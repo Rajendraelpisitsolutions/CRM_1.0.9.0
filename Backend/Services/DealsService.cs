@@ -18,16 +18,31 @@ using System.Threading.Tasks;
 
 namespace Elpis_CRM.Services
 {
+    /// <summary>
+    /// Data-access and business logic for deals: querying, search, CRUD, weekly analytics, tag handling,
+    /// and keeping the deal-contact link table in sync. Read methods enrich each deal's contact fields
+    /// from the join table before returning.
+    /// </summary>
     public class DealsService
     {
         private readonly AppDbContext _dealDb;
 
+        /// <summary>
+        /// Creates the service over the given database context.
+        /// </summary>
+        /// <param name="dealDb">EF Core context backing deals, contacts, and their links.</param>
         public DealsService(AppDbContext dealDb)
         {
             _dealDb = dealDb;
         }
 
-        // GET ALL DEALS (optional server-side search — no pagination: Kanban shows all cards)
+        /// <summary>
+        /// Returns all deals (no pagination, by design — the Kanban board loads every card), optionally
+        /// filtered by a token-based search where each whitespace-separated word must match at least one of
+        /// Name, AccountName, ContactName, DealStage, SalesOwner, Territory, Tags, or DealPipeline.
+        /// </summary>
+        /// <param name="search">Optional search text; ignored unless it has at least 2 non-space characters.</param>
+        /// <returns>Deals ordered by most recent activity (UpdatedAt then CreatedAt), with contact fields enriched.</returns>
         public async Task<List<DealModel>> GetAllAsync(string? search = null)
         {
             var query = _dealDb.Deals.AsNoTracking();
@@ -62,8 +77,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Typeahead search for deals (min 2 characters). Returns up to <paramref name="limit"/> rows.
+        /// Typeahead search for deals (min 2 characters). A purely numeric query also matches the deal ID;
+        /// otherwise each word must match Name, AccountName, ContactName, DealStage, SalesOwner, Territory, or Tags.
         /// </summary>
+        /// <param name="q">Search text; queries shorter than 2 trimmed characters return no results.</param>
+        /// <param name="limit">Maximum rows to return; clamped to 1-100 (default 50).</param>
+        /// <returns>Matching deals (newest activity first, capped at <paramref name="limit"/>) with contact fields enriched, or an empty list.</returns>
         public async Task<List<DealModel>> SearchAsync(string? q, int limit = 50)
         {
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
@@ -108,6 +127,12 @@ namespace Elpis_CRM.Services
             return deals;
         }
 
+        /// <summary>
+        /// Loads one deal by ID and resolves its linked contacts into the contact fields.
+        /// </summary>
+        /// <param name="id">Unique identifier of the deal.</param>
+        /// <returns>The deal with contact fields enriched.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when no deal has the given ID.</exception>
         // GET DEAL BY ID
         public async Task<DealModel> GetByIdAsync(long id)
         {
@@ -121,6 +146,14 @@ namespace Elpis_CRM.Services
             return deal;
         }
 
+        /// <summary>
+        /// Persists a new deal, applying defaults for missing values (stage "New Lead", "default pipeline",
+        /// base-currency value, sales owner, a 30-day expected close date) and generating a time-based ID when
+        /// none is supplied. Validates the referenced account and syncs the deal-contact links before saving.
+        /// </summary>
+        /// <param name="deal">Deal to create; mutated in place with defaults, generated ID, and resolved contact fields.</param>
+        /// <returns>The saved deal.</returns>
+        /// <exception cref="ArgumentException">Thrown when AccountId or any ContactId does not exist.</exception>
         // ADD DEAL
         public async Task<DealModel> AddAsync(DealModel deal)
         {
@@ -191,6 +224,15 @@ namespace Elpis_CRM.Services
             }
         }
 
+        /// <summary>
+        /// Copies the editable fields from <paramref name="deal"/> onto the stored deal, re-syncs its contact
+        /// links (defaulting ContactIds to empty when none provided), and stamps UpdatedAt to the current UTC time.
+        /// </summary>
+        /// <param name="id">ID of the deal to update.</param>
+        /// <param name="deal">Source of the new field values.</param>
+        /// <returns>The updated, persisted deal.</returns>
+        /// <exception cref="KeyNotFoundException">Thrown when no deal has the given ID.</exception>
+        /// <exception cref="ArgumentException">Thrown when a supplied ContactId does not exist.</exception>
         // UPDATE DEAL
         public async Task<DealModel> UpdateAsync(long id, DealModel deal)
         {
@@ -249,6 +291,11 @@ namespace Elpis_CRM.Services
             return existing;
         }
 
+        /// <summary>
+        /// Deletes a deal together with its dependent call logs and meetings.
+        /// </summary>
+        /// <param name="id">ID of the deal to delete.</param>
+        /// <exception cref="KeyNotFoundException">Thrown when no deal has the given ID.</exception>
         // DELETE DEAL
         public async Task DeleteAsync(long id)
         {
@@ -279,6 +326,10 @@ namespace Elpis_CRM.Services
             await _dealDb.SaveChangesAsync();
         }
 
+        /// <summary>
+        /// Flattens the comma-separated Tags field across all deals into a single distinct, trimmed tag list.
+        /// </summary>
+        /// <returns>Unique tag values used by deals.</returns>
         // GET ALL TAGS
         public async Task<List<string>> GetAllTagsAsync()
         {
@@ -294,6 +345,12 @@ namespace Elpis_CRM.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// Finds deals that carry at least one of the requested tags, comparing each deal's individual
+        /// comma-separated tags against the (trimmed) selected tags.
+        /// </summary>
+        /// <param name="tags">Comma-separated tags to match; blank input yields an empty list.</param>
+        /// <returns>Deals sharing at least one tag with <paramref name="tags"/>.</returns>
         // GET DEALS BY TAG
         public async Task<List<DealModel>> GetDealsByTagsAsync(string tags)
         {
@@ -315,6 +372,10 @@ namespace Elpis_CRM.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// Counts deals created within the current Monday-to-Sunday week.
+        /// </summary>
+        /// <returns>Number of deals created this week.</returns>
         // DEAL COUNT THIS WEEK
         public async Task<int> GetThisWeekDealCountAsync()
         {
@@ -330,6 +391,10 @@ namespace Elpis_CRM.Services
                 .CountAsync();
         }
 
+        /// <summary>
+        /// Computes deal-creation counts for the last three Monday-to-Sunday weeks for trend charting.
+        /// </summary>
+        /// <returns>A three-element list ordered [two weeks ago, last week, this week].</returns>
         // DEALS FOR LAST 3 WEEKS
         public async Task<List<int>> GetDealsForAllWeeksAsync()
         {
@@ -350,6 +415,12 @@ namespace Elpis_CRM.Services
             return new List<int> { twoWeeksAgo, lastWeek, currentWeek };
         }
 
+        /// <summary>
+        /// Returns the deals in the named pipeline, matched case-insensitively and ordered by most recent
+        /// activity. A null/blank pipeline short-circuits to an empty list.
+        /// </summary>
+        /// <param name="pipeline">Pipeline name to filter on.</param>
+        /// <returns>Deals in the pipeline, with contact fields enriched.</returns>
         // GET DEALS BY DEAL PIPELINE
         public async Task<List<DealModel>> GetByPipelineAsync(string pipeline)
         {
@@ -382,9 +453,14 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Updates existing deals from an Excel/CSV file with columns DealId (or Id) and ContactId.
-        /// ContactName is resolved from the Contacts table (FirstName + LastName).
+        /// Bulk-links contacts to existing deals from an Excel/CSV file with DealId (or Id) and ContactId
+        /// columns: adds any missing deal-contact link rows and, when a deal has no primary contact yet,
+        /// sets ContactId/ContactName (resolved from the Contacts table as FirstName + LastName). Rows with
+        /// unknown deals/contacts or unparseable IDs are skipped and reported; nothing is saved if no deal changes.
         /// </summary>
+        /// <param name="file">Uploaded .xlsx, .xlsb, .xls, or .csv file; row 1 is the header.</param>
+        /// <param name="ct">Token to cancel reading and persistence.</param>
+        /// <returns>An import result with success flag, updated/skipped counts, elapsed time, an optional message, and per-row errors.</returns>
         public async Task<DealContactLinkImportResult> ImportContactLinksAsync(
             IFormFile file,
             CancellationToken ct = default)
@@ -792,6 +868,12 @@ namespace Elpis_CRM.Services
             }
             return false;
         }
+        /// <summary>
+        /// Gathers every deal tied to a contact, combining those joined through the deal-contact link table
+        /// with legacy deals that reference the contact directly via ContactId.
+        /// </summary>
+        /// <param name="contactId">ID of the contact.</param>
+        /// <returns>The contact's deals, ordered by most recent activity, with contact fields enriched.</returns>
         public async Task<List<DealModel>> GetByContactIdAsync(long contactId)
         {
             var linkedDealIds = await _dealDb.DealContactLinks

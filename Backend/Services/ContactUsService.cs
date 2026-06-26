@@ -24,6 +24,14 @@ namespace Elpis_CRM.Services
         private readonly DealsService _dealsService;
         private readonly AccountService _accountService;
 
+        /// <summary>
+        /// Creates the service with the database context and the contact, deals and account services it
+        /// delegates to for matching and persistence.
+        /// </summary>
+        /// <param name="db">Database context used for read-only contact/account lookups.</param>
+        /// <param name="contactService">Used to create new contacts (handles ID generation and defaults).</param>
+        /// <param name="dealsService">Used to create the deal that results from the submission.</param>
+        /// <param name="accountService">Used to create an account when the company doesn't already exist.</param>
         public ContactUsService(
             AppDbContext db,
             ContactService contactService,
@@ -36,6 +44,16 @@ namespace Elpis_CRM.Services
             _accountService = accountService;
         }
 
+        /// <summary>
+        /// Processes a Contact Us submission end to end: ensures an account exists for the company (creating one
+        /// if needed), matches an existing contact by first/last name + company case-insensitively or creates a new
+        /// one tagged with source "Contact Us", and then opens a "New Business" deal linked to that contact and account.
+        /// A matched contact is left untouched.
+        /// </summary>
+        /// <param name="form">The submitted form; first name and company are required.</param>
+        /// <returns>A summary of whether the contact and account were matched or newly created, with the resulting deal's ID and name.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="form"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the first name or company is missing.</exception>
         public async Task<ContactUsResult> SubmitAsync(ContactUsFormDto form)
         {
             if (form == null) throw new ArgumentNullException(nameof(form));

@@ -264,6 +264,8 @@ function Deals({
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [enquiryNumbers, setEnquiryNumbers] = useState([]);
   const [enquiryLoading, setEnquiryLoading] = useState(false);
+  const [estimatedQuotes, setEstimatedQuotes] = useState([]);
+  const [estimatedLoading, setEstimatedLoading] = useState(false);
 
 
   const [accountsList, setAccountsList] = useState([]);
@@ -863,6 +865,36 @@ function Deals({
         if (!cancelled) {
           setEnquiryLoading(false);
         }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedDealDetails?.contactIds, selectedDealDetails?.contactId]);
+
+  // Estimated quotes for the deal's linked contacts (same pattern as enquiry numbers).
+  useEffect(() => {
+    const contactIds = getDealContactIds(selectedDealDetails);
+    if (!contactIds?.length) {
+      setEstimatedQuotes([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setEstimatedLoading(true);
+        const res = await fetch("/Contact/estimated-quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(contactIds),
+        });
+        if (!cancelled) {
+          const data = await res.json();
+          setEstimatedQuotes(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch estimated quotes", err);
+        if (!cancelled) setEstimatedQuotes([]);
+      } finally {
+        if (!cancelled) setEstimatedLoading(false);
       }
     })();
     return () => { cancelled = true; };
@@ -1645,16 +1677,27 @@ function Deals({
                   </button>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-500">Enquiry No:</span>
-
-                    {enquiryLoading ? (
-                      <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <span className="font-medium text-indigo-600">
-                        {enquiryNumbers?.join(", ") || "-"}
-                      </span>
-                    )}
+                  <div className="flex flex-col gap-2 text-sm ml-6 sm:ml-12">
+                    <div className="flex items-center gap-2 font-semibold text-gray-700">
+                      <span>Enquiry No:</span>
+                      {enquiryLoading ? (
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-blue-600">
+                          {enquiryNumbers?.join(", ") || "-"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 font-semibold text-gray-700">
+                      <span>Estimated Quote:</span>
+                      {estimatedLoading ? (
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-blue-600">
+                          {estimatedQuotes?.join(", ") || "-"}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <button
@@ -1956,35 +1999,6 @@ function Deals({
                                     </svg>
                                   </button>
                                 )} */}
-                                {selectedContacts.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mt-2">
-                                    {selectedContacts.map((contact) => (
-                                      <span key={contact.id} className="inline-flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-1 text-xs text-blue-700">
-                                        {contact.name}
-                                        <button
-                                          type="button"
-                                          onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            setSelectedDealDetails((prev) => {
-                                              if (!prev) return prev;
-                                              const nextContacts = selectedContacts.filter((item) => String(item.id) !== String(contact.id));
-                                              return {
-                                                ...prev,
-                                                contactIds: nextContacts.map((item) => item.id),
-                                                contactNames: nextContacts.map((item) => item.name),
-                                                contactId: nextContacts[0]?.id ?? null,
-                                                contactName: nextContacts.map((item) => item.name).join(", ") || null,
-                                              };
-                                            });
-                                          }}
-                                          className="text-blue-500 hover:text-blue-800"
-                                        >
-                                          ×
-                                        </button>
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
                               </>
                             );
                           })()}

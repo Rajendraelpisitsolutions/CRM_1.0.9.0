@@ -25,11 +25,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Creates a new template.
+        /// Persists a new template; the service stamps created/updated timestamps before saving.
         /// </summary>
-        /// <param name="template">Template details to create.</param>
-        /// <returns>The created template.</returns>
-        /// <response code="201">Template created successfully</response>
+        /// <param name="template">Template payload (name, subject, body, type, active flag).</param>
+        /// <returns>The saved template including its generated ID and timestamps.</returns>
+        /// <response code="201">Template created; a Location header points to the new resource.</response>
         [HttpPost]
         public async Task<ActionResult<TemplateModel>> Create([FromBody] TemplateModel template)
         {
@@ -38,9 +38,9 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves all templates.
+        /// Returns every stored template, both active and inactive, in no particular order.
         /// </summary>
-        /// <returns>List of all templates.</returns>
+        /// <returns>The full list of templates, wrapped in 200 OK.</returns>
         [HttpGet]
         public async Task<ActionResult<List<TemplateModel>>> GetAll()
         {
@@ -48,12 +48,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves a template by its ID.
+        /// Looks up a single template by its primary key.
         /// </summary>
-        /// <param name="id">ID of the template.</param>
-        /// <returns>The template with the specified ID.</returns>
-        /// <response code="200">Template found</response>
-        /// <response code="404">Template not found</response>
+        /// <param name="id">Primary key of the template.</param>
+        /// <returns>The matching template, or a 404 when no template has that ID.</returns>
+        /// <response code="200">Template found.</response>
+        /// <response code="404">No template exists with the given ID.</response>
         [HttpGet("{id:int}")]
         public async Task<ActionResult<TemplateModel>> GetById(int id)
         {
@@ -66,12 +66,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves a template by its name.
+        /// Finds the first template whose name matches exactly.
         /// </summary>
-        /// <param name="name">Name of the template.</param>
-        /// <returns>The template with the specified name.</returns>
-        /// <response code="200">Template found</response>
-        /// <response code="404">Template not found</response>
+        /// <param name="name">Exact template name to match.</param>
+        /// <returns>The matching template, or a 404 when no template carries that name.</returns>
+        /// <response code="200">Template found.</response>
+        /// <response code="404">No template matches the given name.</response>
         [HttpGet("name/{name}")]
         public async Task<ActionResult<TemplateModel>> GetByName(string name)
         {
@@ -84,9 +84,9 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves all active templates.
+        /// Returns only templates flagged as active, omitting any with IsActive set to false.
         /// </summary>
-        /// <returns>List of active templates.</returns>
+        /// <returns>The active templates, wrapped in 200 OK (empty list if none are active).</returns>
         [HttpGet("active")]
         public async Task<ActionResult<List<TemplateModel>>> GetActiveTemplates()
         {
@@ -95,10 +95,10 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves templates by their type.
+        /// Returns all templates whose type matches the supplied value (for example "Email" or "SMS").
         /// </summary>
-        /// <param name="templateType">Type of template.</param>
-        /// <returns>List of templates with the specified type.</returns>
+        /// <param name="templateType">Template type to filter on.</param>
+        /// <returns>The matching templates, wrapped in 200 OK (empty list if none match).</returns>
         [HttpGet("type/{templateType}")]
         public async Task<ActionResult<List<TemplateModel>>> GetByType(string templateType)
         {
@@ -107,13 +107,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Updates an existing template.
+        /// Overwrites an existing template's name, subject, body, type and active flag, refreshing its UpdatedAt timestamp.
         /// </summary>
-        /// <param name="id">ID of the template to update.</param>
-        /// <param name="template">Updated template details.</param>
-        /// <returns>Confirmation of update.</returns>
-        /// <response code="200">Template updated successfully</response>
-        /// <response code="404">Template not found</response>
+        /// <param name="id">Primary key of the template to update.</param>
+        /// <param name="template">Payload carrying the new field values.</param>
+        /// <returns>A plain "Updated successfully" message, or a 404 when the ID is unknown.</returns>
+        /// <response code="200">Template updated.</response>
+        /// <response code="404">No template exists with the given ID.</response>
         [HttpPut("{id:int}")]
         public async Task<ActionResult<TemplateModel>> UpdateTemplate(int id, [FromBody] TemplateModel template)
         {
@@ -126,12 +126,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Deletes a template by its ID.
+        /// Permanently removes the template with the given ID.
         /// </summary>
-        /// <param name="id">ID of the template to delete.</param>
-        /// <returns>Confirmation of deletion.</returns>
-        /// <response code="200">Template deleted successfully</response>
-        /// <response code="404">Template not found</response>
+        /// <param name="id">Primary key of the template to delete.</param>
+        /// <returns>A plain "Deleted Successfully" message, or a 404 when the ID is unknown.</returns>
+        /// <response code="200">Template deleted.</response>
+        /// <response code="404">No template exists with the given ID.</response>
         [HttpDelete("{id:int}")]
         public async Task<ActionResult> Delete(int id)
         {

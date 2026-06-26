@@ -25,29 +25,29 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Retrieves all appointments from the database.
+        /// Loads every appointment from the database in no particular order.
         /// </summary>
-        /// <returns>A list of <see cref="AppointmentsModel"/> objects.</returns>
+        /// <returns>All appointments; an empty list when the table holds none.</returns>
         public async Task<List<AppointmentsModel>> GetAllAppointmentsAsync()
         {
             return await _appointmentsDb.Appointments.ToListAsync();
         }
 
         /// <summary>
-        /// Retrieves an appointment by its ID.
+        /// Fetches a single appointment by primary key.
         /// </summary>
-        /// <param name="appointmentId">The ID of the appointment.</param>
-        /// <returns>The <see cref="AppointmentsModel"/> if found; otherwise, <c>null</c>.</returns>
+        /// <param name="appointmentId">Primary key of the appointment.</param>
+        /// <returns>The matching appointment, or <c>null</c> when no row has that key.</returns>
         public async Task<AppointmentsModel?> GetAppointmentByIdAsync(int appointmentId)
         {
             return await _appointmentsDb.Appointments.FindAsync(appointmentId);
         }
 
         /// <summary>
-        /// Retrieves appointments associated with a specific contact ID.
+        /// Filters appointments down to those belonging to one contact.
         /// </summary>
-        /// <param name="contactId">The ID of the contact.</param>
-        /// <returns>A list of <see cref="AppointmentsModel"/> objects.</returns>
+        /// <param name="contactId">Identifier of the contact to match on.</param>
+        /// <returns>Appointments whose <c>ContactId</c> equals the argument; empty when there are none.</returns>
         public async Task<List<AppointmentsModel>> GetAppointmentsByContactIdAsync(int contactId)
         {
             return await _appointmentsDb.Appointments
@@ -56,10 +56,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Retrieves appointments associated with a specific account ID.
+        /// Filters appointments down to those belonging to one account.
         /// </summary>
-        /// <param name="accountId">The ID of the account.</param>
-        /// <returns>A list of <see cref="AppointmentsModel"/> objects.</returns>
+        /// <param name="accountId">Identifier of the account to match on.</param>
+        /// <returns>Appointments whose <c>AccountId</c> equals the argument; empty when there are none.</returns>
         public async Task<List<AppointmentsModel>> GetAppointmentsByAccountIdAsync(int accountId)
         {
             return await _appointmentsDb.Appointments
@@ -68,10 +68,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Creates a new appointment in the database.
+        /// Persists a new appointment, stamping both <c>CreatedAt</c> and <c>UpdatedAt</c> with the current UTC time before saving.
         /// </summary>
-        /// <param name="appointment">The appointment data to create.</param>
-        /// <returns>The created <see cref="AppointmentsModel"/> object.</returns>
+        /// <param name="appointment">The appointment to insert.</param>
+        /// <returns>The same instance after saving, now populated with its database-generated ID.</returns>
         public async Task<AppointmentsModel> CreateAppointmentAsync(AppointmentsModel appointment)
         {
             appointment.CreatedAt = DateTime.UtcNow;
@@ -83,11 +83,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Updates an existing appointment by its ID.
+        /// Copies a fixed set of editable fields (owner, contact details, deal amount, tags, emails, account/contact links, etc.)
+        /// onto the stored appointment and refreshes <c>UpdatedAt</c> to the current UTC time. Other columns are left untouched.
         /// </summary>
-        /// <param name="appointmentId">The ID of the appointment to update.</param>
-        /// <param name="appointment">The updated appointment data.</param>
-        /// <returns>The updated <see cref="AppointmentsModel"/> if found; otherwise, <c>null</c>.</returns>
+        /// <param name="appointmentId">Primary key of the appointment to update.</param>
+        /// <param name="appointment">Source object whose editable fields are copied across.</param>
+        /// <returns>The saved appointment, or <c>null</c> when no row matches the ID.</returns>
         public async Task<AppointmentsModel?> UpdateAppointmentAsync(int appointmentId, AppointmentsModel appointment)
         {
             var existing = await _appointmentsDb.Appointments.FindAsync(appointmentId);
@@ -116,10 +117,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Deletes an appointment by its ID.
+        /// Removes the appointment with the given ID from the database, if it exists.
         /// </summary>
-        /// <param name="appointmentId">The ID of the appointment to delete.</param>
-        /// <returns><c>true</c> if deleted successfully; <c>false</c> if not found.</returns>
+        /// <param name="appointmentId">Primary key of the appointment to delete.</param>
+        /// <returns><c>true</c> once the row is deleted; <c>false</c> when no such appointment was found.</returns>
         public async Task<bool> DeleteAppointmentAsync(int appointmentId)
         {
             var appointment = await _appointmentsDb.Appointments.FindAsync(appointmentId);

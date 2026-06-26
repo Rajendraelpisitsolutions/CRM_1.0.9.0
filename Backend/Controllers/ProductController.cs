@@ -27,9 +27,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves all products.
+        /// Returns the full product catalogue. Restricted to Admin, Manager and User roles.
         /// </summary>
-        /// <returns>A list of all products.</returns>
+        /// <returns>All products on success; on an unexpected error, a 500 carrying the exception message and stack trace (dev-only diagnostics).</returns>
+        /// <response code="200">Products retrieved.</response>
+        /// <response code="500">An unexpected error occurred; response includes exception detail.</response>
         [HttpGet]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetAll()
@@ -48,12 +50,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves a product by its unique ID.
+        /// Looks up one product by primary key. Restricted to Admin, Manager and User roles.
         /// </summary>
-        /// <param name="id">The product ID.</param>
-        /// <returns>The product matching the specified ID.</returns>
-        /// <response code="200">Product retrieved successfully</response>
-        /// <response code="404">Product not found</response>
+        /// <param name="id">Primary key of the product.</param>
+        /// <returns>The matching product, or a 404 when no product has that ID.</returns>
+        /// <response code="200">Product found.</response>
+        /// <response code="404">No product exists with the given ID.</response>
         [HttpGet("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetById(int id)
@@ -67,12 +69,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves a product by its name.
+        /// Finds the first product whose name matches exactly. Restricted to Admin, Manager and User roles.
         /// </summary>
-        /// <param name="name">The name of the product.</param>
-        /// <returns>The product matching the specified name.</returns>
-        /// <response code="200">Product retrieved successfully</response>
-        /// <response code="404">Product not found</response>
+        /// <param name="name">Exact product name to match.</param>
+        /// <returns>The matching product, or a 404 when no product carries that name.</returns>
+        /// <response code="200">Product found.</response>
+        /// <response code="404">No product matches the given name.</response>
         [HttpGet("name/{name}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetByName(string name)
@@ -86,10 +88,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves products belonging to a specific category.
+        /// Returns every product in the given category. Restricted to Admin, Manager and User roles.
         /// </summary>
-        /// <param name="category">The category name.</param>
-        /// <returns>A list of products in the specified category.</returns>
+        /// <param name="category">Exact category name to filter on.</param>
+        /// <returns>The products in that category, wrapped in 200 OK (empty list if none match).</returns>
+        /// <response code="200">Matching products returned (possibly an empty list).</response>
         [HttpGet("category/{category}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetByCategory(string category)
@@ -99,11 +102,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Adds a new product to the system.
+        /// Creates a product after null and model-state validation; the service stamps the timestamps.
+        /// Restricted to Admin, Manager and User roles.
         /// </summary>
-        /// <param name="product">The product details.</param>
-        /// <returns>The created product.</returns>
-        /// <response code="201">Product created successfully</response>
+        /// <param name="product">Product payload to create.</param>
+        /// <returns>The created product on success; a 400 for a null or invalid payload; a 500 with exception detail on an unexpected error.</returns>
+        /// <response code="201">Product created; a Location header points to the new resource.</response>
+        /// <response code="400">Payload was null or failed model validation.</response>
+        /// <response code="500">An unexpected error occurred; response includes exception detail (dev-only).</response>
         [HttpPost]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> Add([FromBody] ProductsModel product)
@@ -131,13 +137,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Updates an existing product.
+        /// Updates a product's mutable fields. Restricted to Admin and Manager roles (User cannot update).
         /// </summary>
-        /// <param name="id">The ID of the product to update.</param>
-        /// <param name="product">The updated product details.</param>
-        /// <returns>The updated product.</returns>
-        /// <response code="200">Product updated successfully</response>
-        /// <response code="404">Product not found</response>
+        /// <param name="id">Primary key of the product to update.</param>
+        /// <param name="product">Payload carrying the new field values.</param>
+        /// <returns>The updated product, or a 404 when the ID is unknown.</returns>
+        /// <response code="200">Product updated.</response>
+        /// <response code="404">No product exists with the given ID.</response>
         [HttpPut("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager")]
         public async Task<IActionResult> Update(int id, [FromBody] ProductsModel product)
@@ -151,12 +157,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Deletes a product by its ID.
+        /// Permanently removes a product. Restricted to the Admin role only.
         /// </summary>
-        /// <param name="id">The product ID.</param>
-        /// <returns>Confirmation message.</returns>
-        /// <response code="200">Product deleted successfully</response>
-        /// <response code="404">Product not found</response>
+        /// <param name="id">Primary key of the product to delete.</param>
+        /// <returns>A plain "Deleted Successfully" message, or a 404 when the ID is unknown.</returns>
+        /// <response code="200">Product deleted.</response>
+        /// <response code="404">No product exists with the given ID.</response>
         [HttpDelete("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)

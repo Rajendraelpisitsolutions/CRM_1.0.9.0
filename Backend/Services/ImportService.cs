@@ -10,6 +10,16 @@ using System.Text;
 namespace Elpis_CRM.Services;
 
 
+/// <summary>
+/// Outcome of an import run: overall success, the number of rows written versus skipped, the wall-clock
+/// duration, and (when applicable) a top-level error message and per-row error details.
+/// </summary>
+/// <param name="Success">True when the bulk insert completed; false when validation or insertion failed.</param>
+/// <param name="RowsImported">Rows actually written to the destination table.</param>
+/// <param name="RowsSkipped">Rows read but not written (e.g. skipped bad rows).</param>
+/// <param name="Elapsed">Total time taken, measured from the start of <see cref="ImportService.ImportAsync"/>.</param>
+/// <param name="Error">Top-level failure reason, or null on success.</param>
+/// <param name="RowErrors">Individual row-level error messages, or null when there were none.</param>
 public sealed record ImportResult(
     bool Success,
     int RowsImported,
@@ -18,8 +28,12 @@ public sealed record ImportResult(
     string? Error = null,
     IReadOnlyList<string>? RowErrors = null);
 
+/// <summary>Progress snapshot reported during an import: rows read so far and batches completed.</summary>
+/// <param name="RowsProcessed">Cumulative count of rows read from the source.</param>
+/// <param name="BatchesCompleted">Number of full batches processed so far.</param>
 public sealed record ImportProgress(int RowsProcessed, int BatchesCompleted);
 
+/// <summary>Tunable knobs controlling batching, error handling, retries and large-file index management for an import.</summary>
 public sealed record ImportOptions
 {
     /// <summary>Rows per SqlBulkCopy batch. 5 000–10 000 is optimal for most workloads.</summary>
@@ -44,10 +58,19 @@ public sealed record ImportOptions
 
 
 
+/// <summary>
+/// Defines one destination column for an import: its SQL name, CLR type, nullability, and the
+/// pre-compiled converter that turns a raw cell value into a SQL-ready object.
+/// </summary>
 internal sealed class ImportColumnDef
 {
+    /// <summary>The destination column name in the SQL table.</summary>
     public required string SqlColumnName { get; init; }
+
+    /// <summary>The CLR type SqlBulkCopy reports for this column (e.g. string, long, DateTime).</summary>
     public required Type ClrType { get; init; }
+
+    /// <summary>When false, the source file must supply this column or the import is rejected; when true, a missing column maps to DBNull.</summary>
     public bool IsNullable { get; init; }
 
     /// <summary>
@@ -58,20 +81,32 @@ internal sealed class ImportColumnDef
     public required Func<object?, object?> Converter { get; init; }
 }
 
+/// <summary>The full import schema for one table: the physical SQL table name and its ordered column definitions.</summary>
 internal sealed class ImportTableSchema
 {
+    /// <summary>The physical SQL table the rows are written to (may differ from the import key, e.g. "CallLogs" → "CallLog").</summary>
     public required string TableName { get; init; }
+
+    /// <summary>Ordered destination columns; identity columns are intentionally omitted because SqlBulkCopy rejects them.</summary>
     public required ImportColumnDef[] Columns { get; init; }
 }
 
 
 
+/// <summary>
+/// Static catalogue of every importable table and its column converters. <see cref="All"/> is the
+/// single source of truth consulted by <see cref="ImportService"/>; add a table here (plus a
+/// controller endpoint) to make it importable.
+/// </summary>
 internal static class SchemaRegistry
 {
- 
+    /// <summary>String converter: maps null/DBNull to DBNull, otherwise the value's string representation.</summary>
     private static readonly Func<object?, object?> Str =
         static v => v is null or DBNull ? (object)DBNull.Value : v.ToString()!;
 
+    /// <summary>Builds an int converter; the nullable variant returns DBNull for blank/unparseable input, the non-nullable variant returns 0.</summary>
+    /// <param name="nullable">Whether unparseable or empty cells become DBNull (true) or 0 (false).</param>
+    /// <returns>A converter that coerces int/long/double/string cells to an int (or DBNull/0).</returns>
     private static Func<object?, object?> Int(bool nullable) => nullable
         ? static v => v switch
         {
@@ -92,6 +127,9 @@ internal static class SchemaRegistry
             _ => (object)Convert.ToInt32(v)
         };
 
+    /// <summary>Builds a long converter; the nullable variant returns DBNull for blank/unparseable input, the non-nullable variant returns 0.</summary>
+    /// <param name="nullable">Whether unparseable or empty cells become DBNull (true) or 0L (false).</param>
+    /// <returns>A converter that coerces long/int/double/string cells to a long (or DBNull/0).</returns>
     private static Func<object?, object?> Long(bool nullable) => nullable
         ? static v => v switch
         {
@@ -112,6 +150,9 @@ internal static class SchemaRegistry
             _ => (object)Convert.ToInt64(v)
         };
 
+    /// <summary>Builds a decimal converter; strings are parsed with invariant culture and <c>NumberStyles.Any</c>, falling back to DBNull (nullable) or 0 (non-nullable).</summary>
+    /// <param name="nullable">Whether unparseable or empty cells become DBNull (true) or 0m (false).</param>
+    /// <returns>A converter that coerces decimal/double/int/long/string cells to a decimal (or DBNull/0).</returns>
     private static Func<object?, object?> Dec(bool nullable) => nullable
         ? static v => v switch
         {
@@ -142,6 +183,13 @@ internal static class SchemaRegistry
             _ => (object)Convert.ToDecimal(v)
         };
 
+    /// <summary>
+    /// Builds a datetime converter. Excel OADate doubles are converted directly; strings are parsed
+    /// as invariant/UTC (a trailing " UTC" suffix is stripped first). Unparseable values fall back to
+    /// DBNull when nullable, or to <see cref="DateTime.UtcNow"/> when not.
+    /// </summary>
+    /// <param name="nullable">Whether blank/unparseable cells become DBNull (true) or the current UTC time (false).</param>
+    /// <returns>A converter that coerces DateTime/double/string cells to a DateTime.</returns>
     private static Func<object?, object?> Dt(bool nullable)
     {
         static object? ParseDateString(string s, bool isNullable)
@@ -189,7 +237,12 @@ internal static class SchemaRegistry
     //                           ? (object)r.Date : (object)DBNull.Value,
     //         _ => (object)DBNull.Value
     //     };
- private static readonly Func<object?, object?> DateOnly =
+ /// <summary>
+    /// Converter for SQL <c>date</c> columns: keeps only the date component. Excel OADate doubles and
+    /// strings (with optional " UTC" suffix, parsed as universal time) are accepted; anything
+    /// unparseable becomes DBNull.
+    /// </summary>
+    private static readonly Func<object?, object?> DateOnly =
         static v => v switch
         {
             null or DBNull => (object)DBNull.Value,
@@ -214,12 +267,17 @@ internal static class SchemaRegistry
     //   • datetime nullable→ Dt(true)
     //   • date nullable    → DateOnly   (SQL date type; we strip the time component)
 
+    /// <summary>
+    /// Case-insensitive registry mapping an import key (Accounts, Contacts, Deals, DealContactLinks,
+    /// CallLogs, Notes, Tasks) to its table schema. Identity columns are deliberately excluded so
+    /// SqlBulkCopy can write the remaining columns.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, ImportTableSchema> All =
         new Dictionary<string, ImportTableSchema>(StringComparer.OrdinalIgnoreCase)
         {
-            // ════════════════════════════════════════════════════════════════
+            
             // Accounts  (AccountId is NOT identity — must be imported from file)
-            // ════════════════════════════════════════════════════════════════
+            
             ["Accounts"] = new()
             {
                 TableName = "Accounts",
@@ -478,6 +536,10 @@ internal static class SchemaRegistry
 // Called ONCE before the row loop. Never touches the hot path.
 // ───────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Matches source file headers to schema columns by fuzzy-normalizing both sides. Invoked once per
+/// import, before the row loop, so it never touches the hot path.
+/// </summary>
 internal static class HeaderMapper
 {
     /// <summary>
@@ -486,6 +548,8 @@ internal static class HeaderMapper
     /// Uses stackalloc — zero heap allocation for headers ≤ 256 chars.
     /// "Account Name" → "accountname"  |  "account_name" → "accountname"
     /// </summary>
+    /// <param name="header">The raw header text to canonicalize.</param>
+    /// <returns>The lowercased header with separator characters removed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string Normalize(ReadOnlySpan<char> header)
     {
@@ -504,6 +568,10 @@ internal static class HeaderMapper
     /// Returns int[] where result[i] = source file column index for output column i,
     /// or -1 when the column is absent (nullable → sends DBNull; non-nullable → error).
     /// </summary>
+    /// <param name="source">The opened source reader whose header names are matched against the schema.</param>
+    /// <param name="schema">The destination table schema whose columns are being resolved.</param>
+    /// <param name="errors">Receives one message per required column that is missing from the file; empty when the map is valid.</param>
+    /// <returns>An index array aligned to <see cref="ImportTableSchema.Columns"/>; -1 marks an absent column.</returns>
     public static int[] BuildMap(IDataReader source, ImportTableSchema schema, out List<string> errors)
     {
         errors = [];
@@ -548,6 +616,13 @@ internal static class HeaderMapper
 //   • No dynamic type checks  • No dictionary reads inside GetValue
 // ───────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// An <see cref="IDataReader"/> adapter handed straight to <c>SqlBulkCopy.WriteToServerAsync</c>. It
+/// projects the source reader's columns onto the destination schema using a precomputed index map and
+/// per-column converters, presenting columns in schema order. Built for the hot path: no reflection,
+/// regex, or per-row allocations. SqlBulkCopy only exercises Read/GetValue/FieldCount; the remaining
+/// IDataReader members exist solely to satisfy the interface.
+/// </summary>
 internal sealed class MappedDataReader : IDataReader
 {
     private readonly IDataReader _src;
@@ -558,11 +633,23 @@ internal sealed class MappedDataReader : IDataReader
     private readonly IProgress<ImportProgress>? _progress;
     private readonly int _batchSize;
 
-    // Stats (read after import completes)
+    /// <summary>Total rows read from the source so far; populated as <see cref="Read"/> advances.</summary>
     public int RowsRead { get; private set; }
+
+    /// <summary>Rows read but deliberately not written. Tracked here for the caller to read after the import.</summary>
     public int RowsSkipped { get; private set; }
+
+    /// <summary>Accumulated per-row error messages, surfaced in the final <see cref="ImportResult"/>.</summary>
     public List<string> RowErrors { get; } = [];
 
+    /// <summary>
+    /// Wraps a source reader with a column map and converters so SqlBulkCopy sees the destination schema.
+    /// </summary>
+    /// <param name="source">The underlying CSV/Excel reader; not owned by this instance (lifetime managed by the caller).</param>
+    /// <param name="columnMap">Per-output-column source index (-1 = absent → DBNull), as produced by <see cref="HeaderMapper.BuildMap"/>.</param>
+    /// <param name="columns">Destination column definitions, used to extract names, CLR types and converters.</param>
+    /// <param name="batchSize">Row interval at which progress is reported.</param>
+    /// <param name="progress">Optional sink notified once per completed batch.</param>
     public MappedDataReader(
         IDataReader source,
         int[] columnMap,
@@ -581,6 +668,8 @@ internal sealed class MappedDataReader : IDataReader
 
     // ── Hot path ─────────────────────────────────────────────────────────────
 
+    /// <summary>Advances to the next source row, incrementing <see cref="RowsRead"/> and reporting progress every batch.</summary>
+    /// <returns>True if a row was read; false at end of data.</returns>
     public bool Read()
     {
         bool ok = _src.Read();
@@ -593,6 +682,12 @@ internal sealed class MappedDataReader : IDataReader
         return ok;
     }
 
+    /// <summary>
+    /// Returns the converted value for output column <paramref name="i"/>: DBNull for an absent column,
+    /// DBNull if the source cell can't be read, otherwise the result of the column's converter.
+    /// </summary>
+    /// <param name="i">Zero-based destination column index.</param>
+    /// <returns>The SQL-ready value, never a CLR null (uses <see cref="DBNull.Value"/> instead).</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object GetValue(int i)
     {
@@ -609,6 +704,9 @@ internal sealed class MappedDataReader : IDataReader
         return result ?? DBNull.Value;
     }
 
+    /// <summary>Reports whether output column <paramref name="i"/> is null — true for an absent column or a null source cell.</summary>
+    /// <param name="i">Zero-based destination column index.</param>
+    /// <returns>True when the value is DBNull.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsDBNull(int i)
     {
@@ -618,9 +716,21 @@ internal sealed class MappedDataReader : IDataReader
 
     // ── IDataReader plumbing (SqlBulkCopy only uses Read / GetValue / FieldCount) ──
 
+    /// <summary>Number of destination columns exposed to SqlBulkCopy.</summary>
     public int FieldCount => _map.Length;
+
+    /// <summary>Returns the destination SQL column name at the given index.</summary>
+    /// <param name="i">Zero-based destination column index.</param>
     public string GetName(int i) => _names[i];
+
+    /// <summary>Returns the CLR type declared for the destination column at the given index.</summary>
+    /// <param name="i">Zero-based destination column index.</param>
     public Type GetFieldType(int i) => _types[i];
+
+    /// <summary>Resolves a destination column name to its index (case-insensitive).</summary>
+    /// <param name="name">The destination column name to look up.</param>
+    /// <returns>The matching zero-based index.</returns>
+    /// <exception cref="IndexOutOfRangeException">Thrown when no column matches <paramref name="name"/>.</exception>
     public int GetOrdinal(string name)
     {
         for (int i = 0; i < _names.Length; i++)
@@ -628,6 +738,9 @@ internal sealed class MappedDataReader : IDataReader
         throw new IndexOutOfRangeException($"Column '{name}' not found.");
     }
 
+    /// <summary>Fills <paramref name="values"/> with the converted values of the current row.</summary>
+    /// <param name="values">Destination buffer; only the first <see cref="FieldCount"/> slots (or fewer) are written.</param>
+    /// <returns>The number of values copied.</returns>
     public int GetValues(object[] values)
     {
         int count = Math.Min(values.Length, FieldCount);
@@ -674,6 +787,11 @@ internal sealed class MappedDataReader : IDataReader
 // Runs on a separate SqlConnection command (not inside the BulkCopy).
 // ───────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Disables a table's non-clustered indexes before a large bulk insert and rebuilds them afterward,
+/// trading insert throughput against a one-time rebuild cost. Operates via standalone commands on the
+/// supplied connection, outside the SqlBulkCopy. Primary keys and unique constraints are left untouched.
+/// </summary>
 internal static class IndexManager
 {
     private const string FindQuery = """
@@ -687,6 +805,13 @@ internal static class IndexManager
           AND  i.is_unique_constraint = 0;
         """;
 
+    /// <summary>
+    /// Finds the table's enabled, non-clustered, non-key/non-unique indexes and disables each one.
+    /// </summary>
+    /// <param name="conn">An open connection to the target database.</param>
+    /// <param name="table">The table whose indexes should be disabled.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The names of the indexes that were disabled, to pass back to <see cref="RebuildAsync"/>.</returns>
     public static async Task<string[]> DisableAsync(
         SqlConnection conn, string table, CancellationToken ct)
     {
@@ -710,6 +835,14 @@ internal static class IndexManager
         return [.. names];
     }
 
+    /// <summary>
+    /// Rebuilds the named indexes (offline, with a 10-minute per-index timeout). Intended to undo a
+    /// prior <see cref="DisableAsync"/> call once the bulk insert finishes.
+    /// </summary>
+    /// <param name="conn">An open connection to the target database.</param>
+    /// <param name="table">The table whose indexes are being rebuilt.</param>
+    /// <param name="indexes">The index names to rebuild (typically the output of <see cref="DisableAsync"/>).</param>
+    /// <param name="ct">Cancellation token.</param>
     public static async Task RebuildAsync(
         SqlConnection conn, string table, string[] indexes, CancellationToken ct)
     {
@@ -729,6 +862,12 @@ internal static class IndexManager
 // Thread-safe: stateless beyond injected _cs/_log (both immutable after ctor).
 // ───────────────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// High-throughput bulk-import service that streams an uploaded CSV/Excel file into a registered CRM
+/// table via SqlBulkCopy. Validates the file type and schema, maps headers to columns, optionally
+/// disables/rebuilds indexes for large files, and retries the insert on transient SQL errors. Stateless
+/// after construction and therefore thread-safe.
+/// </summary>
 public sealed class ImportService
 {
     private readonly string _cs;
@@ -737,6 +876,12 @@ public sealed class ImportService
     private static readonly HashSet<string> AllowedExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".xlsx", ".xlsb", ".xls", ".csv" };
 
+    /// <summary>
+    /// Resolves and caches the "DefaultConnection" connection string for all imports.
+    /// </summary>
+    /// <param name="cfg">Application configuration supplying the connection string.</param>
+    /// <param name="log">Logger for import lifecycle and error events.</param>
+    /// <exception cref="InvalidOperationException">Thrown when "DefaultConnection" is not configured.</exception>
     public ImportService(IConfiguration cfg, ILogger<ImportService> log)
     {
         _cs = cfg.GetConnectionString("DefaultConnection")
@@ -748,6 +893,21 @@ public sealed class ImportService
     // Public entry point
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Imports an uploaded file into the named table end-to-end: validates the extension and schema,
+    /// opens a CSV or Excel reader, maps the file's headers to the destination columns (failing fast if
+    /// a required column is missing), then bulk-inserts in batches with retry. For files at or above the
+    /// configured threshold it disables non-clustered indexes first and always attempts to rebuild them
+    /// afterward, even if the insert fails. Errors are returned in the result rather than thrown.
+    /// </summary>
+    /// <param name="file">The uploaded CSV/Excel file; must be non-empty with a supported extension.</param>
+    /// <param name="tableName">Import key identifying a schema in <see cref="SchemaRegistry.All"/>.</param>
+    /// <param name="options">Batch size, retry count, index threshold and progress sink; defaults are used when null.</param>
+    /// <param name="ct">Cancellation token for the read/insert phases (index rebuild always runs to completion).</param>
+    /// <returns>
+    /// A successful <see cref="ImportResult"/> with row counts and timing, or a failed one whose
+    /// <see cref="ImportResult.Error"/> describes the validation or insertion failure.
+    /// </returns>
     public async Task<ImportResult> ImportAsync(
         IFormFile file,
         string tableName,
@@ -876,6 +1036,16 @@ public sealed class ImportService
     // Bulk insert
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Streams the mapped reader into the destination table with SqlBulkCopy, using a table lock and an
+    /// internal per-batch transaction and adding name-to-name column mappings. Constraint checking and
+    /// triggers are deliberately not enabled, favouring throughput.
+    /// </summary>
+    /// <param name="conn">An open connection to the target database.</param>
+    /// <param name="tableName">The physical destination table name (bracket-quoted internally).</param>
+    /// <param name="reader">The schema-projected reader supplying rows and column names.</param>
+    /// <param name="options">Supplies the batch size used by the bulk copy.</param>
+    /// <param name="ct">Cancellation token for the write.</param>
     private static async Task BulkInsertAsync(
         SqlConnection conn,
         string tableName,
@@ -913,6 +1083,14 @@ public sealed class ImportService
     // File readers
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Opens an Excel workbook as an <see cref="IDataReader"/>, choosing the Sylvan workbook type from
+    /// the extension (.xlsx/.xlsb/.xls). Row 1 is treated as headers; reading starts at the first data row.
+    /// </summary>
+    /// <param name="stream">The uploaded file stream.</param>
+    /// <param name="ext">The file extension, used to select the workbook format.</param>
+    /// <returns>A reader positioned to read data rows.</returns>
+    /// <exception cref="NotSupportedException">Thrown for an unrecognized Excel extension.</exception>
     private static IDataReader OpenExcel(Stream stream, string ext)
     {
         // Sylvan reads row 1 as headers by default; GetName(i) returns those values.
@@ -927,6 +1105,13 @@ public sealed class ImportService
         return ExcelDataReader.Create(stream, type);
     }
 
+    /// <summary>
+    /// Opens a CSV file as an <see cref="IDataReader"/> using Sylvan, treating the first row as headers,
+    /// honouring a UTF-8 BOM (as written by Excel exports) and auto-detecting the delimiter.
+    /// </summary>
+    /// <param name="stream">The uploaded file stream.</param>
+    /// <param name="_">Cancellation token (currently unused).</param>
+    /// <returns>A reader positioned to read data rows.</returns>
     private static async Task<IDataReader> OpenCsvAsync(Stream stream, CancellationToken _)
     {
         // detectEncodingFromByteOrderMarks handles UTF-8 BOM from Excel CSV exports.
@@ -952,6 +1137,14 @@ public sealed class ImportService
     // Retry with exponential back-off (transient SQL errors only)
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Runs <paramref name="action"/>, retrying only on transient SQL errors with exponential back-off
+    /// (2 s, 4 s, 8 s …) up to <paramref name="maxAttempts"/>. Non-transient errors and the final
+    /// attempt's failure propagate to the caller.
+    /// </summary>
+    /// <param name="action">The operation to run; receives the 1-based attempt number.</param>
+    /// <param name="maxAttempts">Maximum number of attempts before giving up.</param>
+    /// <param name="ct">Cancellation token observed during the back-off delay.</param>
     private static async Task RunWithRetryAsync(
         Func<int, Task> action, int maxAttempts, CancellationToken ct)
     {
@@ -971,9 +1164,12 @@ public sealed class ImportService
     }
 
     /// <summary>
-    /// Returns true for known transient SQL Server / Azure SQL error codes.
-    /// Non-transient errors (schema mismatch, FK violation, etc.) propagate immediately.
+    /// Returns true for known transient SQL Server / Azure SQL error codes (deadlock, timeout, dropped
+    /// connection, Azure throttling/busy/unavailable). Non-transient errors (schema mismatch, FK
+    /// violation, etc.) return false and propagate immediately.
     /// </summary>
+    /// <param name="ex">The SQL exception to classify.</param>
+    /// <returns>True if the error is worth retrying.</returns>
     private static bool IsTransient(SqlException ex) => ex.Number is
         1205 or  // deadlock victim
         -2 or  // timeout
@@ -989,6 +1185,10 @@ public sealed class ImportService
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>Builds a failed <see cref="ImportResult"/> with zero row counts and the elapsed time so far.</summary>
+    /// <param name="error">The failure message to surface to the caller.</param>
+    /// <param name="sw">The running stopwatch whose elapsed time is captured.</param>
+    /// <returns>An unsuccessful result carrying <paramref name="error"/>.</returns>
     private static ImportResult Fail(string error, Stopwatch sw) =>
         new(false, 0, 0, sw.Elapsed, error);
 }

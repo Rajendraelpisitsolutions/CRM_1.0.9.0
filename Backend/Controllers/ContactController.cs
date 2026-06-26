@@ -28,12 +28,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves contacts with optional pagination.
+        /// Returns one page of contacts ordered newest-first, optionally narrowed by a token-based
+        /// search where every whitespace-separated term must match at least one contact field.
         /// </summary>
-        /// <param name="page">Page number (1-based). Default: 1</param>
-        /// <param name="pageSize">Records per page. Default: 50, Max: 500</param>
-        /// <returns>Paginated list of contacts with total count</returns>
-        /// <response code="200">Contacts retrieved successfully</response>
+        /// <param name="page">1-based page number; values below 1 are clamped to 1.</param>
+        /// <param name="pageSize">Rows per page; clamped to the range 1–500.</param>
+        /// <param name="search">Optional search text; ignored unless it has at least 2 non-blank characters.</param>
+        /// <returns>An object carrying the page, page size, total count, total page count and the page of contacts.</returns>
+        /// <response code="200">Page returned (the item list may be empty).</response>
         [HttpGet]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetAllAsync(
@@ -59,8 +61,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Typeahead search across contacts (query min length 2).
+        /// Typeahead lookup across name, email, phone and account fields, ordered by last name then
+        /// first name; a purely numeric query also matches on contact ID.
         /// </summary>
+        /// <param name="q">Search text; returns an empty list when it has fewer than 2 non-blank characters.</param>
+        /// <param name="limit">Maximum rows to return; clamped to the range 1–100 by the service.</param>
+        /// <returns>Matching contacts, or an empty list when the query is too short.</returns>
+        /// <response code="200">Matches returned (possibly empty).</response>
         [HttpGet("search")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<ContactModel>>> SearchAsync([FromQuery] string q, [FromQuery] int limit = 50)
@@ -70,8 +77,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Lifecycle stage counts for dashboard charts.
+        /// Returns contact counts bucketed by lifecycle stage for dashboard charts, with stages folded
+        /// into prospect, engaged, customer, promoter and other (null/blank/unrecognized stages count as other).
         /// </summary>
+        /// <returns>A dictionary keyed by the five fixed stage buckets with their contact counts.</returns>
+        /// <response code="200">Counts returned.</response>
         [HttpGet("stats/lifecycle")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<Dictionary<string, int>>> GetLifeCycleStatsAsync()
@@ -81,10 +91,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves contacts by CreatedAt date (UTC based).
+        /// Returns every contact whose CreatedAt falls within the calendar day of the given date; the
+        /// time component is ignored and only the date portion is used as the matching window.
         /// </summary>
-        /// <param name="createdAt">Date to filter (yyyy-MM-dd recommended).</param>
-        /// <returns>List of contacts created on that date.</returns>
+        /// <param name="createdAt">Day to match on; only the date part is significant (yyyy-MM-dd recommended).</param>
+        /// <returns>Contacts created on that day, or an empty list when none match.</returns>
+        /// <response code="200">Contacts returned (possibly empty).</response>
         [HttpGet("createdAt")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<ContactModel>>> GetByCreatedAt([FromQuery] DateTime createdAt)
@@ -94,10 +106,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves all distinct tags associated with contacts.
+        /// Returns the distinct set of individual tags used across all contacts, obtained by splitting each
+        /// contact's comma-separated Tags field and trimming and de-duplicating the values.
         /// </summary>
-        /// <returns>A list of contact tags.</returns>
-        /// <response code="200">Tags retrieved successfully</response>
+        /// <returns>The unique tag names; empty when no contact carries any tag.</returns>
+        /// <response code="200">Tags returned.</response>
         [HttpGet("tags/all")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<string>>> GetAllTagsAsync()
@@ -107,12 +120,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves email addresses of contacts associated with the specified tags.
+        /// Collects the email addresses of every contact carrying at least one of the requested tags,
+        /// pulling from both the WorkEmail and the multi-value Emails field and returning them
+        /// de-duplicated (case-insensitive) as a single comma-joined string.
         /// </summary>
-        /// <param name="tags">Comma-separated list of tags.</param>
-        /// <returns>Email addresses of matching contacts.</returns>
-        /// <response code="200">Emails retrieved successfully</response>
-        /// <response code="400">Tags parameter is missing or invalid</response>
+        /// <param name="tags">Comma-separated tags; a contact matches if any of its tags is in this set.</param>
+        /// <returns>A comma-joined list of distinct email addresses; empty string when nothing matches.</returns>
+        /// <response code="200">Emails returned (possibly an empty string).</response>
+        /// <response code="400">The tags parameter was missing or blank.</response>
         [HttpGet("tags/emails")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<string>> GetEmailsByTagsAsync([FromQuery] string tags)
@@ -127,12 +142,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves contact names associated with the specified tags.
+        /// Returns the full contacts that carry at least one of the requested tags. Despite the route name,
+        /// this yields complete contact records, identical to the tags/contacts endpoint.
         /// </summary>
-        /// <param name="tags">Comma-separated list of tags.</param>
-        /// <returns>Contact names matching the provided tags.</returns>
-        /// <response code="200">Contact names retrieved successfully</response>
-        /// <response code="400">Tags parameter is missing or invalid</response>
+        /// <param name="tags">Comma-separated tags; a contact matches if any of its tags is in this set.</param>
+        /// <returns>The matching contacts, or an empty list when none match.</returns>
+        /// <response code="200">Contacts returned (possibly empty).</response>
+        /// <response code="400">The tags parameter was missing or blank.</response>
         [HttpGet("tags/contactName")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<string>> GetContactsByTags([FromQuery] string tags)
@@ -147,12 +163,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves full contact objects associated with the specified tags.
+        /// Returns the full contacts that carry at least one of the requested tags, matching each
+        /// contact's comma-separated Tags against the supplied set.
         /// </summary>
-        /// <param name="tags">Comma-separated list of tags.</param>
-        /// <returns>Full contact objects matching the provided tags.</returns>
-        /// <response code="200">Contacts retrieved successfully</response>
-        /// <response code="400">Tags parameter is missing or invalid</response>
+        /// <param name="tags">Comma-separated tags; a contact matches if any of its tags is in this set.</param>
+        /// <returns>The matching contacts, or an empty list when none match.</returns>
+        /// <response code="200">Contacts returned (possibly empty).</response>
+        /// <response code="400">The tags parameter was missing or blank.</response>
         [HttpGet("tags/contacts")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<ContactModel>>> GetContactsByTagsFullAsync([FromQuery] string tags)
@@ -167,12 +184,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves a contact by its unique ID.
+        /// Looks up a single contact by its primary key.
         /// </summary>
-        /// <param name="contactId">The contact ID.</param>
-        /// <returns>The requested contact.</returns>
-        /// <response code="200">Contact found</response>
-        /// <response code="404">Contact not found</response>
+        /// <param name="contactId">Primary key of the contact.</param>
+        /// <returns>The matching contact.</returns>
+        /// <response code="200">Contact found.</response>
+        /// <response code="404">No contact has that ID.</response>
         [HttpGet("{contactId:long}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<ContactModel>> GetByIdAsync(long contactId)
@@ -188,11 +205,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves contacts associated with a specific account.
+        /// Returns the contacts belonging to one account, ordered by name and capped for large accounts;
+        /// each result is a lightweight projection (ID, name, work email and account only).
         /// </summary>
-        /// <param name="accountId">The account ID.</param>
-        /// <returns>List of contacts for the account.</returns>
-        /// <response code="200">Contacts retrieved successfully</response>
+        /// <param name="accountId">The account whose contacts are requested.</param>
+        /// <param name="q">Optional name/email/phone filter applied within the account.</param>
+        /// <param name="limit">Maximum rows to return; clamped to the range 1–500 by the service.</param>
+        /// <returns>The account's contacts as trimmed projections, or an empty list when none match.</returns>
+        /// <response code="200">Contacts returned (possibly empty).</response>
         [HttpGet("account/{accountId:long}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<ContactModel>>> GetContactsByAccountIdAsync(long accountId, [FromQuery] string? q = null, [FromQuery] int limit = 300)
@@ -202,18 +222,21 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Creates a new contact.
+        /// Creates a contact: sets timestamps, resolves the account FK from the account name when only the
+        /// name was supplied, rejects duplicate emails, and (when the ID already exists) updates instead.
         /// </summary>
-        /// <param name="contact">Contact data.</param>
-        /// <param name="generateEnquiryNo">If true, the system generates a sequential EnquiryNo (e.g. EITSPL-EQ-003).</param>
-        /// <returns>The newly created contact.</returns>
-        /// <response code="200">Contact created successfully</response>
-        /// <response code="400">Invalid contact data</response>
+        /// <param name="contact">Contact payload; any client-supplied EnquiryNo is ignored on create.</param>
+        /// <param name="generateEnquiryNo">When true, assigns a fresh sequential EnquiryNo (e.g. EITSPL-EQ-003); otherwise it is left null.</param>
+        /// <returns>The persisted contact, including its generated ID and EnquiryNo.</returns>
+        /// <response code="200">Contact created (or an existing same-ID contact updated).</response>
+        /// <response code="400">Payload was null or a contact with the same email already exists.</response>
+        /// <response code="500">An unexpected error occurred while saving.</response>
         [HttpPost]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<ContactModel>> CreateAsync(
     [FromBody] ContactModel contact,
-    [FromQuery] bool generateEnquiryNo = false)
+    [FromQuery] bool generateEnquiryNo = false,
+    [FromQuery] bool generateEstimatedQuote = false)
         {
             if (contact == null)
             {
@@ -222,7 +245,7 @@ namespace Elpis_CRM.Controllers
 
             try
             {
-                var created = await _contactService.AddAsync(contact, generateEnquiryNo);
+                var created = await _contactService.AddAsync(contact, generateEnquiryNo, generateEstimatedQuote);
                 return Ok(created);
             }
             catch (InvalidOperationException ex)
@@ -244,28 +267,30 @@ namespace Elpis_CRM.Controllers
 
 
         /// <summary>
-        /// Updates an existing contact.
+        /// Overwrites an existing contact's editable fields and refreshes its activity timestamps; CreatedBy
+        /// info is preserved and EnquiryNo is never taken from the payload (only optionally generated).
         /// </summary>
-        /// <param name="contactId">The contact ID.</param>
-        /// <param name="contact">Updated contact data.</param>
-        /// <param name="generateEnquiryNo">If true, the system generates a fresh sequential EnquiryNo (e.g. EITSPL-EQ-003), overwriting any existing value. If false, the existing EnquiryNo is left untouched.</param>
-        /// <returns>Update confirmation and updated contact.</returns>
-        /// <response code="200">Contact updated successfully</response>
-        /// <response code="400">Invalid contact data</response>
-        /// <response code="404">Contact not found</response>
+        /// <param name="contactId">Primary key of the contact to update.</param>
+        /// <param name="contact">New field values; account FK is re-resolved from the account name when needed.</param>
+        /// <param name="generateEnquiryNo">When true, assigns a sequential EnquiryNo only if the contact currently has none; the existing value is otherwise left untouched.</param>
+        /// <returns>A confirmation message wrapping the updated contact.</returns>
+        /// <response code="200">Contact updated.</response>
+        /// <response code="400">Payload was null.</response>
+        /// <response code="404">No contact has that ID.</response>
         [HttpPut("{contactId:long}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult> UpdateAsync(
             long contactId,
             [FromBody] ContactModel contact,
-            [FromQuery] bool generateEnquiryNo = false)
+            [FromQuery] bool generateEnquiryNo = false,
+            [FromQuery] bool generateEstimatedQuote = false)
         {
             if (contact == null)
             {
                 return BadRequest("Contact data cannot be null.");
             }
 
-            var updated = await _contactService.UpdateAsync(contactId, contact, generateEnquiryNo);
+            var updated = await _contactService.UpdateAsync(contactId, contact, generateEnquiryNo, generateEstimatedQuote);
 
             if (updated == null)
             {
@@ -280,12 +305,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Deletes a contact by its ID.
+        /// Deletes a contact along with its related call logs, tasks and notes; restricted to the Admin role.
         /// </summary>
-        /// <param name="contactId">The contact ID.</param>
-        /// <returns>Deletion confirmation message.</returns>
-        /// <response code="200">Contact deleted successfully</response>
-        /// <response code="404">Contact not found</response>
+        /// <param name="contactId">Primary key of the contact to delete.</param>
+        /// <returns>A confirmation message.</returns>
+        /// <response code="200">Contact deleted.</response>
+        /// <response code="404">No contact has that ID.</response>
         [HttpDelete("{contactId:long}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<ActionResult> DeleteAsync(long contactId)
@@ -303,6 +328,14 @@ namespace Elpis_CRM.Controllers
             });
         }
 
+        /// <summary>
+        /// Streams a contact's stored business-card image as JPEG, selecting the front or back side.
+        /// </summary>
+        /// <param name="contactId">Primary key of the contact owning the image.</param>
+        /// <param name="imageType">Which side to return; "front" or "back" (case-insensitive).</param>
+        /// <returns>The image bytes as an image/jpeg file response.</returns>
+        /// <response code="200">Image returned.</response>
+        /// <response code="404">Contact not found, the image type is unknown, or that side has no stored image.</response>
         [HttpGet("{contactId:long}/image/{imageType}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<IActionResult> GetImage(long contactId, string imageType)
@@ -325,6 +358,13 @@ namespace Elpis_CRM.Controllers
             return File(imageBytes, "image/jpeg");
         }
 
+        /// <summary>
+        /// Returns the EnquiryNo values for the given contact IDs, skipping any contact that has no
+        /// enquiry number assigned, so the result may be shorter than the input list.
+        /// </summary>
+        /// <param name="contactIds">Contact IDs to look up enquiry numbers for.</param>
+        /// <returns>The non-blank enquiry numbers found among those contacts.</returns>
+        /// <response code="200">Enquiry numbers returned (possibly empty).</response>
         [HttpPost("enquiry-numbers")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<string>>> GetEnquiryNumbers(
@@ -332,6 +372,22 @@ namespace Elpis_CRM.Controllers
         {
             var enquiryNumbers = await _contactService.GetEnquiryNumbersAsync(contactIds);
             return Ok(enquiryNumbers);
+        }
+
+        /// <summary>
+        /// Returns the EstimatedQuote values for the given contact IDs, skipping any contact that has
+        /// no estimated quote assigned, so the result may be shorter than the input list.
+        /// </summary>
+        /// <param name="contactIds">Contact IDs to look up estimated quotes for.</param>
+        /// <returns>The non-blank estimated-quote numbers found among those contacts.</returns>
+        /// <response code="200">Estimated quotes returned (possibly empty).</response>
+        [HttpPost("estimated-quotes")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
+        public async Task<ActionResult<List<string>>> GetEstimatedQuotes(
+    [FromBody] List<long> contactIds)
+        {
+            var estimatedQuotes = await _contactService.GetEstimatedQuotesAsync(contactIds);
+            return Ok(estimatedQuotes);
         }
 
 

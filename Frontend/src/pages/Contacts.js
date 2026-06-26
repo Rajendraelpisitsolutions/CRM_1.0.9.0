@@ -110,6 +110,9 @@ function Contacts({
 
   // Slide-in "Generate Enquiry No" modal state
   const [slideGenerateEnquiryNo, setSlideGenerateEnquiryNo] = useState(false);
+  // Same for the Estimated Quote (EST-…), entered manually
+  const [slideGenerateEstimatedQuote, setSlideGenerateEstimatedQuote] = useState(false);
+  const [slideEstimatedQuote, setSlideEstimatedQuote] = useState("");
 
   const slideAccountListSyncRef = useRef(null);
   const [debouncedSlideAccountSearch, setDebouncedSlideAccountSearch] = useState("");
@@ -393,6 +396,7 @@ function Contacts({
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState(null);
   const hasEnquiryNo = Boolean(selectedContactDetails?.EnquiryNo || selectedContactDetails?.enquiryNo);
+  const hasEstimatedQuote = Boolean(selectedContactDetails?.EstimatedQuote || selectedContactDetails?.estimatedQuote);
 
   // Get all countries
   const countries = Country.getAllCountries();
@@ -488,7 +492,9 @@ function Contacts({
     setSelectedContactDetails(null);
     setSlideAccountSearch("");
     setSlideAccountMenuOpen(false);
-    setSlideGenerateEnquiryNo(false); 
+    setSlideGenerateEnquiryNo(false);
+    setSlideGenerateEstimatedQuote(false);
+    setSlideEstimatedQuote("");
     slideAccountListSyncRef.current = null;
     try {
       const res = await fetch(`/Contact/${encodeURIComponent(contactId)}`);
@@ -514,12 +520,16 @@ function Contacts({
     setSlideAccountSearch("");
     setSlideAccountMenuOpen(false);
     setSlideGenerateEnquiryNo(false);
+    setSlideGenerateEstimatedQuote(false);
+    setSlideEstimatedQuote("");
     slideAccountListSyncRef.current = null;
   };
 
   React.useEffect(() => {
     if (selectedContactDetails) {
       setSlideGenerateEnquiryNo(false);
+      setSlideGenerateEstimatedQuote(false);
+    setSlideEstimatedQuote("");
     }
   }, [selectedContactDetails?.ContactId, selectedContactDetails?.contactId]);
 
@@ -1832,13 +1842,24 @@ function Contacts({
             {selectedContactDetails && (
               <div className="flex items-center gap-4 px-3 py-2 border-b border-b-gray-200 bg-white">
 
-                <div className="text-sm font-semibold text-gray-700">
-                  Enquiry No:
-                  <span className="ml-1 text-blue-600">
-                    {selectedContactDetails?.EnquiryNo ||
-                      selectedContactDetails?.enquiryNo ||
-                      "-"}
-                  </span>
+                <div className="flex flex-col gap-2 ml-6 sm:ml-12">
+                  <div className="text-sm font-semibold text-gray-700">
+                    Enquiry No:
+                    <span className="ml-1 text-blue-600">
+                      {selectedContactDetails?.EnquiryNo ||
+                        selectedContactDetails?.enquiryNo ||
+                        "-"}
+                    </span>
+                  </div>
+
+                  <div className="text-sm font-semibold text-gray-700">
+                    Estimated Quote:
+                    <span className="ml-1 text-blue-600">
+                      {selectedContactDetails?.EstimatedQuote ||
+                        selectedContactDetails?.estimatedQuote ||
+                        "-"}
+                    </span>
+                  </div>
                 </div>
 
 
@@ -2048,10 +2069,13 @@ function Contacts({
                         account: resolvedName,
                         updatedBy:
                           auth?.getUser?.()?.name || localStorage.getItem("userName") || "Unknown",
+                        ...(slideEstimatedQuote
+                          ? { EstimatedQuote: slideEstimatedQuote, estimatedQuote: slideEstimatedQuote }
+                          : {}),
                       };
 
                       const res = await fetch(
-                        `/Contact/${encodeURIComponent(getField(selectedContactDetails, "ContactId") ?? getField(selectedContactDetails, "contactId") ?? selectedContactDetails.ContactId ?? selectedContactDetails.contactId)}?generateEnquiryNo=${slideGenerateEnquiryNo}`,
+                        `/Contact/${encodeURIComponent(getField(selectedContactDetails, "ContactId") ?? getField(selectedContactDetails, "contactId") ?? selectedContactDetails.ContactId ?? selectedContactDetails.contactId)}?generateEnquiryNo=${slideGenerateEnquiryNo}&generateEstimatedQuote=${slideGenerateEstimatedQuote}`,
                         {
                           method: "PUT",
                           headers: { "Content-Type": "application/json" },
@@ -2063,6 +2087,8 @@ function Contacts({
                         onToast &&
                           onToast("Contact updated successfully", "success");
                         setSlideGenerateEnquiryNo(false);
+                        setSlideGenerateEstimatedQuote(false);
+    setSlideEstimatedQuote("");
                         handleCloseContactDetails();
                       } else {
                         onToast && onToast("Failed to update contact", "error");
@@ -2446,6 +2472,43 @@ function Contacts({
                                   ? `Current: ${selectedContactDetails.EnquiryNo || selectedContactDetails.enquiryNo}`
                                   : "Not generated"}
                           </p>
+
+                          <label className={`flex items-center gap-2 mt-4 ${hasEstimatedQuote ? "opacity-50 cursor-not-allowed" : "cursor-pointer select-none"}`}>
+                            <input
+                              type="checkbox"
+                              checked={slideGenerateEstimatedQuote}
+                              disabled={hasEstimatedQuote}
+                              onChange={(e) => {
+                                setSlideGenerateEstimatedQuote(e.target.checked);
+                                setSlideEstimatedQuote(
+                                  e.target.checked
+                                    ? (selectedContactDetails?.EstimatedQuote || selectedContactDetails?.estimatedQuote || "EST-")
+                                    : ""
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="font-normal text-gray-700 text-sm">
+                              Add Estimated Quote
+                            </span>
+                          </label>
+                          {hasEstimatedQuote ? (
+                            <p className="text-xs text-gray-500 mt-1.5 ml-6">
+                              Already added: {selectedContactDetails?.EstimatedQuote || selectedContactDetails?.estimatedQuote}
+                            </p>
+                          ) : slideGenerateEstimatedQuote ? (
+                            <input
+                              type="text"
+                              value={slideEstimatedQuote}
+                              onChange={(e) => setSlideEstimatedQuote(e.target.value)}
+                              placeholder="EST-0019"
+                              className="w-full mt-2 px-3 py-2 rounded-lg border-2 border-gray-200 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                            />
+                          ) : (
+                            <p className="text-xs text-gray-500 mt-1.5 ml-6">
+                              Not added
+                            </p>
+                          )}
                         </div>
                       </div>
 

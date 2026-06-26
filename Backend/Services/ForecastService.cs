@@ -27,11 +27,11 @@ namespace Elpis_CRM.Services
         #region Totals
 
         /// <summary>
-        /// Gets the total deals for a given month and year.
+        /// Counts deals created within the given month (by <c>CreatedAt</c>) and labels the period with the localized month name and year.
         /// </summary>
-        /// <param name="monthName">The month name (e.g., "January").</param>
-        /// <param name="year">The year (e.g., 2026).</param>
-        /// <returns>An object containing the period label and total deals.</returns>
+        /// <param name="monthName">Full month name (e.g., "January"), parsed via the invariant culture.</param>
+        /// <param name="year">Four-digit year (e.g., 2026).</param>
+        /// <returns>An anonymous object exposing <c>period</c> (label) and <c>totalDeals</c> (count).</returns>
         public async Task<object> MonthlyAsync(string monthName, int year)
         {
             int month = ParseMonthName(monthName);
@@ -42,11 +42,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Gets the total deals for a given quarter and year.
+        /// Counts deals created across the quarter's three months (by <c>CreatedAt</c>) and labels the period with the start–end month range.
         /// </summary>
-        /// <param name="quarter">The quarter ("Q1", "Q2", "Q3", "Q4").</param>
-        /// <param name="year">The year.</param>
-        /// <returns>An object containing the period label and total deals.</returns>
+        /// <param name="quarter">Quarter token "Q1"–"Q4" (case-insensitive).</param>
+        /// <param name="year">Four-digit year.</param>
+        /// <returns>An anonymous object exposing <c>period</c> (label) and <c>totalDeals</c> (count).</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="quarter"/> is not Q1–Q4.</exception>
         public async Task<object> QuarterlyAsync(string quarter, int year)
         {
             int startMonth = quarter.ToUpper() switch
@@ -66,10 +67,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Gets the total deals for a given year.
+        /// Counts deals created during the full calendar year (by <c>CreatedAt</c>), labeling the period with the year.
         /// </summary>
-        /// <param name="year">The year.</param>
-        /// <returns>An object containing the period label and total deals.</returns>
+        /// <param name="year">Four-digit year.</param>
+        /// <returns>An anonymous object exposing <c>period</c> (label) and <c>totalDeals</c> (count).</returns>
         public async Task<object> YearlyAsync(int year)
         {
             DateTime start = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -79,8 +80,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Builds a result object containing total deals in the specified period.
+        /// Counts deals whose <c>CreatedAt</c> falls within the inclusive [start, end] range and pairs the count with the supplied label.
         /// </summary>
+        /// <param name="start">Inclusive lower bound of the creation date range.</param>
+        /// <param name="end">Inclusive upper bound of the creation date range.</param>
+        /// <param name="label">Human-readable period label returned as <c>period</c>.</param>
+        /// <returns>An anonymous object exposing <c>period</c> and <c>totalDeals</c>.</returns>
         private async Task<object> BuildResultAsync(DateTime start, DateTime end, string label)
         {
             int totalDeals = await _context.Deals
@@ -98,9 +103,12 @@ namespace Elpis_CRM.Services
         #region Six Month Trend
 
         /// <summary>
-        /// Gets 6-month trend data: Actual Revenue vs Expected Pipeline Conversion.
-        /// Actual: Closed paid deals. Expected: Weighted open pipeline.
+        /// Builds a six-month trend grouped by month. For each month, actual revenue sums the
+        /// <c>DealValue</c> of deals that have a close date and a "Paid"/"Won" payment status,
+        /// while expected pipeline sums open deals' <c>DealValue × (Probability / 100)</c>.
+        /// Deals are bucketed by their closed month when set, otherwise their expected-close month.
         /// </summary>
+        /// <returns>An ordered list of per-month objects, each with <c>month</c>, <c>actualRevenue</c>, and <c>expectedPipeline</c>.</returns>
         public async Task<List<object>> SixMonthTrendAsync()
         {
             var endDate = DateTime.UtcNow.Date;
@@ -164,8 +172,11 @@ namespace Elpis_CRM.Services
         #region Deal Names
 
         /// <summary>
-        /// Gets distinct deal names for a specific month.
+        /// Returns the distinct names of deals created during the specified month (matched on <c>CreatedAt</c>).
         /// </summary>
+        /// <param name="monthName">Full month name (e.g., "January"), parsed via the invariant culture.</param>
+        /// <param name="year">Four-digit year.</param>
+        /// <returns>Distinct deal names for the month; entries may be null.</returns>
         public async Task<List<string?>> MonthlyDealNamesAsync(string monthName, int year)
         {
             int month = ParseMonthName(monthName);
@@ -176,8 +187,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Gets distinct deal names for a specific quarter.
+        /// Returns the distinct names of deals created during the specified quarter (matched on <c>CreatedAt</c>).
         /// </summary>
+        /// <param name="quarter">Quarter token "Q1"–"Q4" (case-insensitive).</param>
+        /// <param name="year">Four-digit year.</param>
+        /// <returns>Distinct deal names for the quarter; entries may be null.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="quarter"/> is not Q1–Q4.</exception>
         public async Task<List<string?>> QuarterlyDealNamesAsync(string quarter, int year)
         {
             int startMonth = quarter.ToUpper() switch
@@ -196,8 +211,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Gets distinct deal names for a specific year.
+        /// Returns the distinct names of deals created during the specified year (matched on <c>CreatedAt</c>).
         /// </summary>
+        /// <param name="year">Four-digit year.</param>
+        /// <returns>Distinct deal names for the year; entries may be null.</returns>
         public async Task<List<string?>> YearlyDealNamesAsync(int year)
         {
             DateTime start = new DateTime(year, 1, 1);
@@ -207,8 +224,11 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Common method to get distinct deal names for a date range.
+        /// Queries deals whose <c>CreatedAt</c> falls in the inclusive [start, end] range and returns their distinct names.
         /// </summary>
+        /// <param name="start">Inclusive lower bound of the creation date range.</param>
+        /// <param name="end">Inclusive upper bound of the creation date range.</param>
+        /// <returns>Distinct deal names within the range; entries may be null.</returns>
         private async Task<List<string?>> GetDealNamesForPeriodAsync(DateTime start, DateTime end)
         {
             return await _context.Deals
@@ -223,9 +243,12 @@ namespace Elpis_CRM.Services
         #region Helpers
 
         /// <summary>
-        /// Parses the full month name into an integer (1–12).
+        /// Converts a full month name to its 1–12 number, trimming whitespace and stripping any embedded quotes first.
         /// </summary>
-        /// <param name="monthName">Full month name (e.g., "January")</param>
+        /// <param name="monthName">Full month name (e.g., "January"), interpreted with the invariant culture.</param>
+        /// <returns>The month number, 1 through 12.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="monthName"/> is null, empty, or whitespace.</exception>
+        /// <exception cref="FormatException">Thrown when the text is not a recognizable full month name.</exception>
         private int ParseMonthName(string monthName)
         {
             if (string.IsNullOrWhiteSpace(monthName))

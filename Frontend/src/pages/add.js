@@ -344,6 +344,8 @@ function AddForms({
 
   // State to control whether to generate an enquiry number automatically or not
   const [generateEnquiryNo, setGenerateEnquiryNo] = useState(false);
+  // Same idea for the estimated quote (EST-…)
+  const [generateEstimatedQuote, setGenerateEstimatedQuote] = useState(false);
 
   const getContactDisplayName = (contact) => {
     if (!contact) return "";
@@ -442,6 +444,7 @@ function AddForms({
     ImportID: "",
     Account: "",
     EnquiryNo: "", //EnquiryNo:"EITSPL-EQ-",
+    EstimatedQuote: "", //EstimatedQuote:"EST-",
   });
 
   // Account form fields state
@@ -739,6 +742,12 @@ function AddForms({
             newContact.emails = emailVal;
             newContact.Emails = emailVal;
           }
+          // Estimated Quote is a manually-entered value — always include it when present.
+          const estQuoteVal = (contactFormData.EstimatedQuote || "").trim();
+          if (estQuoteVal) {
+            newContact.EstimatedQuote = estQuoteVal;
+            newContact.estimatedQuote = estQuoteVal;
+          }
           // Account: persist both ID and name (DB FK + display). Send PascalCase + camelCase so binding always works.
           const accIdVal = selectedAccountId ? Number(selectedAccountId) : NaN;
           const hasValidAccountId = Number.isFinite(accIdVal) && accIdVal > 0;
@@ -768,7 +777,7 @@ function AddForms({
           newContact.createdBy = savedUserName || "Unknown";
           newContact.updatedBy = savedUserName || "Unknown";
           try {
-            await apiClient.post(`/Contact?generateEnquiryNo=${generateEnquiryNo}`, newContact, {
+            await apiClient.post(`/Contact?generateEnquiryNo=${generateEnquiryNo}&generateEstimatedQuote=${generateEstimatedQuote}`, newContact, {
               headers: { "Content-Type": "application/json" },
             });
             // Dispatch event to notify other components to refetch
@@ -1084,6 +1093,29 @@ function AddForms({
                     value={generateEnquiryNo ? "Will be auto-generated (e.g. EITSPL-EQ-003)" : "Not generated"}
                     className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-slate-50 text-sm text-slate-500 cursor-not-allowed"
                   />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-label flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={generateEstimatedQuote}
+                      onChange={(e) => {
+                        setGenerateEstimatedQuote(e.target.checked);
+                        updateContactField("EstimatedQuote", e.target.checked ? "EST-" : "");
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    />
+                    Add Estimated Quote
+                  </label>
+                  {generateEstimatedQuote && (
+                    <input
+                      type="text"
+                      value={contactFormData.EstimatedQuote || ""}
+                      onChange={(e) => updateContactField("EstimatedQuote", e.target.value)}
+                      placeholder="EST-0019"
+                      className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
                 {/* SECTION 1: Personal Information */}
                 <FormSection

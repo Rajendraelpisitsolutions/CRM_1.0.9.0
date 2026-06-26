@@ -4,6 +4,11 @@ using System.Text.Json;
 
 namespace Elpis_CRM.Controllers
 {
+    /// <summary>
+    /// Reads and updates the quarterly dashboard sales targets, which are persisted in a single JSON file
+    /// (Data/dashboard-targets.json) under the content root rather than in the database. A process-wide
+    /// semaphore serializes file access so concurrent reads/writes don't corrupt the file.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class DashboardTargetsController : ControllerBase
@@ -11,6 +16,10 @@ namespace Elpis_CRM.Controllers
         private static readonly SemaphoreSlim _fileLock = new SemaphoreSlim(1, 1);
         private readonly string _filePath;
 
+        /// <summary>
+        /// Resolves the targets file path under the application's content root (Data/dashboard-targets.json).
+        /// </summary>
+        /// <param name="env">Hosting environment used to locate the content root.</param>
         public DashboardTargetsController(IWebHostEnvironment env)
         {
             // ContentRootPath is always correct on any server
@@ -21,6 +30,13 @@ namespace Elpis_CRM.Controllers
             );
         }
 
+        /// <summary>
+        /// Returns the raw targets JSON file contents verbatim (as application/json), taking the file lock
+        /// for the duration of the read.
+        /// </summary>
+        /// <returns>The file's JSON content.</returns>
+        /// <response code="200">The current dashboard targets as JSON.</response>
+        /// <response code="404">The targets file does not exist.</response>
         [HttpGet("dashboard-targets")]
         public async Task<IActionResult> GetTargets()
         {
@@ -41,6 +57,17 @@ namespace Elpis_CRM.Controllers
             }
         }
 
+        /// <summary>
+        /// Sets the target for a single quarter and rewrites the JSON file, preserving the other quarters'
+        /// values. The whole read-modify-write runs under the file lock; the quarter name is matched
+        /// case-insensitively against q1-q4.
+        /// </summary>
+        /// <param name="quarter">Which quarter to update: q1, q2, q3 or q4 (case-insensitive).</param>
+        /// <param name="request">Body carrying the new <c>Target</c> value for that quarter.</param>
+        /// <returns>The full set of targets after the update.</returns>
+        /// <response code="200">The quarter was updated; returns all four targets.</response>
+        /// <response code="400">The quarter segment was not one of q1-q4.</response>
+        /// <response code="404">The targets file does not exist.</response>
         [HttpPut("dashboard-targets/{quarter}")]
         public async Task<IActionResult> UpdateQuarter(
             string quarter,

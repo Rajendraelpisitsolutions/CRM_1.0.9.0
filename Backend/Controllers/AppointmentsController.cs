@@ -27,10 +27,10 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves all appointments.
+        /// Returns every appointment in the system, unfiltered.
         /// </summary>
-        /// <returns>A list of appointments.</returns>
-        /// <response code="200">Appointments retrieved successfully</response>
+        /// <returns>The full list of appointments; empty when none exist.</returns>
+        /// <response code="200">Appointments retrieved successfully.</response>
         [HttpGet]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<AppointmentsModel>>> GetAll()
@@ -40,12 +40,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves an appointment by its ID.
+        /// Looks up a single appointment by its identifier.
         /// </summary>
-        /// <param name="id">The appointment ID.</param>
-        /// <returns>The appointment details.</returns>
-        /// <response code="200">Appointment found</response>
-        /// <response code="404">Appointment not found</response>
+        /// <param name="id">Primary key of the appointment.</param>
+        /// <returns>The matching appointment, or a 404 when no appointment carries that ID.</returns>
+        /// <response code="200">Appointment found.</response>
+        /// <response code="404">No appointment exists with the given ID.</response>
         [HttpGet("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<AppointmentsModel>> GetById(int id)
@@ -59,11 +59,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves appointments associated with a specific contact.
+        /// Returns the appointments linked to a given contact.
         /// </summary>
-        /// <param name="contactId">The contact ID.</param>
-        /// <returns>A list of appointments.</returns>
-        /// <response code="200">Appointments retrieved successfully</response>
+        /// <param name="contactId">Identifier of the contact whose appointments are wanted.</param>
+        /// <returns>Appointments for that contact; empty when the contact has none.</returns>
+        /// <response code="200">Appointments retrieved successfully.</response>
         [HttpGet("contact/{contactId:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<AppointmentsModel>>> GetByContactId(int contactId)
@@ -73,11 +73,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Retrieves appointments associated with a specific account.
+        /// Returns the appointments linked to a given account.
         /// </summary>
-        /// <param name="accountId">The account ID.</param>
-        /// <returns>A list of appointments.</returns>
-        /// <response code="200">Appointments retrieved successfully</response>
+        /// <param name="accountId">Identifier of the account whose appointments are wanted.</param>
+        /// <returns>Appointments for that account; empty when the account has none.</returns>
+        /// <response code="200">Appointments retrieved successfully.</response>
         [HttpGet("account/{accountId:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<List<AppointmentsModel>>> GetByAccountId(int accountId)
@@ -87,12 +87,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Creates a new appointment.
+        /// Creates an appointment after validating the model; creation timestamps are set by the service.
         /// </summary>
-        /// <param name="appointment">Appointment data.</param>
-        /// <returns>The newly created appointment.</returns>
-        /// <response code="201">Appointment created successfully</response>
-        /// <response code="400">Invalid request data</response>
+        /// <param name="appointment">Appointment to persist, supplied in the request body.</param>
+        /// <returns>The stored appointment with its generated ID, plus a Location header pointing at <see cref="GetById"/>.</returns>
+        /// <response code="201">Appointment created successfully.</response>
+        /// <response code="400">The submitted appointment failed model validation.</response>
         [HttpPost]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<AppointmentsModel>> Create([FromBody] AppointmentsModel appointment)
@@ -107,13 +107,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Updates an existing appointment.
+        /// Applies the supplied changes to the appointment with the given ID; only a fixed subset of fields is updated.
         /// </summary>
-        /// <param name="id">The appointment ID.</param>
-        /// <param name="appointment">Updated appointment data.</param>
-        /// <returns>The updated appointment.</returns>
-        /// <response code="200">Appointment updated successfully</response>
-        /// <response code="404">Appointment not found</response>
+        /// <param name="id">Primary key of the appointment to modify.</param>
+        /// <param name="appointment">Replacement values for the editable appointment fields.</param>
+        /// <returns>The updated appointment, or a 404 when the ID does not exist.</returns>
+        /// <response code="200">Appointment updated successfully.</response>
+        /// <response code="404">No appointment exists with the given ID.</response>
         [HttpPut("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
         public async Task<ActionResult<AppointmentsModel>> Update(int id, [FromBody] AppointmentsModel appointment)
@@ -127,12 +127,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Deletes an appointment by its ID.
+        /// Permanently removes the appointment with the given ID. Restricted to Admin and Manager roles.
         /// </summary>
-        /// <param name="id">The appointment ID.</param>
-        /// <returns>Deletion result.</returns>
-        /// <response code="200">Appointment deleted successfully</response>
-        /// <response code="404">Appointment not found</response>
+        /// <param name="id">Primary key of the appointment to delete.</param>
+        /// <returns>A confirmation message on success, or a 404 when the ID does not exist.</returns>
+        /// <response code="200">Appointment deleted successfully.</response>
+        /// <response code="404">No appointment exists with the given ID.</response>
         [HttpDelete("{id:int}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager")]
         public async Task<ActionResult> Delete(int id)

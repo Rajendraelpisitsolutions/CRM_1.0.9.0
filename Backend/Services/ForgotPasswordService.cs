@@ -7,6 +7,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Concurrent;
 
+/// <summary>
+/// Drives the forgot-password flow: issues time-limited OTPs, verifies them, and resets the stored password.
+/// OTPs are held in a process-wide in-memory store keyed by email, so they do not survive a restart and are
+/// not shared across instances.
+/// </summary>
 public class ForgotPasswordService
 {
     private readonly AppDbContext _loginDb;
@@ -18,8 +23,11 @@ public class ForgotPasswordService
     }
 
     /// <summary>
-    /// Generates a secure OTP, stores it temporarily, and emails it to the user.
+    /// Produces a cryptographically-random 4-digit OTP, records it against the email with a 5-minute expiry
+    /// (overwriting any prior code), and emails it. No account-existence check is performed.
     /// </summary>
+    /// <param name="email">Address that will receive the code and act as the store key.</param>
+    /// <returns>"OTP sent successfully", or "Email cannot be empty" when the address is blank.</returns>
     public async Task<string> GenerateOtpAsync(string email)
     {
         if (string.IsNullOrWhiteSpace(email))
@@ -41,8 +49,12 @@ public class ForgotPasswordService
     }
 
     /// <summary>
-    /// Validates the OTP and marks it as verified.
+    /// Confirms the supplied code matches the unexpired OTP stored for the email; on success it overwrites the
+    /// stored code with the sentinel -1 to mark it verified for the password-reset step.
     /// </summary>
+    /// <param name="email">Address whose pending OTP is being checked.</param>
+    /// <param name="otp">The code entered by the user.</param>
+    /// <returns>"OTP validated successfully", "OTP not found", or "Invalid or expired OTP".</returns>
     public string ValidateOtp(string email, int otp)
     {
         if (!otpStore.TryGetValue(email, out var data))
@@ -60,8 +72,12 @@ public class ForgotPasswordService
     }
 
     /// <summary>
-    /// Updates the password for a user whose OTP has been validated.
+    /// Writes the new password for the account, but only when the email carries a validated OTP (the -1 sentinel);
+    /// it then removes the OTP entry so the same validation cannot be reused.
     /// </summary>
+    /// <param name="email">Address identifying the account; must have a validated OTP on file.</param>
+    /// <param name="newPassword">Replacement password, stored as provided.</param>
+    /// <returns>"Password updated successfully", "OTP not validated", or "User not found".</returns>
     public async Task<string> UpdatePasswordAsync(string email, string newPassword)
     {
         if (!otpStore.TryGetValue(email, out var otpEntry) || otpEntry.Otp != -1)
@@ -82,6 +98,11 @@ public class ForgotPasswordService
 
     #region Helpers
 
+    /// <summary>
+    /// Sends the OTP to the recipient over the configured Office 365 SMTP relay (TLS on port 587).
+    /// </summary>
+    /// <param name="userEmail">Recipient address; trimmed before use.</param>
+    /// <param name="otp">The one-time code to include in the message body.</param>
     private async Task SendEmailAsync(string userEmail, int otp)
     {
         var fromAddress = new MailAddress("Rajendra.m@elpisitsolutions.com", "Elpis CRM OTP Service");

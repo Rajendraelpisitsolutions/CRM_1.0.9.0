@@ -15,12 +15,12 @@ import Home from "./Home";
 
 import Sidebar from "./Sidebar";
 import Header from "./header";
-import Email from "./Email";
 import Deals from "./Deals";
-import OutlookEmail from "./OutlookEmail";
+import OutlookEmail, { Email } from "./OutlookEmail";
 import Teams from "./Teams";
 import CalendarView from "./CalendarView";
 import Users from "./Users";
+import AuditLogs from "./AuditLogs";
 
 import AddForms from "./add";
 import FilterPanel from "./FilterPanel";
@@ -332,6 +332,7 @@ function Dashboard() {
     else if (path.includes("/dashboard/deals")) tab = "deals";
     else if (path.includes("/dashboard/outlookemail")) tab = "outlookEmail";
     else if (path.includes("/dashboard/users")) tab = "users";
+    else if (path.includes("/dashboard/audit-logs")) tab = "auditLogs";
     else if (path.includes("/dashboard/calllogs")) tab = "calllogs";
     else if (path.includes("/dashboard/profile")) return; // profile renders via Outlet, don't touch activeContent
     else if (path.includes("/dashboard/calendar")) return; // calendar renders via Outlet
@@ -375,6 +376,7 @@ function Dashboard() {
     deals: "Deals",
     outlookEmail: " Email",
     users: "Users",
+    auditLogs: "Audit Logs",
     calllogs: "Call Logs",
     calendar: "Calendar",
   };
@@ -411,6 +413,7 @@ function Dashboard() {
     else if (tabId === "deals") url = "/dashboard/Deals";
     else if (tabId === "outlookEmail") url = "/dashboard/OutlookEmail";
     else if (tabId === "users") url = "/dashboard/users";
+    else if (tabId === "auditLogs") url = "/dashboard/audit-logs";
     else if (tabId === "calllogs") url = "/dashboard/calllogs";
     else if (tabId === "calendar") url = "/dashboard/Calendar";
     window.history.pushState({}, "", url);
@@ -892,7 +895,7 @@ function Dashboard() {
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Render nested routes (like Import) via Outlet */}
 
-            {location.pathname.includes("/Import") || location.pathname.includes("/Contacts") || location.pathname.includes("/Teams") || location.pathname.includes("/OutlookEmail") || location.pathname.includes("/users") || location.pathname.toLowerCase().includes("/profile") || location.pathname.toLowerCase().includes("/calendar") ? (
+            {location.pathname.includes("/Import") || location.pathname.includes("/Contacts") || location.pathname.includes("/Teams") || location.pathname.includes("/OutlookEmail") || location.pathname.includes("/users") || location.pathname.toLowerCase().includes("/audit-logs") || location.pathname.toLowerCase().includes("/profile") || location.pathname.toLowerCase().includes("/calendar") ? (
 
               <Outlet />
 
@@ -1059,6 +1062,11 @@ function Dashboard() {
                 {/* Users Tab */}
                 {activeContent === "users" && openTabs.includes("users") && (
                   <Users />
+                )}
+
+                {/* Audit Logs Tab (Admin only) */}
+                {activeContent === "auditLogs" && openTabs.includes("auditLogs") && (
+                  <AuditLogs />
                 )}
 
                 {/* Call Logs Tab */}

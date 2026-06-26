@@ -21,8 +21,8 @@ namespace Elpis_CRM.Controllers
         /// <summary>
         /// Initializes a new instance of the <see cref="BusinessCardController"/>.
         /// </summary>
-        /// <param name="businessCardService">Optional Azure business card service instance.</param>
-        /// <param name="accountService">Account service instance for creating accounts.</param>
+        /// <param name="businessCardService">Azure Document Intelligence scanning service; null when the integration is not configured, in which case scan endpoints return 501.</param>
+        /// <param name="accountService">Account service used to persist accounts created from a scanned card.</param>
         public BusinessCardController(
             AzureBusinessCardService? businessCardService,
             AccountService accountService)
@@ -32,12 +32,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Scans a business card image and extracts contact information.
-        /// Returns extracted data without saving to database.
+        /// Runs the uploaded card image through Azure Document Intelligence and returns the extracted
+        /// account fields (company name, website, phone, address) without persisting anything.
         /// </summary>
-        /// <param name="file">Business card image (JPEG, PNG, TIFF, BMP, or WebP). Maximum 5 MB.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>Extracted account information from the business card.</returns>
+        /// <param name="file">Business card image (JPEG, PNG, TIFF, BMP, or WebP); must be non-empty and at most 5 MB.</param>
+        /// <param name="cancellationToken">Token used to cancel the Azure analysis call.</param>
+        /// <returns>An account populated from the card; fields the model could not detect are left empty.</returns>
         /// <response code="200">Business card scanned successfully</response>
         /// <response code="400">File is missing, empty, too large, or has an unsupported format</response>
         /// <response code="422">Azure analysis failed or could not extract document</response>
@@ -104,12 +104,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Scans a business card image and creates a new account with extracted information.
-        /// Saves the extracted data to the database and returns the created account.
+        /// Scans the card via Azure Document Intelligence and persists the extracted data as a new account.
+        /// Restricted to Admins and Managers. The Location header points at the Scan action.
         /// </summary>
-        /// <param name="file">Business card image (JPEG, PNG, TIFF, BMP, or WebP). Maximum 5 MB.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>The newly created account with extracted business card information.</returns>
+        /// <param name="file">Business card image (JPEG, PNG, TIFF, BMP, or WebP); must be non-empty and at most 5 MB.</param>
+        /// <param name="cancellationToken">Token used to cancel the Azure analysis call.</param>
+        /// <returns>The persisted account, including its database-assigned id.</returns>
         /// <response code="201">Account created successfully from business card</response>
         /// <response code="400">File is missing, empty, too large, or has an unsupported format</response>
         /// <response code="422">Azure analysis failed or could not extract document</response>

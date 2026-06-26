@@ -7,10 +7,18 @@ using System.Reflection;
 
 namespace Elpis_CRM.Services
 {
+    /// <summary>
+    /// Queries accounts and contacts from the database and renders the matching
+    /// rows into in-memory ClosedXML Excel workbooks for download.
+    /// </summary>
     public class ExportService
     {
         private readonly AppDbContext _context;
 
+        /// <summary>
+        /// Initializes the service with the database context used to read the records being exported.
+        /// </summary>
+        /// <param name="context">The application database context.</param>
         public ExportService(AppDbContext context)
         {
             _context = context;
@@ -18,6 +26,15 @@ namespace Elpis_CRM.Services
 
         // ─── Accounts ───────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Reads accounts (no tracking), narrows them by an optional case-insensitive
+        /// search over name/city/country/phone/website and an optional tag substring,
+        /// then renders the result into an "Accounts" Excel worksheet.
+        /// </summary>
+        /// <param name="search">Case-insensitive term matched against name, city, country, phone, and website; ignored when null or blank.</param>
+        /// <param name="tag">Case-insensitive substring matched against the account's tags; ignored when null or blank.</param>
+        /// <param name="columns">Property names to export as columns; when null or empty, every public property is included.</param>
+        /// <returns>The .xlsx workbook as a byte array.</returns>
         public async Task<byte[]> ExportAccountsAsync(
             string? search,
             string? tag,
@@ -48,6 +65,14 @@ namespace Elpis_CRM.Services
 
         // ─── Contacts ───────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Reads contacts (no tracking), narrows them by an optional case-insensitive
+        /// search over first/last name, work email, work phone, city, and country,
+        /// then renders the result into a "Contacts" Excel worksheet.
+        /// </summary>
+        /// <param name="search">Case-insensitive term matched against first/last name, work email, work phone, city, and country; ignored when null or blank.</param>
+        /// <param name="columns">Property names to export as columns; when null or empty, every public property is included.</param>
+        /// <returns>The .xlsx workbook as a byte array.</returns>
         public async Task<byte[]> ExportContactsAsync(
             string? search,
             List<string>? columns)
@@ -73,10 +98,17 @@ namespace Elpis_CRM.Services
         // ─── Generic Excel builder ───────────────────────────────────────────────
 
         /// <summary>
-        /// Builds an Excel workbook from a list of model objects.
-        /// Only the properties listed in <paramref name="columns"/> are included;
-        /// if <paramref name="columns"/> is null/empty, ALL properties are exported.
+        /// Builds a single-sheet Excel workbook from a list of model objects using reflection.
+        /// Only the properties listed in <paramref name="columns"/> are included (order-preserving,
+        /// case-insensitive, unknown names skipped); if <paramref name="columns"/> is null/empty,
+        /// ALL public instance properties are exported. The header row is styled, columns are
+        /// auto-fit up to 60 characters, and the header is frozen.
         /// </summary>
+        /// <typeparam name="T">The model type whose public instance properties become columns.</typeparam>
+        /// <param name="rows">The records to write as data rows.</param>
+        /// <param name="columns">Property names selecting which columns to export; null or empty exports all.</param>
+        /// <param name="sheetName">Name applied to the generated worksheet.</param>
+        /// <returns>The serialized .xlsx workbook as a byte array.</returns>
         private static byte[] BuildExcel<T>(
             IReadOnlyList<T> rows,
             List<string>? columns,
@@ -133,6 +165,13 @@ namespace Elpis_CRM.Services
 
         // ─── Helpers ────────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Writes a value into a cell using a type-appropriate representation: dates get a
+        /// "yyyy-MM-dd HH:mm:ss" format, numeric and boolean values are written natively,
+        /// null becomes an empty string, and anything else falls back to <c>ToString()</c>.
+        /// </summary>
+        /// <param name="cell">The target worksheet cell.</param>
+        /// <param name="value">The property value to write; may be null.</param>
         private static void SetCellValue(IXLCell cell, object? value)
         {
             if (value is null)

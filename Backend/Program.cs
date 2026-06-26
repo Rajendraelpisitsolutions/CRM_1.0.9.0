@@ -37,7 +37,11 @@ builder.Services.AddCors(options =>
             "https://elpiscrm.vercel.app",
             "https://crm.elpisitsolutions.com",
             "https://elpisitsolutions.com",
-            "https://www.elpisitsolutions.com"
+            "https://www.elpisitsolutions.com",
+            // Local React dev server — allowed regardless of ASPNETCORE_ENVIRONMENT so a
+            // Production-mode local run doesn't break it.
+            "http://localhost:3000",
+            "http://127.0.0.1:3000"
         };
             
         // Allow local frontend during development
@@ -170,6 +174,7 @@ builder.Services.AddScoped<MeetingService>();
 builder.Services.AddScoped<AppointmentsService>();
 builder.Services.AddScoped<NotesService>();
 builder.Services.AddScoped<ContactUsService>();
+builder.Services.AddScoped<AuditLogService>();
 
 // Azure Document Intelligence
 var azureSettings = builder.Configuration
@@ -202,6 +207,35 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 
 
 var app = builder.Build();
+
+// Ensure the AuditLogs table exists (the schema is hand-managed, so create it on startup if missing).
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Elpis_CRM.Data.AppDbContext>();
+    db.Database.ExecuteSqlRaw(@"
+IF OBJECT_ID(N'dbo.AuditLogs', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AuditLogs (
+        Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        EntityName NVARCHAR(100) NULL,
+        EntityId NVARCHAR(100) NULL,
+        Action NVARCHAR(20) NULL,
+        ChangedBy NVARCHAR(150) NULL,
+        ChangedByName NVARCHAR(150) NULL,
+        ChangedByRole NVARCHAR(50) NULL,
+        ChangedAt DATETIME2 NOT NULL,
+        Changes NVARCHAR(MAX) NULL,
+        IpAddress NVARCHAR(64) NULL
+    );
+    CREATE INDEX IX_AuditLogs_Entity ON dbo.AuditLogs (EntityName, EntityId);
+    CREATE INDEX IX_AuditLogs_ChangedAt ON dbo.AuditLogs (ChangedAt);
+END");
+}
+catch (Exception ex)
+{
+    app.Services.GetRequiredService<ILogger<Program>>().LogError(ex, "Failed to ensure AuditLogs table exists.");
+}
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>

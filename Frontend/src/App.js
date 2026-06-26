@@ -15,6 +15,7 @@ const Product = lazy(() => import("./pages/Product"));
 const Deals = lazy(() => import("./pages/Deals"));
 const OutlookEmail = lazy(() => import("./pages/OutlookEmail"));
 const Users = lazy(() => import("./pages/Users"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Unauthorized = lazy(() => import("./pages/Unauthorized"));
 const ImportData = lazy(() => import("./pages/ImportData"));
 const Teams = lazy(() => import("./pages/Teams"));
@@ -67,6 +68,7 @@ function App() {
             <Route path="Deals" element={<Deals />} />
             <Route path="OutlookEmail" element={<OutlookEmail />} />
             <Route path="users" element={<Users />} />
+            <Route path="audit-logs" element={<ProtectedRoute allowedRoles={["admin"]}><AuditLogs /></ProtectedRoute>} />
             <Route path="import" element={<ImportData />} />
             <Route path="Teams" element={<Teams />} />
             <Route path="profile" element={<Profile />} />

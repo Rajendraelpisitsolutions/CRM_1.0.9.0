@@ -24,10 +24,8 @@ import { useContext } from "react";
 import AuthContext from "../auth/AuthContext";
 import apiClient from "../api/client";
 import SignupPanel from "./SignupPanel";
-import Email from "./Email";
 import logo from "../assets/Logo_2.png";
 import AddForms from "./add";
-import { HiOutlineMail } from "react-icons/hi";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -135,7 +133,6 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
     try { return sessionStorage.getItem("userRole") || localStorage.getItem("userRole") || ""; } catch { return ""; }
   });
   const [showSignupPanel, setShowSignupPanel] = useState(false);
-  const [showEmailPanel, setShowEmailPanel] = useState(false);
 
   // Stable ref so fetchNotifications doesn't need accounts/instance in deps
   const msalRef = useRef({ accounts, instance });
@@ -977,33 +974,6 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
           )}
         </div>
 
-        {/* Email button — hidden on the smallest screens (lives in the Add popup there instead, see below) */}
-        <button
-          onClick={async () => {
-            if (accounts.length === 0) {
-              try {
-                await instance.loginRedirect({
-                  scopes: [
-                    "https://graph.microsoft.com/User.Read",
-                    "https://graph.microsoft.com/Mail.Read",
-                    "https://graph.microsoft.com/Mail.ReadWrite",
-                    "https://graph.microsoft.com/Mail.Send",
-                  ],
-                });
-                setShowEmailPanel(true);
-              } catch (error) {
-                console.error("Login failed:", error);
-              }
-            } else {
-              setShowEmailPanel(true);
-            }
-          }}
-          className="hidden sm:inline-flex p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-          title="Send Mail"
-          aria-label="Send Mail"
-        >
-          <HiOutlineMail size={18} />
-        </button>
 
         {/* Add button */}
         {(auth?.getRole?.() === "Admin" || auth?.getRole?.() === "admin" || auth?.getRole?.() === "Manager" || auth?.getRole?.() === "manager" || auth?.getRole?.() === "User" || auth?.getRole?.() === "user") && (
@@ -1054,34 +1024,6 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                     <FiDollarSign size={18} className="text-purple-500" />
                     <span className="font-medium">Add Deal</span>
                   </a>
-                  {/* Send Mail — surfaced here too on the smallest screens, where the
-                      standalone mail icon in the header is hidden for space */}
-                  <button
-                    onClick={async () => {
-                      setShowAddPopup(false);
-                      if (accounts.length === 0) {
-                        try {
-                          await instance.loginRedirect({
-                            scopes: [
-                              "https://graph.microsoft.com/User.Read",
-                              "https://graph.microsoft.com/Mail.Read",
-                              "https://graph.microsoft.com/Mail.ReadWrite",
-                              "https://graph.microsoft.com/Mail.Send",
-                            ],
-                          });
-                          setShowEmailPanel(true);
-                        } catch (error) {
-                          console.error("Login failed:", error);
-                        }
-                      } else {
-                        setShowEmailPanel(true);
-                      }
-                    }}
-                    className="sm:hidden w-full px-4 py-3 flex items-center gap-3 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <HiOutlineMail size={18} className="text-sky-500" />
-                    <span className="font-medium">Send Mail</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -1138,6 +1080,13 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                         onClick={() => { setActiveContent("users"); navigate("/dashboard/users"); setShowDropdown(false); }}>
                         <FiUsers size={16} className="text-gray-500" />
                         <span>Manage Users</span>
+                      </button>
+                      <button className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
+                        onClick={() => { setActiveContent("auditLogs"); navigate("/dashboard/audit-logs"); setShowDropdown(false); }}>
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        <span>Audit Logs</span>
                       </button>
                       <div className="my-1 border-t border-gray-100" />
                     </>
@@ -1320,9 +1269,6 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
         </>,
         document.body
       )}
-
-      {/* Email panel via portal */}
-      {showEmailPanel && createPortal(<Email onClose={() => setShowEmailPanel(false)} />, document.body)}
     </header>
   );
 }

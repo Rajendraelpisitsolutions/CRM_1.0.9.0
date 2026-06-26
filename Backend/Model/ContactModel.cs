@@ -83,6 +83,7 @@ namespace Elpis_CRM.Model
         public byte[]? FrontImage { get; set; }
         public byte[]? BackImage { get; set; }
         public string? EnquiryNo { get; set; }
+        public string? EstimatedQuote { get; set; }
     }
 }
 

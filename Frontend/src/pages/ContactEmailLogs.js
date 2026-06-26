@@ -1006,6 +1006,12 @@ export default function ContactEmailLogs({
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [notesError, setNotesError] = useState(null);
 
+  // Notes grouped by deal. noteDealFilter === null → the contact's own notes;
+  // a dealId → that deal's notes (fetched lazily and cached in dealNotesMap).
+  const [noteDealFilter, setNoteDealFilter] = useState(null);
+  const [dealNotesMap, setDealNotesMap] = useState({});
+  const [loadingDealNotes, setLoadingDealNotes] = useState(false);
+
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [editNote, setEditNote] = useState(null);
   const [noteDealSelections, setNoteDealSelections] = useState(() => new Set());
@@ -1035,6 +1041,34 @@ export default function ContactEmailLogs({
       return { id, name };
     });
   }, [deals]);
+
+  // Notes shown for the active filter (contact-only vs a specific deal).
+  const displayedNotes = noteDealFilter == null ? notes : (dealNotesMap[noteDealFilter] || []);
+  const activeDealName = noteEligibleDeals.find((d) => d.id === noteDealFilter)?.name || "";
+
+  // Chips to switch between the contact's notes and each related deal's notes.
+  const notesDealFilterBar = noteEligibleDeals.length > 0 ? (
+    <div className="flex items-center gap-2 overflow-x-auto px-6 py-2.5 bg-white border-b border-gray-200">
+      <span className="text-xs font-medium text-gray-400 shrink-0">Notes for:</span>
+      <button
+        type="button"
+        onClick={() => setNoteDealFilter(null)}
+        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter == null ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+      >
+        Contact
+      </button>
+      {noteEligibleDeals.map((deal) => (
+        <button
+          key={deal.id}
+          type="button"
+          onClick={() => setNoteDealFilter(deal.id)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter === deal.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+        >
+          {deal.name}
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   const selectedDealsText = (() => {
     if (noteDealOnlySelected && noteDealSelections.size === 0) {
@@ -1128,12 +1162,48 @@ export default function ContactEmailLogs({
     }
   }, [contactId]);
 
+  // ====================== FETCH NOTES FOR A DEAL ======================
+  const fetchDealNotes = useCallback(async (dealId) => {
+    if (!dealId) return;
+    setLoadingDealNotes(true);
+    try {
+      const res = await apiClient.get(`/Notes/deal/${dealId}`);
+      const normalized = Array.isArray(res.data)
+        ? res.data.map((note) => ({
+            NoteId: note.Id ?? note.id ?? note.noteId ?? "",
+            Description: note.Description ?? note.description ?? "",
+            CreatedAt: note.CreatedAt ?? note.createdAt ?? null,
+            UpdatedAt: note.UpdatedAt ?? note.updatedAt ?? null,
+          }))
+        : [];
+      setDealNotesMap((prev) => ({ ...prev, [dealId]: normalized }));
+    } catch (err) {
+      console.error("Fetch Deal Notes Error:", err);
+      setDealNotesMap((prev) => ({ ...prev, [dealId]: [] }));
+    } finally {
+      setLoadingDealNotes(false);
+    }
+  }, []);
+
   // ====================== LOAD WHEN TAB OPEN ======================
   useEffect(() => {
     if (activeTab === "notes") {
       fetchNotes();
     }
   }, [activeTab, fetchNotes]);
+
+  // Load a deal's notes when its chip is selected (cached after first load).
+  useEffect(() => {
+    if (activeTab === "notes" && noteDealFilter != null && !dealNotesMap[noteDealFilter]) {
+      fetchDealNotes(noteDealFilter);
+    }
+  }, [activeTab, noteDealFilter, dealNotesMap, fetchDealNotes]);
+
+  // Reset to the contact view when switching contacts.
+  useEffect(() => {
+    setNoteDealFilter(null);
+    setDealNotesMap({});
+  }, [contactId]);
 
   useEffect(() => {
     if (contactId) {
@@ -1179,6 +1249,7 @@ export default function ContactEmailLogs({
       });
 
       await fetchNotes();
+      setDealNotesMap({}); // invalidate deal note cache (note may be mirrored to deals)
     } catch (err) {
       console.error("Save Note Error:", err);
       const serverMessage = err?.response?.data || err?.message;
@@ -1215,6 +1286,7 @@ export default function ContactEmailLogs({
       }
 
       await fetchNotes();
+      setDealNotesMap({}); // invalidate deal note cache
     } catch (err) {
       console.error(err);
       setNotesError("Failed to delete note");
@@ -2447,16 +2519,22 @@ export default function ContactEmailLogs({
                                 </button>
                               </div>
 
-                              {loadingNotes && <p>Loading...</p>}
+                              {notesDealFilterBar}
+
+                              {(loadingNotes || loadingDealNotes) && <p>Loading...</p>}
                               {notesError && (
                                 <p className="text-red-500">{notesError}</p>
                               )}
 
-                              {!loadingNotes && notes.length === 0 && (
-                                <p className="text-gray-500">No notes found</p>
+                              {!loadingNotes && !loadingDealNotes && displayedNotes.length === 0 && (
+                                <p className="text-gray-500">
+                                  {noteDealFilter == null
+                                    ? "No notes found"
+                                    : `No notes for ${activeDealName}`}
+                                </p>
                               )}
 
-                              {notes.map((note) => (
+                              {displayedNotes.map((note) => (
                                 <div
                                   key={note.NoteId}
                                   className="bg-white p-4 mb-3 rounded shadow"
@@ -2770,8 +2848,10 @@ export default function ContactEmailLogs({
               </button>
             </div>
 
+            {notesDealFilterBar}
+
             <div className="p-6 space-y-4">
-              {loadingNotes && (
+              {(loadingNotes || loadingDealNotes) && (
                 <div className="rounded-xl border border-gray-200 bg-white px-6 py-5 text-gray-600">
                   Loading notes...
                 </div>
@@ -2783,14 +2863,16 @@ export default function ContactEmailLogs({
                 </div>
               )}
 
-              {!loadingNotes && notes.length === 0 && !notesError && (
+              {!loadingNotes && !loadingDealNotes && displayedNotes.length === 0 && !notesError && (
                 <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center text-gray-500">
-                  No notes found for this contact.
+                  {noteDealFilter == null
+                    ? "No notes found for this contact."
+                    : `No notes for ${activeDealName}.`}
                 </div>
               )}
 
               <div className="divide-y divide-gray-200">
-                {notes.map((note) => (
+                {displayedNotes.map((note) => (
                   <div
                     key={note.NoteId}
                     className="bg-white hover:bg-indigo-50/40 transition-all duration-200 border-l-4 border-transparent hover:border-indigo-500"

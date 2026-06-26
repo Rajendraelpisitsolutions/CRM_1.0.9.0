@@ -8,16 +8,26 @@ using System.Threading.Tasks;
 
 namespace Elpis_CRM.Services
 {
+    /// <summary>
+    /// Data-access and business logic for contacts: paging and search, tag-based lookups, lifecycle
+    /// stats, sequential enquiry-number generation, account-FK resolution, duplicate-email guarding
+    /// and cascade-aware deletion.
+    /// </summary>
     public class ContactService
     {
         private readonly AppDbContext _contactContext;
 
+        /// <summary>
+        /// Creates the service over the given EF Core database context.
+        /// </summary>
+        /// <param name="context">The application's database context.</param>
         public ContactService(AppDbContext context)
         {
             _contactContext = context;
         }
 
         private const string EnquiryNoPrefix = "EITSPL-EQ-";
+        private const string EstimatedQuotePrefix = "Estimate Quote EST-";
 
         /// <summary>
         /// Generates the next sequential EnquiryNo (e.g. "EITSPL-EQ-003").
@@ -64,6 +74,54 @@ namespace Elpis_CRM.Services
             return $"{EnquiryNoPrefix}{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() % 1000:D3}";
         }
 
+        /// <summary>
+        /// Generates the next sequential EstimatedQuote (e.g. "EST-003"), mirroring the
+        /// EnquiryNo scheme: highest existing numeric suffix + 1, with a race-condition retry.
+        /// </summary>
+        private async Task<string> GenerateNextEstimatedQuoteAsync()
+        {
+            const int maxAttempts = 5;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                var existing = await _contactContext.Contacts
+                    .Where(c => c.EstimatedQuote != null && c.EstimatedQuote.StartsWith(EstimatedQuotePrefix))
+                    .Select(c => c.EstimatedQuote)
+                    .ToListAsync();
+
+                var maxNumber = 0;
+                foreach (var val in existing)
+                {
+                    var suffix = val!.Substring(EstimatedQuotePrefix.Length);
+                    if (int.TryParse(suffix, out var num) && num > maxNumber)
+                    {
+                        maxNumber = num;
+                    }
+                }
+
+                var candidate = $"{EstimatedQuotePrefix}{maxNumber + 1:D3}";
+
+                var collision = await _contactContext.Contacts
+                    .AnyAsync(c => c.EstimatedQuote == candidate);
+
+                if (!collision)
+                {
+                    return candidate;
+                }
+            }
+
+            return $"{EstimatedQuotePrefix}{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() % 1000:D3}";
+        }
+
+        /// <summary>
+        /// Returns one page of contacts ordered newest-first (by CreatedAt), plus the total matching count.
+        /// When a search of at least 2 characters is given, it is tokenized on spaces and every token must
+        /// match at least one searchable field (name, emails, phones, account, owner, enquiry no, territory, tags).
+        /// </summary>
+        /// <param name="page">1-based page number; values below 1 are coerced to 1.</param>
+        /// <param name="pageSize">Rows per page; coerced into the range 1–500.</param>
+        /// <param name="search">Optional search text; ignored when blank or shorter than 2 characters.</param>
+        /// <returns>A tuple of the page of contacts and the total count across all pages.</returns>
         // Get Contacts with Pagination (optional server-side search)
         public async Task<(List<ContactModel> items, int totalCount)> GetAllAsync(int page = 1, int pageSize = 150, string? search = null)
         {
@@ -91,6 +149,7 @@ namespace Elpis_CRM.Services
                         (c.Account    != null && c.Account.ToLower().Contains(t))    ||
                         (c.SalesOwner != null && c.SalesOwner.ToLower().Contains(t)) ||
                         (c.EnquiryNo != null && c.EnquiryNo.ToLower().Contains(t)) ||
+                        (c.EstimatedQuote != null && c.EstimatedQuote.ToLower().Contains(t)) ||
                         (c.Territory  != null && c.Territory.ToLower().Contains(t))  ||
                         (c.Tags       != null && c.Tags.ToLower().Contains(t)));
                 }
@@ -105,6 +164,11 @@ namespace Elpis_CRM.Services
             return (items, totalCount);
         }
 
+        /// <summary>
+        /// Fetches a single contact by its primary key.
+        /// </summary>
+        /// <param name="id">Primary key of the contact.</param>
+        /// <returns>The matching contact, or null when none has that ID.</returns>
         // Get contact by ID
         public async Task<ContactModel?> GetByIdAsync(long id)
         {
@@ -112,6 +176,15 @@ namespace Elpis_CRM.Services
                 .FirstOrDefaultAsync(c => c.ContactId == id);
         }
 
+        /// <summary>
+        /// Returns the contacts under one account, ordered by first then last name and capped at <paramref name="limit"/>,
+        /// optionally filtered by a substring on name/email/phone. Results are trimmed projections carrying only
+        /// the ID, first/last name, work email and account.
+        /// </summary>
+        /// <param name="accountId">Account whose contacts are requested.</param>
+        /// <param name="q">Optional case-insensitive substring filter on name, work email or phone.</param>
+        /// <param name="limit">Maximum rows; clamped to the range 1–500.</param>
+        /// <returns>The matching contact projections, or an empty list when none match.</returns>
         // Get contacts by account ID (optional name/email filter + cap for large accounts)
         public async Task<List<ContactModel>> GetContactsByAccountIdAsync(long accountId, string? q = null, int limit = 300)
         {
@@ -150,8 +223,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Global contact typeahead (min 2 characters on <paramref name="q"/>).
+        /// Global contact typeahead, ordered by last then first name. A numeric query also matches on contact ID;
+        /// otherwise the text is tokenized and every token must match some name/email/phone/account field.
         /// </summary>
+        /// <param name="q">Search text; an empty list is returned when it has fewer than 2 non-blank characters.</param>
+        /// <param name="limit">Maximum rows; clamped to the range 1–100.</param>
+        /// <returns>Matching contacts, or an empty list when the query is too short.</returns>
         public async Task<List<ContactModel>> SearchAsync(string? q, int limit = 50)
         {
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
@@ -185,6 +262,8 @@ namespace Elpis_CRM.Services
                         (c.WorkEmail != null && c.WorkEmail.ToLower().Contains(t)) ||
                         (c.Mobile    != null && c.Mobile.ToLower().Contains(t))    ||
                         (c.WorkPhone != null && c.WorkPhone.ToLower().Contains(t)) ||
+                        (c.EnquiryNo != null && c.EnquiryNo.ToLower().Contains(t)) ||
+                        (c.EstimatedQuote != null && c.EstimatedQuote.ToLower().Contains(t)) ||
                         (c.Account   != null && c.Account.ToLower().Contains(t)));
                 }
             }
@@ -197,8 +276,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Aggregated lifecycle counts for dashboard charts (full table scan count only, no row payload).
+        /// Groups all contacts by lifecycle stage in the database, then folds the stages into five fixed
+        /// buckets (prospect, engaged, customer, promoter, other), routing null/blank/unrecognized stages to "other".
         /// </summary>
+        /// <returns>A dictionary keyed by the five bucket names with their contact counts.</returns>
         public async Task<Dictionary<string, int>> GetLifeCycleStageCountsAsync()
         {
             var groups = await _contactContext.Contacts
@@ -252,6 +333,11 @@ namespace Elpis_CRM.Services
             };
         }
 
+        /// <summary>
+        /// Builds the distinct set of individual tags across all contacts by splitting each contact's
+        /// comma-separated Tags field, trimming each tag and removing duplicates.
+        /// </summary>
+        /// <returns>The unique tag names; empty when no contact carries any tag.</returns>
         // Get all unique tags
         public async Task<List<string>> GetAllTagsAsync()
         {
@@ -267,7 +353,14 @@ namespace Elpis_CRM.Services
                 .ToList();
         }
 
-        // Get emails by tags
+        /// <summary>
+        /// Gathers the email addresses of contacts that carry at least one of the requested tags (matched by
+        /// comparing each contact's comma-separated, trimmed tags against the requested set). Addresses are
+        /// pulled from WorkEmail and from the Emails field (split on "," or ";"), then de-duplicated case-insensitively.
+        /// </summary>
+        /// <param name="tags">Comma-separated tags to match; a contact qualifies if any of its tags is in this set.</param>
+        /// <returns>A comma-joined string of distinct email addresses; an empty string when nothing matches.</returns>
+        // Get emails by tags — returns both WorkEmail and the Emails field
         public async Task<string> GetEmailsByTagsAsync(string tags)
         {
             var selectedTags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -275,20 +368,44 @@ namespace Elpis_CRM.Services
                                    .ToList();
 
             var contacts = await _contactContext.Contacts
-                .Where(c => !string.IsNullOrEmpty(c.WorkEmail) && !string.IsNullOrEmpty(c.Tags))
+                .Where(c => !string.IsNullOrEmpty(c.Tags) &&
+                            (!string.IsNullOrEmpty(c.WorkEmail) || !string.IsNullOrEmpty(c.Emails)))
                 .ToListAsync();
 
-            var emails = contacts
+            var matched = contacts
                 .Where(c => c.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.Trim())
-                .Any(tag => selectedTags.Contains(tag)))
-                .Select(c => c.WorkEmail)
-                .Distinct()
+                    .Select(t => t.Trim())
+                    .Any(tag => selectedTags.Contains(tag)));
+
+            var emails = new List<string>();
+            foreach (var c in matched)
+            {
+                if (!string.IsNullOrWhiteSpace(c.WorkEmail))
+                    emails.Add(c.WorkEmail.Trim());
+
+                // Emails may hold one or several addresses separated by , or ;
+                if (!string.IsNullOrWhiteSpace(c.Emails))
+                {
+                    emails.AddRange(c.Emails
+                        .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(e => e.Trim()));
+                }
+            }
+
+            var distinct = emails
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            return string.Join(",", emails);
+            return string.Join(",", distinct);
         }
 
+        /// <summary>
+        /// Returns the full contacts that carry at least one of the requested tags, matching each contact's
+        /// comma-separated, trimmed Tags against the requested set.
+        /// </summary>
+        /// <param name="tags">Comma-separated tags to match; a contact qualifies if any of its tags is in this set.</param>
+        /// <returns>The matching contacts; an empty list when the argument is blank or nothing matches.</returns>
         // Get contacts by tags
         public async Task<List<ContactModel>> GetContactsByTagsAsync(string tags)
         {
@@ -344,8 +461,18 @@ namespace Elpis_CRM.Services
             }
         }
 
+        /// <summary>
+        /// Persists a new contact: stamps the created/updated and activity timestamps, resolves the account FK
+        /// from the account name when missing, and rejects the insert if any of its emails (WorkEmail or the
+        /// comma-separated Emails field) already exists on another contact. If a positive ID is supplied and
+        /// already exists (import scenario), the existing contact is updated instead; otherwise an ID is generated.
+        /// </summary>
+        /// <param name="contact">Contact to create; its EnquiryNo is ignored and set by this method.</param>
+        /// <param name="generateEnquiryNo">When true, assigns a fresh sequential EnquiryNo; otherwise it is left null.</param>
+        /// <returns>The saved contact (or the updated existing one when the ID already existed).</returns>
+        /// <exception cref="InvalidOperationException">Thrown when a contact with the same email already exists.</exception>
         // Create contact
-        public async Task<ContactModel> AddAsync(ContactModel contact, bool generateEnquiryNo = false)
+        public async Task<ContactModel> AddAsync(ContactModel contact, bool generateEnquiryNo = false, bool generateEstimatedQuote = false)
         {
             var now = DateTime.UtcNow;
 
@@ -365,13 +492,14 @@ namespace Elpis_CRM.Services
                 ? await GenerateNextEnquiryNoAsync()
                 : null;
 
+            // EstimatedQuote is entered manually by the user — keep the value from the payload.
+
             await EnsureAccountIdResolvedAsync(contact);
 
-            // =====================================================
             // Duplicate Email Check
             // WorkEmail -> WorkEmail + Emails
             // Emails -> WorkEmail + Emails
-            // =====================================================
+            
 
             var emailList = new List<string>();
 
@@ -446,9 +574,19 @@ namespace Elpis_CRM.Services
             return contact;
         }
 
+        /// <summary>
+        /// Copies the editable fields from <paramref name="contact"/> onto the stored contact and refreshes its
+        /// activity/updated timestamps. CreatedBy/UpdatedBy fields are intentionally preserved, the account FK is
+        /// re-resolved from the account name when needed, and EnquiryNo is taken only from generation (never from
+        /// the payload) and then only when requested and currently empty.
+        /// </summary>
+        /// <param name="id">Primary key of the contact to update.</param>
+        /// <param name="contact">Source of the new field values.</param>
+        /// <param name="generateEnquiryNo">When true, assigns a sequential EnquiryNo only if the stored contact has none.</param>
+        /// <returns>The updated contact, or null when no contact has that ID.</returns>
         // Update contact
         // Update contact
-        public async Task<ContactModel?> UpdateAsync(long id, ContactModel contact, bool generateEnquiryNo = false)
+        public async Task<ContactModel?> UpdateAsync(long id, ContactModel contact, bool generateEnquiryNo = false, bool generateEstimatedQuote = false)
         {
             var existing = await _contactContext.Contacts
                 .FirstOrDefaultAsync(c => c.ContactId == id);
@@ -511,10 +649,23 @@ namespace Elpis_CRM.Services
                 existing.EnquiryNo = await GenerateNextEnquiryNoAsync();
             }
 
+            // EstimatedQuote is entered manually — save the value the user typed (only when
+            // provided, so editing other fields never blanks an existing quote).
+            if (!string.IsNullOrWhiteSpace(contact.EstimatedQuote))
+            {
+                existing.EstimatedQuote = contact.EstimatedQuote;
+            }
+
             await _contactContext.SaveChangesAsync();
             return existing;
         }
 
+        /// <summary>
+        /// Deletes a contact, first removing its related call logs, tasks and notes to satisfy FK constraints.
+        /// If that cascade fails for any reason, it falls back to removing just the contact row.
+        /// </summary>
+        /// <param name="id">Primary key of the contact to delete.</param>
+        /// <returns>True when a contact was deleted; false when no contact has that ID.</returns>
         // Delete contact
         public async Task<bool> DeleteAsync(long id)
         {
@@ -569,6 +720,12 @@ namespace Elpis_CRM.Services
                 return true;
             }
         }
+        /// <summary>
+        /// Returns all contacts created within the calendar day of <paramref name="createdAt"/>; the time
+        /// component is dropped and matching spans from midnight up to (but not including) the next midnight.
+        /// </summary>
+        /// <param name="createdAt">Day to match; only the date part is used.</param>
+        /// <returns>Contacts created on that day, or an empty list when none match.</returns>
             // Get contacts by CreatedAt date
         public async Task<List<ContactModel>> GetContactsByCreatedAtAsync(DateTime createdAt)
         {
@@ -580,6 +737,12 @@ namespace Elpis_CRM.Services
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Returns the enquiry numbers for the given contact IDs, omitting contacts whose EnquiryNo is null or
+        /// blank, so the result may contain fewer entries than the input list.
+        /// </summary>
+        /// <param name="contactIds">Contact IDs to read enquiry numbers from.</param>
+        /// <returns>The non-blank enquiry numbers found among those contacts.</returns>
         public async Task<List<string>> GetEnquiryNumbersAsync(List<long> contactIds)
         {
             return await _contactContext.Contacts
@@ -590,6 +753,20 @@ namespace Elpis_CRM.Services
                 .ToListAsync();
         }
 
-
+        /// <summary>
+        /// Returns the estimated-quote numbers for the given contact IDs, omitting contacts whose
+        /// EstimatedQuote is null or blank (so the result may be shorter than the input list).
+        /// </summary>
+        /// <param name="contactIds">Contact IDs to read estimated-quote numbers from.</param>
+        /// <returns>The non-blank estimated-quote numbers found among those contacts.</returns>
+        public async Task<List<string>> GetEstimatedQuotesAsync(List<long> contactIds)
+        {
+            return await _contactContext.Contacts
+                .Where(c => contactIds.Contains(c.ContactId))
+                .Select(c => c.EstimatedQuote)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!)
+                .ToListAsync();
+        }
     }
 }

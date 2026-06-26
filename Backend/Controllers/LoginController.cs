@@ -11,6 +11,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace Elpis_CRM.Controllers
 {
+    /// <summary>
+    /// Authentication and user-account management: credential login with JWT issuance,
+    /// self-service profile/password updates, and Admin-only CRUD over login accounts.
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class LoginController : ControllerBase
@@ -33,8 +37,16 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Login endpoint - Validates user credentials and returns JWT token
+        /// Authenticates an active user by email-or-phone and password (compared as plain text, case-sensitive)
+        /// and, on success, issues an HMAC-SHA256 signed JWT valid for 2 hours carrying the user's email, name,
+        /// id and role, returned alongside basic profile fields.
         /// </summary>
+        /// <param name="login">Credentials: <c>EmailOrPhone</c> (matched against either column) and <c>Password</c>; both are trimmed.</param>
+        /// <returns>200 with the token and profile; otherwise an error message describing the failure.</returns>
+        /// <response code="200">Credentials valid; returns token, role, name, email and loginId.</response>
+        /// <response code="400">Body missing, email/phone or password blank, or the password did not match.</response>
+        /// <response code="404">No active user matches the supplied email or phone.</response>
+        /// <response code="500">JWT signing key is not configured, or an unexpected error occurred.</response>
         [HttpPost("check")]
         public async Task<IActionResult> LoginCheck([FromBody] LoginCheckModel login)
         {
@@ -94,6 +106,29 @@ namespace Elpis_CRM.Controllers
                     signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
                 );
 
+                // Audit the successful login (the SaveChanges hook skips AuditLogs rows themselves).
+                // Also store the logged-in person's record so the entry captures who signed in.
+                _loginDb.AuditLogs.Add(new Elpis_CRM.Model.AuditLogModel
+                {
+                    EntityName = "Login",
+                    EntityId = user.LoginId.ToString(),
+                    Action = "Login",
+                    ChangedBy = user.Email,
+                    ChangedByName = user.Name,
+                    ChangedByRole = roleValue,
+                    ChangedAt = DateTime.UtcNow,
+                    IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    Changes = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        LoginId = user.LoginId,
+                        Name = user.Name,
+                        Email = user.Email,
+                        Phone = user.Phone,
+                        Role = roleValue
+                    })
+                });
+                await _loginDb.SaveChangesAsync();
+
                 return Ok(new
                 {
                     token = new JwtSecurityTokenHandler().WriteToken(token),
@@ -117,8 +152,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Get all users (names and emails) for dropdown/autocomplete
+        /// Lists active users that have a name (id, name and email only), de-duplicated, for populating
+        /// dropdowns and autocomplete pickers. Requires a valid bearer token.
         /// </summary>
+        /// <returns>200 with the slimmed-down user list (may be empty).</returns>
+        /// <response code="200">User list returned.</response>
+        /// <response code="401">No or invalid bearer token.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("all-users")]
         public async Task<IActionResult> GetAllUsers()
@@ -133,8 +172,15 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Create new user account (Admin only)
+        /// Creates a new login account, stamping created/updated timestamps and marking it active.
+        /// Rejects the request if the email is already registered. Admin role required.
         /// </summary>
+        /// <param name="login">Full account record; <c>Email</c> must be unique. The password is persisted as supplied.</param>
+        /// <returns>200 with a confirmation message and the new loginId.</returns>
+        /// <response code="200">Account created.</response>
+        /// <response code="409">The email is already registered.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpPost("create")]
         public async Task<IActionResult> Create([FromBody] LoginModel login)
@@ -160,8 +206,13 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Get current logged-in user details from database
+        /// Returns the profile of the caller identified by the <c>NameIdentifier</c> claim in their token,
+        /// reloaded fresh from the database.
         /// </summary>
+        /// <returns>200 with the current user's profile.</returns>
+        /// <response code="200">Profile returned.</response>
+        /// <response code="401">Token missing or has no usable user-id claim.</response>
+        /// <response code="404">No account exists for the id in the token.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("me")]
         public async Task<IActionResult> GetLoggedInUser()
@@ -192,8 +243,15 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Update current logged-in user's own profile (name, email, phone)
+        /// Updates the caller's own name, email and/or phone (only non-blank fields are applied; phone may be
+        /// cleared by sending an empty string). Blocks the change if the new email is already used by another account.
         /// </summary>
+        /// <param name="model">Partial profile; blank/omitted name and email are ignored, a non-null phone is always written (trimmed).</param>
+        /// <returns>200 with a confirmation and the updated profile.</returns>
+        /// <response code="200">Profile updated.</response>
+        /// <response code="401">Token missing or has no usable user-id claim.</response>
+        /// <response code="404">No account exists for the id in the token.</response>
+        /// <response code="409">The requested email already belongs to another account.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("me")]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileModel model)
@@ -242,8 +300,12 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Get all user accounts 
+        /// Returns every login account, active or not, with profile and audit fields but without passwords. Admin role required.
         /// </summary>
+        /// <returns>200 with the full account list.</returns>
+        /// <response code="200">Accounts returned.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpGet("all")]
         public async Task<IActionResult> GetAllAccounts()
@@ -266,8 +328,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Get user by Id
+        /// Fetches a single account's profile and audit fields (no password) by its login id. Admin role required.
         /// </summary>
+        /// <param name="id">Login id of the account to retrieve.</param>
+        /// <returns>200 with the account, or 404 if no such id exists.</returns>
+        /// <response code="200">Account found.</response>
+        /// <response code="404">No account with the given id.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
@@ -296,8 +364,16 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Update user account
+        /// Overwrites an account's name, email, phone, role and active flag and refreshes its updated timestamp.
+        /// The password is intentionally left untouched. Admin role required.
         /// </summary>
+        /// <param name="id">Login id of the account to update.</param>
+        /// <param name="loginModel">New field values; the supplied password is ignored.</param>
+        /// <returns>200 with a confirmation and the updated fields, or 404 if the id is unknown.</returns>
+        /// <response code="200">Account updated.</response>
+        /// <response code="404">No account with the given id.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] LoginModel loginModel)
@@ -340,8 +416,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Delete user account 
+        /// Permanently removes an account from the database (hard delete). Admin role required.
         /// </summary>
+        /// <param name="id">Login id of the account to delete.</param>
+        /// <returns>200 with a confirmation, or 404 if the id is unknown.</returns>
+        /// <response code="200">Account deleted.</response>
+        /// <response code="404">No account with the given id.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
@@ -360,8 +442,15 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Deactivate user account -Soft delete
+        /// Soft-deletes an account by clearing its active flag (preventing login) and bumping the updated timestamp,
+        /// leaving the record in place. Admin role required.
         /// </summary>
+        /// <param name="id">Login id of the account to deactivate.</param>
+        /// <returns>200 with a confirmation, or 404 if the id is unknown.</returns>
+        /// <response code="200">Account deactivated.</response>
+        /// <response code="404">No account with the given id.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpPut("{id:int}/deactivate")]
         public async Task<IActionResult> Deactivate(int id)
@@ -381,8 +470,15 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Activate user account 
+        /// Re-enables a previously deactivated account by setting its active flag and bumping the updated timestamp.
+        /// Admin role required.
         /// </summary>
+        /// <param name="id">Login id of the account to activate.</param>
+        /// <returns>200 with a confirmation, or 404 if the id is unknown.</returns>
+        /// <response code="200">Account activated.</response>
+        /// <response code="404">No account with the given id.</response>
+        /// <response code="401">No or invalid bearer token.</response>
+        /// <response code="403">Caller is authenticated but not an Admin.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         [HttpPut("{id:int}/activate")]
         public async Task<IActionResult> Activate(int id)
@@ -402,8 +498,14 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Change password for current user
+        /// Sets a new password for the caller, located by the email claim in their token. Note: the new value is
+        /// stored as-is and the model's current password is not verified before the change.
         /// </summary>
+        /// <param name="model">Carries <c>NewPassword</c>, which replaces the stored password.</param>
+        /// <returns>200 with a confirmation message.</returns>
+        /// <response code="200">Password changed.</response>
+        /// <response code="401">Token has no email claim.</response>
+        /// <response code="404">No account matches the email in the token.</response>
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordModel model)

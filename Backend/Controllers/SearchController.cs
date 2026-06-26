@@ -6,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Elpis_CRM.Controllers
 {
+    /// <summary>
+    /// Global search across contacts, accounts, deals and products, plus a public backend version probe.
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
 
@@ -20,6 +23,31 @@ namespace Elpis_CRM.Controllers
             _logger = logger;
         }
 
+        /// <summary>
+        /// Runs a case-insensitive, token-based search (every whitespace-separated word in <paramref name="query"/>
+        /// must match some field) across contacts, accounts, deals and products, optionally narrowed by the per-entity
+        /// filters, then orders each group by relevance (exact, then starts-with, then partial). Open to anonymous callers.
+        /// </summary>
+        /// <param name="query">Search text; trimmed and lower-cased. Fewer than 2 characters yields an empty result set.</param>
+        /// <param name="contactStatus">Substring filter on a contact's status.</param>
+        /// <param name="contactTerritory">Substring filter on a contact's territory.</param>
+        /// <param name="contactTags">Substring filter on a contact's tags.</param>
+        /// <param name="contactSalesOwnerId">Exact match on a contact's sales-owner id.</param>
+        /// <param name="contactSalesOwner">Substring filter on a contact's sales-owner name.</param>
+        /// <param name="accountTerritory">Substring filter on an account's territory.</param>
+        /// <param name="accountTags">Substring filter on an account's tags.</param>
+        /// <param name="accountSalesOwnerId">Exact match on an account's sales-owner id.</param>
+        /// <param name="accountSalesOwner">Substring filter on an account's sales-owner name.</param>
+        /// <param name="dealStage">Substring filter on a deal's stage.</param>
+        /// <param name="dealTerritory">Substring filter on a deal's territory.</param>
+        /// <param name="dealTags">Substring filter on a deal's tags.</param>
+        /// <param name="dealSalesOwnerId">Exact match on a deal's sales-owner id.</param>
+        /// <param name="dealSalesOwner">Substring filter on a deal's sales-owner name.</param>
+        /// <param name="productCategory">Substring filter on a product's category.</param>
+        /// <param name="productActive">Substring filter on a product's active flag.</param>
+        /// <returns>200 with a flat, relevance-ordered list of matches (contacts, then accounts, then deals, then products); empty when the query is too short.</returns>
+        /// <response code="200">Search executed; results (possibly empty) returned.</response>
+        /// <response code="500">An unexpected error occurred while searching.</response>
         [HttpGet]
         [AllowAnonymous]
         public async Task<IActionResult> Search(
@@ -378,6 +406,16 @@ namespace Elpis_CRM.Controllers
             }
         }
 
+        /// <summary>
+        /// Shapes one search hit into the response object, dropping blank fields and listing under
+        /// <c>matchedFields</c> those whose value contains the query.
+        /// </summary>
+        /// <param name="id">Entity primary key.</param>
+        /// <param name="type">Result category ("contact", "account", "deal" or "product").</param>
+        /// <param name="name">Display name; emitted as an empty string when null.</param>
+        /// <param name="loweredQuery">Lower-cased query used to flag which fields matched.</param>
+        /// <param name="fields">Field name/value pairs to surface; blanks are skipped.</param>
+        /// <returns>An anonymous object with id, type, name, all non-blank fields, and the matched subset.</returns>
         private static object BuildResult(
             object id,
             string type,
@@ -413,8 +451,11 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
-        /// Returns the version of the published backend
+        /// Reports the published backend's hard-coded version and build date along with the current hosting
+        /// environment (defaulting to "Production"). Public, used as a deployment/health probe.
         /// </summary>
+        /// <returns>200 with the version, timestamp and environment.</returns>
+        /// <response code="200">Version information returned.</response>
         [HttpGet("version")]
         [AllowAnonymous]
         public IActionResult GetVersion()

@@ -25,9 +25,9 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Retrieves all products.
+        /// Loads every product, both active and inactive, in no particular order.
         /// </summary>
-        /// <returns>A list of <see cref="ProductsModel"/> objects.</returns>
+        /// <returns>All products as a list; empty when the table holds no rows.</returns>
         public async Task<List<ProductsModel>> GetAllAsync()
         {
             var productList = await _productDb.Products.ToListAsync();
@@ -35,20 +35,20 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Retrieves a product by its ID.
+        /// Fetches a product by primary key using the context's identity-map-aware Find.
         /// </summary>
-        /// <param name="productId">The ID of the product.</param>
-        /// <returns>The <see cref="ProductsModel"/> if found; otherwise, null.</returns>
+        /// <param name="productId">Primary key to look up.</param>
+        /// <returns>The matching product, or null when no row has that ID.</returns>
         public async Task<ProductsModel?> GetByIdAsync(int productId)
         {
             return await _productDb.Products.FindAsync(productId);
         }
 
         /// <summary>
-        /// Retrieves a product by its name.
+        /// Returns the first product whose Name equals the given value.
         /// </summary>
-        /// <param name="name">The name of the product.</param>
-        /// <returns>The <see cref="ProductsModel"/> if found; otherwise, null.</returns>
+        /// <param name="name">Exact name to match.</param>
+        /// <returns>The first matching product, or null when none match.</returns>
         public async Task<ProductsModel?> GetProductByNameAsync(string name)
         {
             return await _productDb.Products
@@ -56,10 +56,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Retrieves products by their category.
+        /// Loads every product whose Category exactly equals the given value.
         /// </summary>
-        /// <param name="category">The category name.</param>
-        /// <returns>A list of <see cref="ProductsModel"/> in the specified category.</returns>
+        /// <param name="category">Category name to filter on.</param>
+        /// <returns>The matching products; empty when none share that category.</returns>
         public async Task<List<ProductsModel>> GetByCategoryAsync(string category)
         {
             var productCategory = await _productDb.Products
@@ -69,10 +69,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Adds a new product.
+        /// Inserts a product, setting both CreatedAt and UpdatedAt to the current UTC time before saving.
         /// </summary>
-        /// <param name="product">The <see cref="ProductsModel"/> to add.</param>
-        /// <returns>The added <see cref="ProductsModel"/> with updated timestamps.</returns>
+        /// <param name="product">The product to persist.</param>
+        /// <returns>The same instance after saving, now carrying its database-generated ID and timestamps.</returns>
         public async Task<ProductsModel> AddAsync(ProductsModel product)
         {
             product.CreatedAt = DateTime.UtcNow;
@@ -84,11 +84,12 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Updates an existing product.
+        /// Copies name, active flag, base-currency amount, category and UpdatedBy onto the existing row and bumps
+        /// UpdatedAt to now (UTC). CreatedAt, the ID and any other columns are left untouched.
         /// </summary>
-        /// <param name="productId">The ID of the product to update.</param>
-        /// <param name="product">The <see cref="ProductsModel"/> containing updated values.</param>
-        /// <returns>The updated <see cref="ProductsModel"/> if found; otherwise, null.</returns>
+        /// <param name="productId">Primary key of the product to update.</param>
+        /// <param name="product">Source of the new field values.</param>
+        /// <returns>The updated product, or null when no row has that ID.</returns>
         public async Task<ProductsModel?> UpdateAsync(int productId, ProductsModel product)
         {
             var existing = await _productDb.Products.FindAsync(productId);
@@ -109,10 +110,10 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
-        /// Deletes a product by its ID.
+        /// Hard-deletes the product with the given ID, if it exists.
         /// </summary>
-        /// <param name="productId">The ID of the product to delete.</param>
-        /// <returns>True if the product was deleted; otherwise, false.</returns>
+        /// <param name="productId">Primary key of the product to remove.</param>
+        /// <returns>True when a row was found and deleted; false when the ID was not present.</returns>
         public async Task<bool> DeleteAsync(int productId)
         {
             var product = await _productDb.Products.FindAsync(productId);

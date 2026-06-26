@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Inbox, Send, Trash2, Edit2, Reply, ReplyAll, Forward, ArrowLeft,
   Mail, MailOpen, Paperclip, Plus, Pencil, FileText, Archive,
@@ -10,15 +10,37 @@ import {
   MessageSquare, LogOut, HelpCircle, FolderOpen, AlertCircle,
   AtSign, ArrowUpDown,
   MapPin, Video, Link2, Smile, Copy, Globe, Mic, ExternalLink, Bookmark, Lock, Menu,
+  CheckCircle2, Image as ImageIcon,
 } from "lucide-react";
 import { FiTrash2 } from "react-icons/fi";
-import Email from "./Email";
 import apiClient from "../api/client";
 import { useMsal } from "@azure/msal-react";
 import DOMPurify from "dompurify";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const TRANSPARENT_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+// A template footer can carry an optional company logo (a data URL). It is stored
+// inside the template body wrapped in a sentinel so no schema change is needed,
+// and split back out into { logo, text } when the template is loaded.
+const LOGO_OPEN = "[[LOGO]]";
+const LOGO_CLOSE = "[[/LOGO]]";
+function buildTemplateBody(text, logo) {
+  return logo ? `${LOGO_OPEN}${logo}${LOGO_CLOSE}\n${text || ""}` : (text || "");
+}
+function parseTemplateBody(body) {
+  const b = body || "";
+  if (b.startsWith(LOGO_OPEN)) {
+    const end = b.indexOf(LOGO_CLOSE);
+    if (end !== -1) {
+      const logo = b.slice(LOGO_OPEN.length, end);
+      let text = b.slice(end + LOGO_CLOSE.length);
+      if (text.startsWith("\n")) text = text.slice(1);
+      return { logo, text };
+    }
+  }
+  return { logo: "", text: b };
+}
 
 function replaceCidImages(html, attachments = []) {
   if (!html) return html;
@@ -315,6 +337,10 @@ function OutlookEmail({ onToast }) {
   // ── Email Actions ─────────────────────────────────────────────────────────
   const [openedMailId, setOpenedMailId] = useState(null);
   const [selectedMailIds, setSelectedMailIds] = useState([]);
+  // Outlook-style reading view: collapse the folder pane while a mail is open so
+  // the reading pane gets more room. A toggle in the app rail overrides it.
+  const [showFolderPane, setShowFolderPane] = useState(true);
+  useEffect(() => { setShowFolderPane(!openedMailId); }, [openedMailId]);
   const [flaggedIds, setFlaggedIds] = useState({});
   const [readOverrides, setReadOverrides] = useState({});
   const [mailCategories, setMailCategories] = useState({});
@@ -338,6 +364,10 @@ function OutlookEmail({ onToast }) {
 
   // ── Compose ───────────────────────────────────────────────────────────────
   const [showCompose, setShowCompose] = useState(false);
+  // True while the compose's Templates & Tags panel is open — used to hide the
+  // mail list so the bigger template panel + compose can take over that space.
+  const [composeTemplatesOpen, setComposeTemplatesOpen] = useState(false);
+  useEffect(() => { if (!showCompose) setComposeTemplatesOpen(false); }, [showCompose]);
   const [replyData, setReplyData] = useState(null);
 
   // ── Inline reply ─────────────────────────────────────────────────────────
@@ -360,10 +390,47 @@ function OutlookEmail({ onToast }) {
   // ── Templates ─────────────────────────────────────────────────────────────
   const [openedTemplateIdx, setOpenedTemplateIdx] = useState(null);
   const [showAddTemplate, setShowAddTemplate] = useState(false);
-  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "" });
+  // A template is "assigned" to an email (stored in CreatedBy). That email is the
+  // key used to auto-load a user's template on compose.
+  const loggedInEmail = (typeof window !== "undefined" ? sessionStorage.getItem("userEmail") : "") || "";
+  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", assignedEmail: "", logo: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editTemplateIdx, setEditTemplateIdx] = useState(null);
-  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "" });
+  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", assignedEmail: "", logo: "" });
+
+  // A user only sees / manages templates assigned to them (CreatedBy == their email);
+  // legacy templates with no assignment are owned if their footer carries the email.
+  const ownsTemplate = (tpl) => {
+    const cb = (tpl.createdBy ?? tpl.CreatedBy ?? "").toLowerCase().trim();
+    const em = loggedInEmail.toLowerCase().trim();
+    if (cb) return cb === em;
+    const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
+    return !!em && hay.includes(em);
+  };
+  const myTemplates = Array.isArray(apiTemplates) ? apiTemplates.filter(ownsTemplate) : [];
+
+  // ── Message-box popup (replaces toast for created/updated/deleted) ─────────
+  const [popup, setPopup] = useState(null); // { message, type: "success" | "error" }
+  const showPopup = (message, type = "success") => {
+    setPopup({ message, type });
+    setTimeout(() => setPopup(prev => (prev && prev.message === message ? null : prev)), 2200);
+  };
+
+  // ── Delete-template confirm message box (replaces window.confirm) ──────────
+  const [templateToDelete, setTemplateToDelete] = useState(null); // the tpl object
+  const confirmDeleteTemplate = async () => {
+    const tpl = templateToDelete;
+    if (!tpl) return;
+    setTemplateToDelete(null);
+    try {
+      await apiClient.delete(`/Template/${tpl.templateId ?? tpl.TemplateId}`);
+      apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
+      setOpenedTemplateIdx(null);
+      showPopup("Template deleted");
+    } catch {
+      showPopup("Could not delete template", "error");
+    }
+  };
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const [settingsTab, setSettingsTab] = useState("account");
@@ -1149,13 +1216,25 @@ function OutlookEmail({ onToast }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const r = await apiClient.post("/Template", newTemplate);
+      const footerText = newTemplate.body || "";
+      const footerName = footerText.trim().slice(0, 40);
+      // CreatedBy = the logged-in user's email: each user owns only their own templates.
+      // The optional logo is embedded into the body via buildTemplateBody.
+      const r = await apiClient.post("/Template", {
+        name: footerName,
+        subject: "",
+        body: buildTemplateBody(footerText, newTemplate.logo),
+        createdBy: loggedInEmail,
+      });
       if (r.status >= 200 && r.status < 300) {
         setShowAddTemplate(false);
-        setNewTemplate({ name: "", subject: "", body: "" });
+        setNewTemplate({ name: "", subject: "", body: "", assignedEmail: "", logo: "" });
         apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
+        showPopup("Template created");
       }
-    } catch { }
+    } catch {
+      showPopup("Could not create template", "error");
+    }
     setIsSubmitting(false);
   };
 
@@ -1301,6 +1380,19 @@ function OutlookEmail({ onToast }) {
   const EMAIL_FOLDERS = ["Inbox", "Sent", "Drafts", "Deleted", "Junk", "Archive", "Outbox", "History"];
   const isEmailFolder = EMAIL_FOLDERS.includes(activeFolder);
 
+  // Open the compose inline in the reading pane. If we're not on a mail folder
+  // (e.g. Templates), switch to Inbox first so it never falls back to a modal overlay.
+  const startCompose = (rd = null) => {
+    if (!EMAIL_FOLDERS.includes(activeFolder)) setActiveFolder("Inbox");
+    setOpenedMailId(null);
+    setReplyData(rd);
+    setShowCompose(true);
+  };
+
+  // Leaving the mail folders (e.g. opening Templates) closes any open compose,
+  // so the Templates page shows instead of the New Message panel.
+  useEffect(() => { if (!isEmailFolder) setShowCompose(false); }, [isEmailFolder]);
+
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className={`flex flex-col h-full ${th.bg} ${th.text} overflow-hidden relative${isDark ? " outlook-dark" : ""}`}>
@@ -1318,6 +1410,47 @@ function OutlookEmail({ onToast }) {
           .outlook-dark .text-white { color: #ffffff !important; }
           .outlook-dark .outlook-email-body, .outlook-dark .outlook-email-body * { color: #ffffff !important; background-color: transparent !important; background: transparent !important; }
         `}</style>
+      )}
+
+      {/* ── Message Box Popup (created / updated / deleted) ───────────────── */}
+      {popup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setPopup(null)}>
+          <div className={`${th.card} border w-full max-w-xs rounded-2xl shadow-2xl p-6 text-center`} onClick={e => e.stopPropagation()}>
+            <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${popup.type === "error" ? (isDark ? "bg-red-500/15 text-red-400" : "bg-red-100 text-red-600") : (isDark ? "bg-green-500/15 text-green-400" : "bg-green-100 text-green-600")}`}>
+              {popup.type === "error" ? <AlertCircle size={28} /> : <Check size={30} strokeWidth={3} />}
+            </div>
+            <p className={`text-base font-semibold ${th.text}`}>{popup.message}</p>
+            <button onClick={() => setPopup(null)}
+              className="mt-5 px-6 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Template Confirm Message Box ───────────────────────────── */}
+      {templateToDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setTemplateToDelete(null)}>
+          <div className={`${th.card} border w-full max-w-sm rounded-2xl shadow-2xl p-6`} onClick={e => e.stopPropagation()}>
+            <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? "bg-red-500/15 text-red-400" : "bg-red-100 text-red-600"}`}>
+              <Trash2 size={26} />
+            </div>
+            <h4 className={`text-base font-semibold text-center mb-1 ${th.text}`}>Delete template</h4>
+            <p className={`text-sm text-center ${th.textMuted} mb-5`}>
+              Are you sure you want to delete{templateToDelete.name || templateToDelete.body ? ` "${(templateToDelete.name || templateToDelete.body).slice(0, 40)}"` : " this template"}? This can't be undone.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => setTemplateToDelete(null)}
+                className={`px-5 py-2 text-sm rounded-lg ${isDark ? "bg-gray-700 text-gray-200 hover:bg-gray-600" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                Cancel
+              </button>
+              <button onClick={confirmDeleteTemplate}
+                className="px-5 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Delete Confirm Modal ─────────────────────────────────────────── */}
@@ -1687,7 +1820,7 @@ function OutlookEmail({ onToast }) {
               <button onClick={() => setShowMobileSidebar(false)} className={`p-2 rounded-lg ${th.hover}`}><X size={16} /></button>
             </div>
             <div className="p-3 shrink-0">
-              <button onClick={() => { setShowCompose(true); setShowMobileSidebar(false); }}
+              <button onClick={() => { startCompose(); setShowMobileSidebar(false); }}
                 className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
                 <Plus size={16} />New email
               </button>
@@ -1732,6 +1865,11 @@ function OutlookEmail({ onToast }) {
 
         {/* ── Left App Rail (desktop only) ────────────────────────────────── */}
         <nav className="hidden md:flex flex-col items-center py-3 gap-1 w-14 bg-blue-800 shrink-0">
+          <button onClick={() => setShowFolderPane(p => !p)}
+            title={showFolderPane ? "Collapse folder pane" : "Expand folder pane"}
+            className="w-10 h-10 flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10 transition mb-1">
+            <Menu size={20} />
+          </button>
           {[
             { key: "Mail", icon: Mail, badge: folderCounts.Inbox },
             { key: "Calendar", icon: Calendar },
@@ -1750,10 +1888,11 @@ function OutlookEmail({ onToast }) {
         {/* ── Mail App ─────────────────────────────────────────────────── */}
         {activeApp === "Mail" && (
           <>
-            {/* ── Mail Sidebar (desktop only) ──────────────────────────── */}
+            {/* ── Mail Sidebar (desktop only; collapses while reading a mail) ── */}
+            {showFolderPane && (
             <aside className={`hidden md:flex md:w-56 ${th.surface} border-r ${th.border} flex-col shrink-0`}>
               <div className="p-3">
-                <button onClick={() => setShowCompose(true)}
+                <button onClick={() => startCompose()}
                   className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
                   <Plus size={16} />New email
                 </button>
@@ -1822,6 +1961,7 @@ function OutlookEmail({ onToast }) {
                 </div>
               </nav>
             </aside>
+            )}
 
             {/* ── Mobile folder tab bar ──────────────────────────────── */}
             {/* Only show when NOT in email reading view on mobile */}
@@ -1847,8 +1987,9 @@ function OutlookEmail({ onToast }) {
                   {/* ── Email List Panel ─────────────────────────────── */}
                   {/* Mobile: show list when mobileView==="list"; Desktop: always show */}
                   <div className={`
-  ${openedMailId && mobileView === "email" ? "hidden" : "flex"}
-  md:flex
+  ${showCompose && composeTemplatesOpen
+      ? "hidden"
+      : `${(openedMailId && mobileView === "email") || showCompose ? "hidden md:flex" : "flex md:flex"}`}
   w-full md:w-96 border-r ${th.border} flex-col ${th.bg} shrink-0
 `}>
 
@@ -1942,6 +2083,8 @@ function OutlookEmail({ onToast }) {
                           return (
                             <div key={mail.id}
                               onClick={() => {
+                                setShowCompose(false);
+                                setReplyData(null);
                                 setOpenedMailId(mail.id);
                                 markAsRead(mail);
                                 setInlineReply(null);
@@ -1992,11 +2135,20 @@ function OutlookEmail({ onToast }) {
                   {/* ── Reading Pane ─────────────────────────────────── */}
                   {/* Mobile: full-screen when mobileView==="email" */}
                   <div className={`
-                    ${mobileView === "email" && openedMailId ? "flex" : "hidden"}
+                    ${(mobileView === "email" && openedMailId) || showCompose ? "flex" : "hidden"}
                     md:flex flex-1 overflow-hidden min-h-0
                   `}>
                     <div className={`flex flex-1 flex-col ${isDark ? "bg-[#1b1a19]" : "bg-[#F3F2F1]"} overflow-hidden min-w-0`}>
-                      {openedMail ? (
+                      {showCompose ? (
+                        <Email
+                          inline
+                          accessToken={accessToken}
+                          onClose={() => { setShowCompose(false); setReplyData(null); }}
+                          replyData={replyData}
+                          onTemplatesOpenChange={setComposeTemplatesOpen}
+                          onMailSent={mail => { handleMailSent(mail); setShowCompose(false); setReplyData(null); }}
+                        />
+                      ) : openedMail ? (
                         <>
                           {/* Mobile back button */}
                           <div className={`md:hidden px-3 pt-2 pb-1 ${isDark ? "bg-[#1b1a19]" : "bg-[#F3F2F1]"} shrink-0`}>
@@ -2428,23 +2580,22 @@ function OutlookEmail({ onToast }) {
                   <div className={`${openedTemplateIdx !== null || showAddTemplate ? "hidden md:flex" : "flex"} w-full md:w-80 border-r ${th.border} flex-col ${th.bg}`}>
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
-                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); }}
+                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", assignedEmail: loggedInEmail, logo: "" }); }}
                         className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                      {!apiTemplates.length ? (
+                      {!myTemplates.length ? (
                         <div className="flex flex-col items-center justify-center h-full py-12">
                           <Edit2 size={36} className={`mb-3 ${th.textMuted} opacity-40`} />
                           <p className={`text-sm ${th.textMuted}`}>No templates yet</p>
                         </div>
-                      ) : apiTemplates.map((tpl, idx) => (
+                      ) : myTemplates.map((tpl, idx) => (
                         <div key={tpl.name + idx}
                           onClick={() => { setOpenedTemplateIdx(idx); setShowAddTemplate(false); }}
                           className={`border-b ${th.border} px-4 py-3 cursor-pointer transition ${th.hover} ${openedTemplateIdx === idx && !showAddTemplate ? isDark ? "bg-indigo-900/20 border-l-2 border-l-indigo-400" : "bg-indigo-50 border-l-2 border-l-indigo-600" : ""}`}>
-                          <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || tpl.subject}</p>
-                          <p className={`text-xs ${th.textMuted} truncate mt-0.5`}>{tpl.subject}</p>
+                          <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || tpl.body || "Untitled template"}</p>
                         </div>
                       ))}
                     </div>
@@ -2467,25 +2618,43 @@ function OutlookEmail({ onToast }) {
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 md:p-6">
                           <form onSubmit={handleAddTemplate} className="max-w-2xl space-y-5">
-                            {[
-                              { label: "Template Name", key: "name", ph: "Enter template name" },
-                              { label: "Subject", key: "subject", ph: "Enter subject line" },
-                            ].map(({ label, key, ph }) => (
-                              <div key={key}>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>{label}</label>
-                                <input type="text" value={newTemplate[key]}
-                                  onChange={e => setNewTemplate(p => ({ ...p, [key]: e.target.value }))}
-                                  required placeholder={ph}
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                              </div>
-                            ))}
                             <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Message</label>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Assigned to</label>
+                              <div className={`px-4 py-2.5 border rounded-xl text-sm ${th.input} opacity-80`}>{loggedInEmail || "you"}</div>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it, and it auto-loads on new email.</p>
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
                               <textarea value={newTemplate.body}
                                 onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))}
                                 required rows={6}
-                                placeholder="Enter your message..."
+                                placeholder="Enter footer content..."
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
+                              {newTemplate.logo ? (
+                                <div className="flex items-center gap-3">
+                                  <img src={newTemplate.logo} alt="Company logo" className="h-14 max-w-[180px] object-contain border rounded-lg p-1 bg-white" />
+                                  <button type="button" onClick={() => setNewTemplate(p => ({ ...p, logo: "" }))}
+                                    className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Remove</button>
+                                </div>
+                              ) : (
+                                <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
+                                  <ImageIcon size={16} />
+                                  <span>Upload logo</span>
+                                  <input type="file" accept="image/*" className="hidden"
+                                    onChange={e => {
+                                      const file = e.target.files && e.target.files[0];
+                                      if (!file) return;
+                                      if (file.size > 512 * 1024) { showPopup("Logo too large (max 512 KB)", "error"); return; }
+                                      const reader = new FileReader();
+                                      reader.onload = () => setNewTemplate(p => ({ ...p, logo: String(reader.result || "") }));
+                                      reader.readAsDataURL(file);
+                                    }} />
+                                </label>
+                              )}
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Appears in the email footer when this template is used.</p>
                             </div>
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
@@ -2499,7 +2668,7 @@ function OutlookEmail({ onToast }) {
                         </div>
                       </>
                     ) : (() => {
-                      const tpl = apiTemplates[openedTemplateIdx];
+                      const tpl = myTemplates[openedTemplateIdx];
                       if (editTemplateIdx === openedTemplateIdx && tpl) return (
                         <>
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center ${th.surface} shrink-0`}>
@@ -2509,23 +2678,48 @@ function OutlookEmail({ onToast }) {
                             <form onSubmit={async e => {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
-                                await apiClient.put(`/Template/${encodeURIComponent(tpl.name)}`, { name: tpl.name, subject: editTemplate.subject, body: editTemplate.body });
+                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.body || "").trim().slice(0, 40), subject: "", body: buildTemplateBody(editTemplate.body, editTemplate.logo), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
-                              } catch { }
+                                showPopup("Template updated");
+                              } catch {
+                                showPopup("Could not update template", "error");
+                              }
                               setIsSubmitting(false);
                             }} className="max-w-2xl space-y-5">
                               <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Subject</label>
-                                <input type="text" value={editTemplate.subject}
-                                  onChange={e => setEditTemplate(p => ({ ...p, subject: e.target.value }))} required
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Assigned to</label>
+                                <div className={`px-4 py-2.5 border rounded-xl text-sm ${th.input} opacity-80`}>{editTemplate.assignedEmail || loggedInEmail || "you"}</div>
                               </div>
                               <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Message</label>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
                                 <textarea value={editTemplate.body}
                                   onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} required rows={6}
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              </div>
+                              <div>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
+                                {editTemplate.logo ? (
+                                  <div className="flex items-center gap-3">
+                                    <img src={editTemplate.logo} alt="Company logo" className="h-14 max-w-[180px] object-contain border rounded-lg p-1 bg-white" />
+                                    <button type="button" onClick={() => setEditTemplate(p => ({ ...p, logo: "" }))}
+                                      className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Remove</button>
+                                  </div>
+                                ) : (
+                                  <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
+                                    <ImageIcon size={16} />
+                                    <span>Upload logo</span>
+                                    <input type="file" accept="image/*" className="hidden"
+                                      onChange={e => {
+                                        const file = e.target.files && e.target.files[0];
+                                        if (!file) return;
+                                        if (file.size > 512 * 1024) { showPopup("Logo too large (max 512 KB)", "error"); return; }
+                                        const reader = new FileReader();
+                                        reader.onload = () => setEditTemplate(p => ({ ...p, logo: String(reader.result || "") }));
+                                        reader.readAsDataURL(file);
+                                      }} />
+                                  </label>
+                                )}
                               </div>
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
@@ -2542,18 +2736,12 @@ function OutlookEmail({ onToast }) {
                       return tpl ? (
                         <>
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
-                            <h2 className="text-sm font-semibold truncate">{tpl.name}</h2>
+                            <h2 className="text-sm font-semibold truncate">{tpl.name || tpl.body || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
-                              <button onClick={() => { setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject, body: tpl.body }); }}
+                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject, body: parsed.text, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo }); }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
-                              <button onClick={async () => {
-                                if (!window.confirm("Delete this template?")) return;
-                                try {
-                                  await apiClient.delete(`/Template/${tpl.TemplateId}`);
-                                  apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
-                                  setOpenedTemplateIdx(null);
-                                } catch { }
-                              }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
+                              <button onClick={() => setTemplateToDelete(tpl)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
                                 <Trash2 size={13} />Delete
                               </button>
                             </div>
@@ -2561,14 +2749,19 @@ function OutlookEmail({ onToast }) {
                           <div className="flex-1 overflow-y-auto p-4 md:p-6">
                             <div className="max-w-2xl space-y-5">
                               <div>
-                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Subject</label>
-                                <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{tpl.subject}</div>
+                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Assigned Email</label>
+                                <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{(tpl.createdBy ?? tpl.CreatedBy) || "— not assigned —"}</div>
                               </div>
                               <div>
-                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Message</label>
-                                <div className={`px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} whitespace-pre-wrap min-h-32 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{tpl.body}</div>
+                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Footer</label>
+                                {(() => { const { logo, text } = parseTemplateBody(tpl.body); return (
+                                  <div className={`flex gap-4 items-start px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} min-h-32 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
+                                    {logo && <img src={logo} alt="Company logo" className="h-16 max-w-[160px] object-contain shrink-0" />}
+                                    <div className="whitespace-pre-wrap flex-1 min-w-0">{text}</div>
+                                  </div>
+                                ); })()}
                               </div>
-                              <button onClick={() => { setReplyData({ type: "new", toEmail: "", subject: tpl.subject, body: tpl.body }); setShowCompose(true); }}
+                              <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject, body: tpl.body }); }}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl transition">
                                 <Mail size={14} />Use Template
                               </button>
@@ -3259,15 +3452,9 @@ function OutlookEmail({ onToast }) {
         )}
       </div>
 
-      {/* ── Compose Modal ────────────────────────────────────────────────── */}
-      {showCompose && (
-        <Email
-          accessToken={accessToken}
-          onClose={() => { setShowCompose(false); setReplyData(null); }}
-          replyData={replyData}
-          onMailSent={mail => { handleMailSent(mail); setShowCompose(false); setReplyData(null); }}
-        />
-      )}
+      {/* Compose renders inline in the reading pane (beside the mail list) for email
+          folders only — see the showCompose branch there. No modal overlay, so opening
+          Templates (or any non-mail view) shows that page, not a New Message panel. */}
 
       {/* ── Schedule Send Modal ──────────────────────────────────────────── */}
       {scheduleModal && (
@@ -3332,3 +3519,1648 @@ function OutlookEmail({ onToast }) {
 }
 
 export default OutlookEmail;
+
+
+// ─── Email compose component (merged from former Email.js) ──────────────────
+const QUOTE_COLORS = ["bg-blue-500","bg-red-500","bg-green-500","bg-purple-500","bg-orange-500","bg-teal-500","bg-pink-500","bg-indigo-500"];
+function quoteAvatarColor(name) {
+  if (!name) return QUOTE_COLORS[0];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return QUOTE_COLORS[h % QUOTE_COLORS.length];
+}
+function quoteInitials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2)).toUpperCase();
+}
+function quoteFileSize(bytes) {
+  if (!bytes) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
+
+export function Email({ accessToken: accessTokenProp, onClose, onMailSent, replyData, inline = false, onTemplatesOpenChange }) {
+  const { instance, accounts } = useMsal();
+  const [accessToken, setAccessToken] = useState(accessTokenProp || "");
+
+  // Templates state
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState(""); // Applied template
+  // Modal state for template
+  const [modalSelectedTemplate, setModalSelectedTemplate] = useState("");
+  // Sync modal state with applied state when opening modal
+
+  // States
+  const [toInput, setToInput] = useState("");   // confirmed recipients, comma-separated
+  const [toDraft, setToDraft] = useState("");   // the address currently being typed
+  const [ccInput, setCcInput] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  // The footer is one unit: a signature text + an optional company logo, kept
+  // separate from the message body so they move/send together as a single block.
+  const [footerText, setFooterText] = useState("");
+  const [footerLogo, setFooterLogo] = useState("");
+  const [showCc, setShowCc] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [successMessage, setSuccessMessage] = useState("");
+  const [sendDropdown, setSendDropdown]           = useState(false);
+  const [scheduleModal, setScheduleModal]         = useState(false);
+  const [scheduleDateTime, setScheduleDateTime]   = useState("");
+  const [schedulingInProgress, setSchedulingInProgress] = useState(false);
+  // Show all emails modal for To field
+  const [showAllToEmails, setShowAllToEmails] = useState(false);
+  // Tag selection state
+  const [tags, setTags] = useState([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsError, setTagsError] = useState("");
+  const [selectedTags, setSelectedTags] = useState([]); // Applied tags
+  // Modal state for tags
+  const [modalSelectedTags, setModalSelectedTags] = useState([]);
+
+  // Templates & Tags Modal state
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  // Let the host (OutlookEmail) react when the picker opens (e.g. widen the area).
+  useEffect(() => { if (onTemplatesOpenChange) onTemplatesOpenChange(showTemplatesModal); }, [showTemplatesModal, onTemplatesOpenChange]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Original email quote (reply/replyAll mode) — shown visually, not in textarea
+  const [quoteHtml, setQuoteHtml] = useState("");
+
+  // File attachment and image states
+  const [attachments, setAttachments] = useState([]);
+  const [images, setImages] = useState([]);
+  const attachmentInputRef = React.useRef(null);
+  const imageInputRef = React.useRef(null);
+
+  // Email suggestions state
+  const [emailSuggestions, setEmailSuggestions] = useState([]);
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const [filteredEmailSuggestions, setFilteredEmailSuggestions] = useState([]);
+  const toInputRef = React.useRef(null);
+
+  async function fetchApi(url, options) {
+    try {
+      if (/^https?:\/\//i.test(url)) return window.fetch(url, options);
+      const path = url.startsWith("/") ? url : `/${url}`;
+      const method = (options && options.method) || "GET";
+      if (method === "GET") {
+        const res = await apiClient.get(path, { params: options && options.params });
+        return { ok: res.status >= 200 && res.status < 300, status: res.status, json: async () => res.data, text: async () => JSON.stringify(res.data) };
+      }
+      const res = await apiClient.request({ url: path, method, data: options && options.body, headers: options && options.headers });
+      return { ok: res.status >= 200 && res.status < 300, status: res.status, json: async () => res.data, text: async () => JSON.stringify(res.data) };
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
+  const fetch = fetchApi;
+
+  //  DRAG & DROP
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+
+    const imageFiles = droppedFiles.filter((file) =>
+      file.type.startsWith("image/")
+    );
+    const otherFiles = droppedFiles.filter(
+      (file) => !file.type.startsWith("image/")
+    );
+
+    if (imageFiles.length > 0) {
+      setImages((prev) => [...prev, ...imageFiles]);
+    }
+
+    if (otherFiles.length > 0) {
+      setAttachments((prev) => [...prev, ...otherFiles]);
+    }
+  };
+
+  // Filter templates and tags based on search
+  const filteredTemplates = templates.filter(
+    (tpl) =>
+      (tpl.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ((tpl.templateType ?? tpl.TemplateType) &&
+        (tpl.templateType ?? tpl.TemplateType).toLowerCase().includes(searchQuery.toLowerCase())) ||
+      ((tpl.body ?? tpl.Body) &&
+        (tpl.body ?? tpl.Body).toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredTags = tags.filter((tag) =>
+    tag.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Handler functions for modal — selecting reflects immediately (template footer
+  // into the message box, tag emails into the To field), not only on "Apply".
+  const handleTemplateSelect = (templateName) => {
+    setModalSelectedTemplate(templateName);
+    setSelectedTemplate(templateName);
+  };
+
+  const handleTagToggle = (tag) => {
+    const next = modalSelectedTags.includes(tag)
+      ? modalSelectedTags.filter((t) => t !== tag)
+      : [...modalSelectedTags, tag];
+    setModalSelectedTags(next);
+    setSelectedTags(next);
+  };
+
+  const handleApply = () => {
+    setSelectedTemplate(modalSelectedTemplate);
+    setSelectedTags(modalSelectedTags);
+    setShowTemplatesModal(false);
+  };
+
+  const handleClearAll = () => {
+    setModalSelectedTemplate("");
+    setModalSelectedTags([]);
+    setSelectedTemplate("");
+    setSelectedTags([]);
+  };
+
+  // Get access token from MSAL (redirect-safe, no popup)
+useEffect(() => {
+  console.log(
+    "Email: Getting token. Prop:",
+    !!accessTokenProp,
+    "Accounts:",
+    accounts.length
+  );
+
+  // 1️⃣ If token was passed in, just use it
+  if (accessTokenProp) {
+    console.log("Email: Using provided access token");
+    setAccessToken(accessTokenProp);
+    return;
+  }
+
+  // 2️⃣ No account → nothing to do
+  if (accounts.length === 0) {
+    console.warn("Email: No accounts found");
+    setAccessToken("");
+    return;
+  }
+
+  const request = {
+    account: accounts[0],
+    scopes: [
+      "https://graph.microsoft.com/User.Read",
+      "https://graph.microsoft.com/Mail.Read",
+      "https://graph.microsoft.com/Mail.ReadWrite",
+      "https://graph.microsoft.com/Mail.Send",
+    ],
+  };
+
+  const getToken = async () => {
+    try {
+      // ✅ Silent first
+      const response = await instance.acquireTokenSilent(request);
+      console.log("Email: Token acquired (silent)");
+      setAccessToken(response.accessToken);
+    } catch (error) {
+      console.warn(
+        "Email: Silent token failed, redirecting:",
+        error.errorCode
+      );
+
+      // ✅ Redirect fallback (NO popup)
+      instance.acquireTokenRedirect(request);
+    }
+  };
+
+  getToken();
+}, [accessTokenProp, instance, accounts]);
+
+  // Manage body overflow when modal is open
+  useEffect(() => {
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = "hidden";
+    return () => {
+      // Restore body scroll when modal is closed/unmounted
+      document.body.style.overflow = "unset";
+    };
+  }, []);
+
+  // Fetch templates on mount
+  useEffect(() => {
+    apiClient
+      .get(`/Template`)
+      .then((res) => {
+        const templatesArray = Array.isArray(res.data) ? res.data : [];
+        // Active templates that belong to the logged-in user only.
+        const me = (sessionStorage.getItem("userEmail") || accounts[0]?.username || "").toLowerCase().trim();
+        const mine = templatesArray.filter((t) => {
+          if (t.IsActive === false || t.isActive === false) return false;
+          const cb = (t.createdBy ?? t.CreatedBy ?? "").toLowerCase().trim();
+          if (cb) return cb === me;
+          const hay = `${t.name ?? ""} ${t.body ?? t.Body ?? ""}`.toLowerCase();
+          return !!me && hay.includes(me);
+        });
+        console.debug("[Email] Templates loaded (mine):", mine);
+        setTemplates(mine);
+      })
+      .catch((err) => {
+        console.error("[Email] Failed to load templates:", err);
+        setTemplates([]);
+      });
+  }, []);
+
+  // Auto-select the template that belongs to the logged-in user (their signature)
+  // for a fresh new email — matched primarily by the user's EMAIL appearing in the
+  // template (footer/name) or its CreatedBy. Skips replies/forwards and never
+  // overrides a template the user picked themselves.
+  useEffect(() => {
+    if (!templates.length || selectedTemplate) return;
+    const t = replyData?.type;
+    if (t === "reply" || t === "replyAll" || t === "forward") return;
+    if (replyData?.body) return; // "Use Template" already supplied a specific template
+
+    // The logged-in user's email(s): CRM session login and the connected mailbox.
+    const emails = [sessionStorage.getItem("userEmail"), accounts[0]?.username]
+      .map((e) => (e || "").toLowerCase().trim())
+      .filter(Boolean);
+
+    let match = null;
+    // Primary: the template that belongs to or carries the logged-in email.
+    if (emails.length) {
+      match = templates.find((tpl) => {
+        const createdBy = (tpl.createdBy ?? tpl.CreatedBy ?? "").toLowerCase();
+        if (emails.includes(createdBy)) return true;
+        const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
+        return emails.some((em) => hay.includes(em));
+      });
+    }
+
+    // Fallback: match by the user's name / email handle if no email match.
+    if (!match) {
+      const name = (accounts[0]?.name || sessionStorage.getItem("userName") || "").toLowerCase().trim();
+      const local = (emails[0] || "").split("@")[0];
+      const tokens = [name, ...name.split(/\s+/), local, ...local.split(/[._-]+/)]
+        .map((s) => s.trim())
+        .filter((s) => s.length >= 3);
+      if (tokens.length) {
+        match = templates.find((tpl) => {
+          const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
+          return tokens.some((tok) => hay.includes(tok));
+        });
+      }
+    }
+
+    if (match) {
+      setSelectedTemplate(match.name);
+      setModalSelectedTemplate(match.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates, accounts]);
+
+  // Fetch tags on mount (so button shows if there are any tags)
+  useEffect(() => {
+    setTagsLoading(true);
+    setTagsError("");
+    apiClient
+      .get(`/Contact/tags/all`)
+      .then((res) => {
+        const tagsArray = Array.isArray(res.data) ? res.data : [];
+        console.debug("[Email] Tags loaded:", tagsArray);
+        setTags(tagsArray);
+        setTagsLoading(false);
+      })
+      .catch((err) => {
+        console.error("[Email] Failed to load tags:", err);
+        setTags([]);
+        setTagsError("Could not load tags");
+        setTagsLoading(false);
+      });
+  }, []);
+
+  // Fetch contact emails for autocomplete using paged endpoint (avoids loading all contacts)
+  useEffect(() => {
+    const fetchContactEmails = async () => {
+      try {
+        const allEmails = [];
+        let page = 1;
+        const pageSize = 100;
+        while (true) {
+          const res = await apiClient.get(`/Contact?page=${page}&pageSize=${pageSize}`);
+          const items = Array.isArray(res.data?.items) ? res.data.items : [];
+          items.forEach((contact) => {
+            const workEmail = contact.WorkEmail || contact.workEmail || "";
+            if (typeof workEmail === "string" && workEmail.trim()) {
+              allEmails.push(workEmail.trim());
+            }
+          });
+          if (items.length < pageSize) break;
+          page++;
+          if (page > 10) break; // safety cap at 1000 emails
+        }
+        setEmailSuggestions([...new Set(allEmails)].sort());
+      } catch (error) {
+        setEmailSuggestions([]);
+      }
+    };
+    fetchContactEmails();
+  }, []);
+
+  // When a template is selected, reflect its footer (body) and subject into the
+  // message box. The templates list from GET /Template already carries full data,
+  // so we resolve it locally instead of re-fetching by name — `/Template/{name}`
+  // isn't a valid route (the API only exposes /Template/{id} and /Template/name/{name}).
+  useEffect(() => {
+    if (!selectedTemplate) return;
+    const tpl = templates.find((t) => (t.name ?? t.Name) === selectedTemplate);
+    if (tpl) {
+      const { logo, text } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
+      setSubject(tpl.subject ?? tpl.Subject ?? "");
+      setFooterText(text);
+      setFooterLogo(logo);
+    }
+  }, [selectedTemplate, templates]);
+
+  // On mount, check for selectedContactEmails in localStorage to prefill To field (one-shot, clear after read)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("selectedContactEmails");
+      if (raw) {
+        localStorage.removeItem("selectedContactEmails");
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length > 0) {
+          setToInput(arr.join(", "));
+        }
+      }
+    } catch (e) {}
+  }, []);
+
+  // Convert HTML to plain text while preserving structure
+  const htmlToPlainText = (html) => {
+    if (!html) return "";
+    let text = html;
+    // Convert common HTML tags to newlines
+    text = text.replace(/<br\s*\/?>/gi, "\n");
+    text = text.replace(/<\/p>/gi, "\n");
+    text = text.replace(/<\/div>/gi, "\n");
+    text = text.replace(/<\/li>/gi, "\n");
+    // Remove all remaining HTML tags
+    text = text.replace(/<[^>]*>/g, "");
+    // Decode HTML entities
+    text = text.replace(/&nbsp;/g, " ");
+    text = text.replace(/&lt;/g, "<");
+    text = text.replace(/&gt;/g, ">");
+    text = text.replace(/&amp;/g, "&");
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&#39;/g, "'");
+    // Clean up multiple newlines
+    text = text.replace(/\n\n\n+/g, "\n\n");
+    return text.trim();
+  };
+
+  // Handle reply data when provided
+  useEffect(() => {
+    if (replyData) {
+      setToInput(replyData.toEmail || "");
+      setCcInput(replyData.ccEmail || "");
+      setSubject(replyData.subject || "");
+
+      if (replyData.type === "new" && replyData.body) {
+        // "Use Template" passed a specific template body (may carry a logo).
+        const { logo, text } = parseTemplateBody(replyData.body);
+        setFooterText(text);
+        setFooterLogo(logo);
+        setQuoteHtml("");
+      } else if (replyData.type === "reply" || replyData.type === "replyAll") {
+        // Body starts empty — user types reply above the quoted original
+        setBody("");
+        setQuoteHtml(replyData.originalBody || "");
+      } else if (replyData.type === "forward") {
+        const plainTextBody = htmlToPlainText(replyData.originalBody);
+        const forwardText = `\n\n---\nForwarded message:\nFrom: ${replyData.originalMail.sender}\nTo: ${replyData.originalMail.toEmail}\nDate: ${new Date(replyData.originalMail.receivedDateTime).toLocaleString()}\nSubject: ${replyData.originalMail.subject}\n\n${plainTextBody}`;
+        setBody(forwardText);
+        setQuoteHtml("");
+        if (replyData.attachments && replyData.attachments.length > 0) {
+          setAttachments(replyData.attachments);
+        }
+      }
+
+      if (replyData.ccEmail) {
+        setShowCc(true);
+      }
+    }
+  }, [replyData]);
+
+  // Append a confirmed address to the To list (kept comma-separated).
+  const commitToEmail = (email) => {
+    const clean = (email || "").trim();
+    if (!clean) return;
+    setToInput((prev) => (prev.trim() ? `${prev.trim()}, ${clean}` : clean));
+  };
+
+  // Handle To input change with email autocomplete. Only the small draft string
+  // changes per keystroke — the (potentially large) confirmed list is untouched,
+  // so typing stays fast even with many recipients.
+  const handleToInputChange = (e) => {
+    const value = e.target.value;
+    const lastChar = value[value.length - 1];
+
+    // Separator commits the typed address.
+    if (lastChar === "," || lastChar === ";") {
+      commitToEmail(value.slice(0, -1));
+      setToDraft("");
+      setShowEmailSuggestions(false);
+      setFilteredEmailSuggestions([]);
+      return;
+    }
+
+    setToDraft(value);
+
+    const lastEmail = value.trim().toLowerCase();
+    if (lastEmail) {
+      // Cap at 8 matches with an early exit — avoids scanning/rendering the whole list.
+      const filtered = [];
+      for (let i = 0; i < emailSuggestions.length && filtered.length < 8; i++) {
+        if (emailSuggestions[i].toLowerCase().includes(lastEmail)) {
+          filtered.push(emailSuggestions[i]);
+        }
+      }
+      setFilteredEmailSuggestions(filtered);
+      setShowEmailSuggestions(filtered.length > 0);
+    } else {
+      setShowEmailSuggestions(false);
+      setFilteredEmailSuggestions([]);
+    }
+  };
+
+  // Handle selecting an email from suggestions
+  const handleSelectEmailSuggestion = (email) => {
+    commitToEmail(email);
+    setToDraft("");
+    setShowEmailSuggestions(false);
+    setFilteredEmailSuggestions([]);
+    if (toInputRef.current) {
+      toInputRef.current.focus();
+    }
+  };
+
+  // Helper: parse a user-provided string of emails into an array
+  const parseEmails = (input) => {
+    if (!input) return [];
+    return input
+      .split(/[;,\n]+/) // split on comma, semicolon or newline
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  };
+
+  // Confirmed recipients, parsed once per change (avoids re-splitting on every render).
+  const toEmails = useMemo(() => parseEmails(toInput), [toInput]);
+  // Recipients including the in-progress draft — used when sending.
+  const allToEmails = useMemo(
+    () => parseEmails(toDraft ? `${toInput}, ${toDraft}` : toInput),
+    [toInput, toDraft]
+  );
+
+  const validateEmail = (email) => {
+    // simple regex for basic validation
+    const re =
+      /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+    return re.test(String(email).toLowerCase());
+  };
+
+  // Handle attachment file selection
+  const handleAttachmentSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    setAttachments([...attachments, ...files]);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
+  };
+
+  // Handle image file selection
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+    setImages([...images, ...imageFiles]);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  };
+
+  // Remove attachment
+  const removeAttachment = (index) => {
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
+  // Remove image
+  const removeImage = (index) => {
+    setImages(images.filter((_, i) => i !== index));
+  };
+
+  // Convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64 = reader.result.split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
+  };
+
+  // The footer as one block: company logo on the LEFT, signature text on the right.
+  const footerBlockHtml = () => {
+    if (!footerText && !footerLogo) return "";
+    const textHtml = (footerText || "").replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+    if (footerLogo) {
+      return `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
+        + `<td valign="middle" style="padding-right:14px;"><img src="${footerLogo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
+        + `<td valign="middle" style="font-size:13px;color:#374151;line-height:1.5;">${textHtml}</td>`
+        + `</tr></table>`;
+    }
+    return `<div style="margin-top:18px;font-size:13px;color:#374151;line-height:1.5;">${textHtml}</div>`;
+  };
+
+  // Handle Form Submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSending(true);
+
+    // Parse inputs into arrays (include any address still being typed)
+    const toEmails = allToEmails;
+    const ccEmails = parseEmails(ccInput);
+
+    // Frontend validation for empty or invalid fields
+    let validationErrors = {};
+    if (toEmails.length === 0)
+      validationErrors.to = "At least one recipient is required";
+    if (!subject.trim()) validationErrors.subject = "Subject is required";
+    if (!body.trim() && !quoteHtml) validationErrors.body = "Email body is required";
+
+    // Validate email formats
+    const invalidTo = toEmails.filter((addr) => !validateEmail(addr));
+    if (invalidTo.length > 0)
+      validationErrors.to = `Invalid To address(es): ${invalidTo.join(", ")}`;
+    const invalidCc = ccEmails.filter((addr) => !validateEmail(addr));
+    if (invalidCc.length > 0)
+      validationErrors.cc = `Invalid Cc address(es): ${invalidCc.join(", ")}`;
+
+    // Update error state and clear success message
+    setErrors(validationErrors);
+    setSuccessMessage("");
+
+    // If any validation failed, stop submission here
+    if (Object.keys(validationErrors).length > 0) {
+      setIsSending(false);
+      return;
+    }
+
+    // Prepare attachments for Microsoft Graph API
+    let attachmentsPayload = [];
+    try {
+      for (const file of attachments) {
+        const base64 = await fileToBase64(file);
+        attachmentsPayload.push({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: file.name,
+          contentBytes: base64,
+        });
+      }
+
+      for (const file of images) {
+        const base64 = await fileToBase64(file);
+        attachmentsPayload.push({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: file.name,
+          contentBytes: base64,
+        });
+      }
+    } catch (error) {
+      console.error("Error converting files to base64:", error);
+      setErrors({ apiError: "Failed to process attachments/images" });
+      setIsSending(false);
+      return;
+    }
+
+    // Send Email via Microsoft Graph API
+    try {
+      console.log("Sending email via Graph API");
+      const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+      const finalHtml = quoteHtml
+        ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+        : `${userHtml}${footerBlockHtml()}`;
+      const emailPayload = {
+        message: {
+          subject: subject,
+          body: {
+            contentType: "HTML",
+            content: finalHtml,
+          },
+          toRecipients: toEmails.map((addr) => ({
+            emailAddress: {
+              address: addr,
+            },
+          })),
+          ccRecipients:
+            ccEmails.length > 0
+              ? ccEmails.map((addr) => ({
+                  emailAddress: {
+                    address: addr,
+                  },
+                }))
+              : [],
+        },
+      };
+
+      // Add attachments if any
+      if (attachmentsPayload.length > 0) {
+        emailPayload.message.attachments = attachmentsPayload;
+      }
+
+      const response = await fetch(
+        "https://graph.microsoft.com/v1.0/me/sendMail",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(emailPayload),
+        }
+      );
+
+      // Check if the request was successful
+      if (response.ok || response.status === 202) {
+        console.log(" Email sent successfully (status:", response.status, ")");
+        setSuccessMessage("Email sent successfully!");
+        setErrors({});
+
+        // Reset form fields after successful email send
+        setToInput("");
+        setCcInput("");
+        setSubject("");
+        setBody("");
+        setQuoteHtml("");
+        setSelectedTemplate("");
+        setSelectedTags([]);
+        setAttachments([]);
+        setImages([]);
+
+        // Clear selected contacts from localStorage after sending
+        try {
+          localStorage.removeItem("selectedContactEmails");
+        } catch (e) {}
+
+        // Call onMailSent prop if provided
+        if (typeof onMailSent === "function") {
+          onMailSent({
+            subject,
+            body,
+            to: toEmails,
+            cc: ccEmails,
+          });
+        }
+
+        setIsSending(false);
+
+        // Close modal after a short delay
+        setTimeout(() => {
+          onClose();
+        }, 1000);
+      } else {
+        const errorData = await response.json();
+        console.error("Graph API error response:", errorData);
+        setErrors({
+          apiError: errorData.error?.message || "Failed to send email",
+        });
+        setIsSending(false);
+      }
+    } catch (error) {
+      console.error("Network/parse error when sending email:", error);
+      setErrors({ apiError: error.message || "Failed to send email" });
+      setIsSending(false);
+    }
+  };
+
+  // Build send payload (shared by schedule + mail merge)
+  const buildPayload = () => {
+    const toEmails = allToEmails;
+    const ccEmails = parseEmails(ccInput);
+    const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+    const finalHtml = quoteHtml
+      ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+      : `${userHtml}${footerBlockHtml()}`;
+    return { toEmails, ccEmails, html: finalHtml };
+  };
+
+  const handleScheduleSend = async () => {
+    if (!scheduleDateTime) return;
+    const scheduledAt = new Date(scheduleDateTime);
+    const delay = scheduledAt.getTime() - Date.now();
+    if (delay <= 0) { setErrors({ apiError: "Please select a future date and time." }); return; }
+    const { toEmails, ccEmails, html } = buildPayload();
+    if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
+    setSchedulingInProgress(true);
+    try {
+      const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          body: { contentType: "HTML", content: html },
+          toRecipients: toEmails.map(a => ({ emailAddress: { address: a } })),
+          ccRecipients: ccEmails.map(a => ({ emailAddress: { address: a } })),
+        }),
+      });
+      if (draftRes.ok) {
+        const draft = await draftRes.json();
+        setTimeout(async () => {
+          await fetch(`https://graph.microsoft.com/v1.0/me/messages/${draft.id}/send`, {
+            method: "POST", headers: { Authorization: `Bearer ${accessToken}` },
+          }).catch(() => {});
+        }, delay);
+        setScheduleModal(false);
+        setSuccessMessage(`Scheduled for ${scheduledAt.toLocaleString()}`);
+        setTimeout(() => onClose(), 1200);
+      } else {
+        const err = await draftRes.json().catch(() => ({}));
+        setErrors({ apiError: err?.error?.message || "Failed to schedule email." });
+      }
+    } catch (e) {
+      setErrors({ apiError: e.message || "Failed to schedule." });
+    } finally {
+      setSchedulingInProgress(false);
+    }
+  };
+
+  const handleMailMerge = async () => {
+    const { toEmails, ccEmails, html } = buildPayload();
+    if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
+    if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
+    setIsSending(true); setErrors({});
+    let sent = 0;
+    for (const addr of toEmails) {
+      try {
+        const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ message: {
+            subject,
+            body: { contentType: "HTML", content: html },
+            toRecipients: [{ emailAddress: { address: addr } }],
+            ccRecipients: ccEmails.map(a => ({ emailAddress: { address: a } })),
+          }}),
+        });
+        if (res.ok || res.status === 202) sent++;
+      } catch {}
+    }
+    setIsSending(false);
+    setSuccessMessage(`Mail merge sent to ${sent} of ${toEmails.length} recipient${toEmails.length !== 1 ? "s" : ""}.`);
+    setTimeout(() => onClose(), 1200);
+  };
+
+  // When tags are applied, reflect the matching contacts' emails into the To field.
+  useEffect(() => {
+    if (!selectedTags.length) return;
+    apiClient
+      .get(`/Contact/tags/emails`, { params: { tags: selectedTags.join(",") } })
+      .then((res) => {
+        // Backend returns a comma-joined string; be defensive about other shapes.
+        let raw = res.data;
+        if (Array.isArray(raw)) raw = raw.join(",");
+        else if (raw && typeof raw === "object") raw = Object.values(raw).join(",");
+        const emailArr = String(raw ?? "")
+          .split(/[,;\n]+/)
+          .map((e) => e.trim())
+          .filter((e) => e.length > 0);
+        if (emailArr.length === 0) {
+          // No emails for these tags — don't wipe what's already in To.
+          console.warn("[Email] No contact emails found for tags:", selectedTags);
+          return;
+        }
+        // Reflect the selected tags' contact emails into the To field.
+        setToInput([...new Set(emailArr)].join(", "));
+      })
+      .catch((err) => {
+        console.error("[Email] Failed to load emails for tags:", selectedTags, err);
+      });
+  }, [selectedTags]);
+
+
+  // Static light-mode theme (Email compose always light)
+  const d = {
+    bg: "bg-white", surface: "bg-gray-50", text: "text-gray-900",
+    muted: "text-gray-600", border: "border-gray-200", borderSm: "border-gray-100",
+    input: "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-blue-200",
+    hover: "hover:bg-gray-100", hoverBlue: "hover:bg-blue-50",
+    chip: "bg-white border-gray-300 text-gray-700",
+    tag: "bg-blue-100 text-blue-800 border-blue-300",
+  };
+  const isDark = false;
+
+  return (
+    <div className={inline ? "w-full h-full flex flex-col min-h-0" : "fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1100] p-3 sm:p-4"}>
+      <div className={inline ? "bg-white w-full h-full flex flex-col overflow-hidden min-h-0" : "bg-white rounded-xl shadow-2xl w-full max-w-2xl sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"}>
+        {/* Header */}
+        <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${d.surface}`}>
+          <h2 className={`text-lg sm:text-xl font-bold ${d.text}`}>
+            {replyData?.type === "reply" ? "Reply"
+              : replyData?.type === "replyAll" ? "Reply All"
+              : replyData?.type === "forward" ? "Forward"
+              : "New Message"}
+          </h2>
+          <button
+            onClick={onClose}
+            className={`${d.muted} hover:text-gray-300 transition-colors p-1.5 ${d.hover} rounded-lg`}
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col flex-1 overflow-hidden"
+        >
+          {/* Selected template + tags, with the Tags picker button (hidden while picking) */}
+          {!showTemplatesModal && (tags.length > 0 || templates.length > 1) && (
+            <div className={`px-4 sm:px-6 py-3 border-b ${isDark ? "bg-blue-900/20 border-blue-800/40" : "bg-blue-50 border-blue-100"}`}>
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplatesModal(true)}
+                  className={`px-3 py-2 ${isDark ? "bg-gray-700 text-blue-400 border-blue-700 hover:bg-gray-600" : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
+                >
+                  <Tag size={16} />
+                  Tags
+                </button>
+
+                {(selectedTemplate || selectedTags.length > 0) ? (
+                  <div className="flex-1 min-w-0 flex flex-wrap content-start gap-2 max-h-[5.5rem] overflow-y-auto pr-1">
+                    {selectedTemplate && (
+                      <span className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 text-xs font-medium">
+                        <FileText size={12} className="flex-shrink-0" />
+                        <span className="truncate max-w-[220px]">{selectedTemplate}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTemplate("")}
+                          className="flex-shrink-0 w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-blue-200 font-bold leading-none"
+                          aria-label="Remove template"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )}
+                    {selectedTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-medium"
+                      >
+                        <Tag size={11} className="flex-shrink-0" />
+                        <span className="truncate max-w-[200px]">{tag}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
+                          className="flex-shrink-0 w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-emerald-200 font-bold leading-none"
+                          aria-label="Remove tag"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className={`flex-1 self-center text-xs ${d.muted}`}>Click the Tags button to add recipients by tag.</span>
+                )}
+              </div>
+            </div>
+          )}
+          {/* Compose body: optional Templates & Tags side panel (inline) + the fields */}
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Templates & Tags — inline side panel when composing in-pane, modal otherwise */}
+          {showTemplatesModal && (
+            <div className={inline
+              ? `flex-1 min-w-0 h-full flex`
+              : "fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1200] p-3 sm:p-4"}>
+              <div className={inline
+                ? `${d.bg} w-full h-full overflow-hidden flex flex-col`
+                : `${d.bg} rounded-xl shadow-2xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col`}>
+                {/* Modal Header */}
+                <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${isDark ? "bg-blue-900/20" : "bg-blue-50"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-600 rounded-lg flex-shrink-0">
+                        <FileText size={20} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className={`text-base sm:text-lg font-bold ${d.text}`}>Tags</h2>
+                        <p className={`text-xs sm:text-sm ${d.muted} mt-0.5`}>
+                          Pick tags to add their contacts to the recipients
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplatesModal(false)}
+                      className={`p-1.5 ${d.hover} rounded-lg transition-colors flex-shrink-0 ${d.muted}`}
+                      aria-label="Close"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search Bar */}
+                <div className={`px-4 sm:px-6 py-2 sm:py-3 ${d.surface} border-b ${d.border}`}>
+                  <div className="relative">
+                    <Search size={16} className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${d.muted} flex-shrink-0`} />
+                    <input
+                      type="text"
+                      placeholder="Search tags..."
+                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4">
+                  {/* Templates Section — only when the user has more than one of their own to switch between */}
+                  {templates.length > 1 && (
+                    <div className="mb-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText size={16} className="text-blue-500 flex-shrink-0" />
+                        <h3 className={`${d.text} text-sm font-semibold`}>Templates</h3>
+                        <span className={`text-xs ${d.muted} ${isDark ? "bg-gray-700" : "bg-gray-100"} px-2 py-0.5 rounded-full ml-auto`}>
+                          {filteredTemplates.length}
+                        </span>
+                      </div>
+
+                      {filteredTemplates.length === 0 ? (
+                        <p className={`${d.muted} text-xs sm:text-sm py-3 sm:py-4 text-center ${d.surface} rounded-lg`}>
+                          No templates found
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredTemplates.map((tpl) => (
+                            <button
+                              key={tpl.name}
+                              type="button"
+                              onClick={() => handleTemplateSelect(tpl.name)}
+                              className={`w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg border transition-all text-sm ${
+                                modalSelectedTemplate === tpl.name
+                                  ? isDark ? "bg-blue-900/30 border-blue-500" : "bg-blue-50 border-blue-500 shadow-sm"
+                                  : `${d.bg} ${d.border} ${d.hoverBlue}`
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`${d.text} font-medium text-sm`}>{tpl.name}</span>
+                                    {tpl.TemplateType && (
+                                      <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${isDark ? "bg-blue-900/40 text-blue-300" : "bg-blue-100 text-blue-700"}`}>
+                                        {tpl.TemplateType}
+                                      </span>
+                                    )}
+                                    {modalSelectedTemplate === tpl.name && (
+                                      <CheckCircle2 size={16} className="text-blue-500 flex-shrink-0 ml-auto" />
+                                    )}
+                                  </div>
+                                  {(tpl.body ?? tpl.Body) && (
+                                    <p className={`${d.muted} text-xs mt-1 line-clamp-2`}>{tpl.body ?? tpl.Body}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tags Section */}
+                  {!tagsLoading && !tagsError && tags.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Tag size={16} className="text-emerald-500 flex-shrink-0" />
+                        <h3 className={`${d.text} text-sm font-semibold`}>Tags</h3>
+                        <span className={`text-xs ${d.muted} ${isDark ? "bg-gray-700" : "bg-gray-100"} px-2 py-0.5 rounded-full ml-auto`}>
+                          {filteredTags.length}
+                        </span>
+                      </div>
+
+                      {filteredTags.length === 0 ? (
+                        <p className={`${d.muted} text-xs sm:text-sm py-3 sm:py-4 text-center ${d.surface} rounded-lg`}>
+                          No tags found
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {filteredTags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => handleTagToggle(tag)}
+                              className={`w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border transition-all text-sm flex items-center gap-2 ${
+                                modalSelectedTags.includes(tag)
+                                  ? isDark ? "bg-emerald-900/30 border-emerald-500 text-emerald-300" : "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
+                                  : `${d.bg} ${d.border} ${d.text} hover:border-emerald-400 ${isDark ? "hover:bg-emerald-900/20" : "hover:bg-emerald-50"}`
+                              }`}
+                            >
+                              <Tag size={14} className="flex-shrink-0 text-emerald-500" />
+                              <span className="flex-1 truncate font-medium">{tag}</span>
+                              {modalSelectedTags.includes(tag) && (
+                                <CheckCircle2 size={16} className="flex-shrink-0 text-emerald-500" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {tagsLoading && (
+                    <div className={`${d.muted} text-sm text-center py-4`}>
+                      Loading tags...
+                    </div>
+                  )}
+
+                  {tagsError && (
+                    <div className="text-red-500 text-sm text-center py-4">
+                      {tagsError}
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t ${d.border} ${d.surface}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className={`px-3 py-2 ${d.text} rounded-lg transition-colors text-xs sm:text-sm font-medium ${d.hover}`}
+                    >
+                      Clear All
+                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplatesModal(false)}
+                        className={`px-3 py-2 border ${d.border} ${d.text} text-xs sm:text-sm font-medium rounded-lg ${d.hover} transition-colors`}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApply}
+                        className="px-3 py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+            {/* Compose fields — full width; hidden while the full-width Tags picker is open */}
+            <div className={`${inline && showTemplatesModal ? "hidden" : "flex"} flex-col flex-1 min-w-0 overflow-hidden`}>
+
+          {/* Recipients */}
+          <div className={`px-4 sm:px-6 py-3`}>
+            <div className={`flex items-center gap-3 py-1 border-b-2 border-gray-300 focus-within:border-blue-500 transition-colors`}>
+              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg border ${d.border} text-xs sm:text-sm font-semibold ${d.text} flex-shrink-0`}>To</span>
+              <div className="flex-1 relative min-w-0">
+                {/* chips + input (borderless; the row shows an underline) */}
+                <div
+                  onClick={() => toInputRef.current && toInputRef.current.focus()}
+                  className="flex flex-wrap items-center gap-1.5 w-full cursor-text text-sm"
+                >
+                  {toEmails.slice(0, 2).map((email, idx) => (
+                    <span
+                      key={email + idx}
+                      className={`${d.tag} pl-2 pr-1 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1 flex-shrink-0`}
+                    >
+                      <span className="truncate max-w-[160px]">{email}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setToInput(toEmails.filter((_, i) => i !== idx).join(", "));
+                        }}
+                        className="hover:text-red-600 font-bold leading-none"
+                        aria-label="Remove email"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {toEmails.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAllToEmails(true);
+                      }}
+                      className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-xs font-medium border border-blue-300 hover:bg-blue-100 transition-colors flex-shrink-0"
+                    >
+                      +{toEmails.length - 2} more
+                    </button>
+                  )}
+                  <input
+                    ref={toInputRef}
+                    type="text"
+                    placeholder={toEmails.length ? "" : "Recipients"}
+                    value={toDraft}
+                    onChange={handleToInputChange}
+                    onKeyDown={(e) => {
+                      if (e.key === "Backspace" && !toDraft && toEmails.length) {
+                        setToInput(toEmails.slice(0, -1).join(", "));
+                      }
+                    }}
+                    onFocus={() => {
+                      const q = toDraft.trim().toLowerCase();
+                      if (q && emailSuggestions.some((em) => em.toLowerCase().includes(q))) {
+                        setShowEmailSuggestions(true);
+                      }
+                    }}
+                    className={`flex-1 min-w-[120px] border-0 outline-none bg-transparent px-1 py-1.5 text-sm ${d.text} placeholder-gray-400`}
+                  />
+                </div>
+
+                {/* Email Suggestions Dropdown */}
+                {showEmailSuggestions && filteredEmailSuggestions.length > 0 && (
+                  <div className={`absolute top-full left-0 right-0 mt-1 ${d.bg} border ${d.border} rounded-lg shadow-lg z-[100] max-h-[200px] overflow-y-auto`}>
+                    {filteredEmailSuggestions.map((email, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectEmailSuggestion(email)}
+                        className={`w-full text-left px-3 py-2 ${d.hoverBlue} border-b ${d.borderSm} last:border-b-0 text-sm ${d.text} transition-colors`}
+                      >
+                        {email}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCc(!showCc)}
+                className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm px-2 font-medium flex-shrink-0"
+              >
+                Cc
+              </button>
+            </div>
+            {errors.to && (
+              <p className="text-red-600 text-xs ml-8 sm:ml-[52px] -mt-1 mb-2">
+                {errors.to}
+              </p>
+            )}
+
+            {showCc && (
+              <>
+                <div className={`flex items-center gap-3 py-1 mt-2 border-b-2 border-gray-300 focus-within:border-blue-500 transition-colors`}>
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-lg border ${d.border} text-xs sm:text-sm font-semibold ${d.text} flex-shrink-0`}>Cc</span>
+                  <input
+                    type="text"
+                    value={ccInput}
+                    onChange={(e) => setCcInput(e.target.value)}
+                    placeholder="Cc recipients"
+                    className={`flex-1 min-w-0 border-0 outline-none bg-transparent px-1 py-1.5 text-sm ${d.text} placeholder-gray-400`}
+                  />
+                </div>
+                {errors.cc && (
+                  <p className="text-red-600 text-xs mt-1 mb-1">
+                    {errors.cc}
+                  </p>
+                )}
+              </>
+            )}
+
+            <div className={`py-1 mt-2 border-b-2 border-gray-300 focus-within:border-blue-500 transition-colors`}>
+              <input
+                id="email-subject"
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Add a subject"
+                className={`w-full border-0 outline-none bg-transparent px-1 py-1.5 text-sm ${d.text} placeholder-gray-400`}
+              />
+            </div>
+            {errors.subject && (
+              <p className="text-red-600 text-xs mt-1">
+                {errors.subject}
+              </p>
+            )}
+          </div>
+
+          {/* Message Body */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col gap-3">
+            {/* Message body + footer in a single box (footer = logo on the left + text) */}
+            <div
+              className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 ${
+                quoteHtml ? "min-h-[120px]" : "flex-1 min-h-[220px]"
+              } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… or drop files"}
+                className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400`}
+              />
+              {(footerText || footerLogo) && (
+                <div className={`flex gap-3 items-center p-3 border-t ${d.border}`}>
+                  {footerLogo && (
+                    <img src={footerLogo} alt="Company logo" className={`h-16 max-w-[130px] object-contain shrink-0 self-center border-r ${d.border} pr-3`} />
+                  )}
+                  <textarea
+                    value={footerText}
+                    onChange={(e) => setFooterText(e.target.value)}
+                    rows={Math.max(1, (footerText || "").split("\n").length)}
+                    placeholder="Footer / signature"
+                    className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-0 self-center leading-5 ${d.text} placeholder-gray-400`}
+                  />
+                </div>
+              )}
+            </div>
+            {errors.body && (
+              <p className="text-red-600 text-xs -mt-2">{errors.body}</p>
+            )}
+
+            {/* Original email quoted block (reply/replyAll mode) */}
+            {quoteHtml && replyData && (
+              <div className={`border ${d.border} rounded-xl overflow-hidden shadow-sm`}>
+                {/* Sender row */}
+                <div className={`flex items-start gap-3 px-4 py-3 ${d.surface} border-b ${d.border}`}>
+                  <div className={`w-9 h-9 rounded-full ${quoteAvatarColor(replyData.originalMail?.sender)} flex items-center justify-center text-white font-semibold text-sm flex-shrink-0`}>
+                    {quoteInitials(replyData.originalMail?.sender)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className={`text-sm font-semibold ${d.text} truncate`}>{replyData.originalMail?.sender}</span>
+                      <span className={`text-[11px] ${d.muted} flex-shrink-0`}>
+                        {replyData.originalMail?.receivedDateTime ? new Date(replyData.originalMail.receivedDateTime).toLocaleString() : ""}
+                      </span>
+                    </div>
+                    <div className={`flex flex-wrap items-center gap-1 text-xs ${d.muted}`}>
+                      <span className="font-medium">To:</span>
+                      {(replyData.originalMail?.toEmail || "").split(/[,;]/).map(e => e.trim()).filter(Boolean).map((e, i) => (
+                        <span key={i} className={`px-1.5 py-0.5 rounded ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"}`}>{e}</span>
+                      ))}
+                    </div>
+                    {replyData.originalMail?.ccEmail && (
+                      <div className={`flex flex-wrap items-center gap-1 mt-0.5 text-xs ${d.muted}`}>
+                        <span className="font-medium">Cc:</span>
+                        {replyData.originalMail.ccEmail.split(/[,;]/).map(e => e.trim()).filter(Boolean).map((e, i) => (
+                          <span key={i} className={`px-1.5 py-0.5 rounded ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-600"}`}>{e}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Attachments row */}
+                {replyData.originalMail?.attachments?.length > 0 && (
+                  <div className={`px-4 py-2.5 border-b ${d.border} ${d.surface} flex flex-wrap gap-2`}>
+                    {replyData.originalMail.attachments.map((att, i) => {
+                      const name = att.name || att.fileName || `attachment-${i}`;
+                      const sz = quoteFileSize(att.size);
+                      return (
+                        <div key={i} className={`flex items-center gap-1.5 px-2.5 py-1.5 border ${d.border} rounded-lg ${d.bg} text-xs`}>
+                          <Paperclip size={12} className={`${d.muted} flex-shrink-0`} />
+                          <span className={`${d.text} font-medium truncate max-w-[140px]`}>{name}</span>
+                          {sz && <span className={d.muted}>{sz}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Email body */}
+                <div
+                  className={`px-4 py-3 text-sm ${d.muted} max-h-52 overflow-y-auto leading-relaxed ${d.bg}`}
+                  dangerouslySetInnerHTML={{ __html: quoteHtml }}
+                />
+              </div>
+            )}
+          </div>
+          
+
+          {/* Attachments Preview */}
+          {attachments.length > 0 && (
+            <div className={`px-4 sm:px-6 py-2 border-t ${d.border} ${d.surface}`}>
+              <p className={`text-xs font-semibold ${d.text} mb-1.5`}>
+                Attachments ({attachments.length})
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {attachments.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center gap-2 ${d.chip} px-2 py-1 rounded text-xs border flex-shrink-0`}
+                  >
+                    <span className={`${d.text} truncate text-xs max-w-[160px]`}>{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(idx)}
+                      className="text-red-600 hover:text-red-800 font-bold flex-shrink-0"
+                      aria-label="Remove attachment"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Images Preview */}
+          {images.length > 0 && (
+            <div className={`px-4 sm:px-6 py-2 border-t ${d.border} ${d.surface}`}>
+              <p className={`text-xs font-semibold ${d.text} mb-1.5`}>
+                Images ({images.length})
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {images.map((file, idx) => (
+                  <div key={idx} className="relative group flex-shrink-0">
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="h-12 w-12 object-cover rounded border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px] leading-none"
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error & Success Messages */}
+          {errors.apiError && (
+            <div className="px-4 sm:px-6 py-2 sm:py-3 bg-red-50 border-t border-red-200">
+              <p className="text-red-600 text-xs sm:text-sm">{errors.apiError}</p>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="px-4 sm:px-6 py-2 sm:py-3 bg-emerald-50 border-t border-emerald-200">
+              <p className="text-emerald-700 text-xs sm:text-sm">{successMessage}</p>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className={`px-4 sm:px-6 py-3 border-t ${d.border} flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 ${d.surface}`}>
+            <div className="flex items-center gap-1 flex-wrap">
+              {/* Send split-button with dropdown */}
+              <div className="relative flex-shrink-0">
+                <div className="flex rounded-lg overflow-hidden shadow-sm">
+                  <button
+                    type="submit"
+                    disabled={isSending}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
+                  >
+                    <Send size={15} />
+                    {isSending ? "Sending..." : "Send"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendDropdown(p => !p)}
+                    className="flex items-center px-2 bg-blue-600 hover:bg-blue-700 text-white border-l border-blue-500 transition h-10 sm:h-auto"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+
+                {sendDropdown && (
+                  <div className={`absolute left-0 bottom-full mb-1 w-48 ${d.bg} border ${d.border} rounded-xl shadow-xl z-[60] overflow-visible`}
+                    onMouseLeave={() => setSendDropdown(false)}>
+                    <button type="submit" onClick={() => setSendDropdown(false)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
+                      <Send size={14} className="text-blue-500 flex-shrink-0" />Send
+                    </button>
+                    <button type="button" onClick={() => { setSendDropdown(false); setScheduleDateTime(""); setScheduleModal(true); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
+                      <Clock size={14} className="text-blue-500 flex-shrink-0" />Schedule send
+                    </button>
+                    <button type="button" onClick={() => { setSendDropdown(false); handleMailMerge(); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
+                      <Users size={14} className="text-blue-500 flex-shrink-0" />Start mail merge
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                className={`p-2 ${d.muted} ${d.hover} rounded-lg transition h-10 w-10 flex items-center justify-center`}
+                title="Attach file"
+                aria-label="Attach file"
+              >
+                <Paperclip size={18} />
+              </button>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                onChange={handleAttachmentSelect}
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                className={`p-2 ${d.muted} ${d.hover} rounded-lg transition h-10 w-10 flex items-center justify-center`}
+                title="Insert emoji"
+                aria-label="Insert emoji"
+              >
+                <Smile size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className={`p-2 ${d.muted} ${d.hover} rounded-lg transition h-10 w-10 flex items-center justify-center`}
+                title="Insert image"
+                aria-label="Insert image"
+              >
+                <ImageIcon size={18} />
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className={`${d.muted} px-3 sm:px-4 py-2 ${d.hover} rounded-lg transition text-xs sm:text-sm font-medium`}
+            >
+              Discard
+            </button>
+          </div>
+            </div>{/* /compose fields column */}
+          </div>{/* /compose body row */}
+        </form>
+
+        {/* All Recipients Modal */}
+        {showAllToEmails && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200] flex items-center justify-center p-3 sm:p-4">
+            <div className={`${d.bg} rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col`}>
+              {/* Modal Header */}
+              <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} flex items-center justify-between gap-3`}>
+                <h2 className={`text-base sm:text-lg font-bold ${d.text}`}>All Recipients ({toEmails.length})</h2>
+                <button
+                  onClick={() => setShowAllToEmails(false)}
+                  className={`${d.muted} p-1.5 ${d.hover} rounded-lg transition flex-shrink-0`}
+                  aria-label="Close"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4">
+                {/* Input field for adding more emails */}
+                <div className="mb-4 relative">
+                  <input
+                    type="text"
+                    placeholder="Add more emails..."
+                    value={toDraft}
+                    onChange={handleToInputChange}
+                    onFocus={() => setShowEmailSuggestions(filteredEmailSuggestions.length > 0)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                  />
+
+                  {/* Suggestions in modal */}
+                  {showEmailSuggestions && filteredEmailSuggestions.length > 0 && (
+                    <div className={`absolute top-full left-0 right-0 mt-1 ${d.bg} border ${d.border} rounded-lg shadow-lg z-[210] max-h-[150px] overflow-y-auto`}>
+                      {filteredEmailSuggestions.map((email, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSelectEmailSuggestion(email)}
+                          className={`w-full text-left px-3 py-2 ${d.hoverBlue} border-b ${d.borderSm} last:border-b-0 text-xs sm:text-sm ${d.text} transition-colors`}
+                        >
+                          {email}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* List of all emails */}
+                <div className="space-y-2">
+                  {toEmails.map((email, idx) => (
+                    <div
+                      key={email + idx}
+                      className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border ${isDark ? "bg-blue-900/20 border-blue-800" : "bg-blue-50 border-blue-200"}`}
+                    >
+                      <span className={`text-xs sm:text-sm ${d.text} flex-1 break-all`}>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setToInput(toEmails.filter((_, i) => i !== idx).join(", "));
+                        }}
+                        className="ml-2 text-red-600 hover:text-red-700 hover:bg-red-100 p-1 rounded transition flex-shrink-0"
+                        title="Remove email"
+                        aria-label="Remove email"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {toEmails.length === 0 && (
+                  <p className={`text-center ${d.muted} text-xs sm:text-sm py-6 sm:py-8`}>No recipients added yet</p>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t ${d.border} flex items-center justify-end gap-2 ${d.surface}`}>
+                <button
+                  type="button"
+                  onClick={() => setShowAllToEmails(false)}
+                  className={`px-3 py-2 ${d.text} border ${d.border} rounded-lg ${d.hover} transition text-xs sm:text-sm font-medium`}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Schedule Send Modal ── */}
+        {scheduleModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1400] p-4">
+            <div className={`${d.bg} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${d.border}`}>
+              <div className={`px-5 py-4 border-b ${d.border} flex items-center justify-between`}>
+                <h3 className={`text-base font-semibold ${d.text} flex items-center gap-2`}>
+                  <Clock size={16} className="text-blue-500" />Schedule send
+                </h3>
+                <button type="button" onClick={() => setScheduleModal(false)}
+                  className={`p-1.5 rounded-lg ${d.hover} ${d.muted} transition`}>
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <label className={`text-xs font-medium ${d.muted} mb-2 block`}>Select date and time</label>
+                <input
+                  type="datetime-local"
+                  value={scheduleDateTime}
+                  onChange={e => setScheduleDateTime(e.target.value)}
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 ${d.input}`}
+                />
+                {errors.apiError && <p className="mt-2 text-xs text-red-500">{errors.apiError}</p>}
+              </div>
+              <div className={`px-5 py-3 border-t ${d.border} flex items-center justify-end gap-2 ${d.surface}`}>
+                <button type="button" onClick={() => setScheduleModal(false)}
+                  className={`px-4 py-2 text-sm font-medium ${d.muted} ${d.hover} rounded-lg transition`}>
+                  Cancel
+                </button>
+                <button type="button" onClick={handleScheduleSend}
+                  disabled={!scheduleDateTime || schedulingInProgress}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
+                  <Clock size={14} />{schedulingInProgress ? "Scheduling…" : "Schedule"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

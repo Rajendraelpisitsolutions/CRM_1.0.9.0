@@ -6,7 +6,8 @@ using Microsoft.Extensions.Options;
 namespace Elpis_CRM.Services;
 
 /// <summary>
-/// Settings for Azure Document Intelligence
+/// Bound configuration (from the "AzureDocumentIntelligence" section) holding the endpoint and API key
+/// used to construct the Document Intelligence client.
 /// </summary>
 public sealed class AzureDocumentIntelligenceSettings
 {
@@ -16,7 +17,8 @@ public sealed class AzureDocumentIntelligenceSettings
 }
 
 /// <summary>
-/// Settings for file uploads
+/// Bound configuration (from the "FileUploadSettings" section) defining the upload size cap and the
+/// image content types accepted for scanning. Defaults to 5 MB and common image formats.
 /// </summary>
 public sealed class FileUploadSettings
 {
@@ -29,8 +31,8 @@ public sealed class FileUploadSettings
 }
 
 /// <summary>
-/// Service for scanning business cards using Azure Document Intelligence
-/// Maps extracted data directly to AccountsModel fields
+/// Wraps Azure Document Intelligence to turn an uploaded business card image into an <see cref="AccountModel"/>,
+/// using the custom "business_card_c1" model and mapping company name, website, phone, and address.
 /// </summary>
 public sealed class AzureBusinessCardService
 {
@@ -39,6 +41,11 @@ public sealed class AzureBusinessCardService
     private readonly DocumentAnalysisClient _client;
     private readonly FileUploadSettings _uploadSettings;
 
+    /// <summary>
+    /// Initializes the service with the Azure analysis client and the upload validation settings.
+    /// </summary>
+    /// <param name="client">Document Analysis client targeting the configured Azure endpoint.</param>
+    /// <param name="uploadSettings">Size and content-type limits applied to incoming files.</param>
     public AzureBusinessCardService(
         DocumentAnalysisClient client,
         IOptions<FileUploadSettings> uploadSettings)
@@ -48,8 +55,17 @@ public sealed class AzureBusinessCardService
     }
 
     /// <summary>
-    /// Scans a business card image and returns mapped AccountsModel data
+    /// Validates the upload, submits it to the Azure "business_card_c1" model, and maps the first detected
+    /// document's fields onto a new <see cref="AccountModel"/>.
     /// </summary>
+    /// <param name="file">Uploaded image to analyze; checked for emptiness, size, and allowed content type.</param>
+    /// <param name="cancellationToken">Token forwarded to the Azure analysis call.</param>
+    /// <returns>
+    /// An account populated from the card. If Azure detects no document, an account with an empty name is returned;
+    /// individual undetected fields are left null.
+    /// </returns>
+    /// <exception cref="ArgumentException">The file is empty, exceeds the size limit, or has a disallowed content type.</exception>
+    /// <exception cref="InvalidOperationException">The Azure Document Intelligence request failed.</exception>
     public async Task<AccountModel> ScanAsync(
         IFormFile file,
         CancellationToken cancellationToken = default)
@@ -133,8 +149,11 @@ public sealed class AzureBusinessCardService
 
 
     /// <summary>
-    /// Extracts a string field value from an analyzed document
+    /// Reads a named field as a trimmed string.
     /// </summary>
+    /// <param name="doc">Analyzed document returned by Azure.</param>
+    /// <param name="fieldName">Key of the field to read.</param>
+    /// <returns>The trimmed value, or null if the field is absent or blank.</returns>
     private static string? GetStringField(AnalyzedDocument doc, string fieldName)
     {
         if (!doc.Fields.TryGetValue(fieldName, out var field) || field is null)
@@ -145,9 +164,12 @@ public sealed class AzureBusinessCardService
     }
 
     /// <summary>
-    /// Extracts the first item from a list field, or uses string if not a list.
-    /// Handles both phone number and string types.
+    /// Reads the first entry of a list-typed field, preferring its phone-number representation and falling back
+    /// to its string value; if the field is not a list, reads it directly as a string.
     /// </summary>
+    /// <param name="doc">Analyzed document returned by Azure.</param>
+    /// <param name="fieldName">Key of the field to read.</param>
+    /// <returns>The trimmed value, or null if the field is absent, empty, or unreadable.</returns>
     private static string? GetFirstListItem(AnalyzedDocument doc, string fieldName)
     {
         if (!doc.Fields.TryGetValue(fieldName, out var field) || field is null)
@@ -195,8 +217,13 @@ public sealed class AzureBusinessCardService
     }
 
     /// <summary>
-    /// Extracts and formats address from a structured or raw address field, handling both list and string types.
+    /// Reads an address field, joining the structured address components (street, city, state, postal code,
+    /// country) into a single comma-separated string and falling back to the raw string value when no
+    /// structured address is available.
     /// </summary>
+    /// <param name="doc">Analyzed document returned by Azure.</param>
+    /// <param name="fieldName">Key of the address field to read.</param>
+    /// <returns>The formatted address, or null if the field is absent or yields no usable value.</returns>
     private static string? GetAddressField(AnalyzedDocument doc, string fieldName)
     {
         if (!doc.Fields.TryGetValue(fieldName, out var field) || field is null)
