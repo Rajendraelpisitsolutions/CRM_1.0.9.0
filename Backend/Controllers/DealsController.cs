@@ -21,16 +21,18 @@ namespace Elpis_CRM.Controllers
         private const string JwtScheme = "Bearer";
         private readonly DealsService _dealService;
         private readonly AppDbContext _dealsDb;
+        private readonly RecycleBinService _recycleBinService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DealController"/>.
         /// </summary>
         /// <param name="dealService">Service for deal operations.</param>
         /// <param name="dealsDb">Application database context.</param>
-        public DealController(DealsService dealService, AppDbContext dealsDb)
+        public DealController(DealsService dealService, AppDbContext dealsDb, RecycleBinService recycleBinService)
         {
             _dealService = dealService;
             _dealsDb = dealsDb;
+            _recycleBinService = recycleBinService;
         }
 
         /// <summary>
@@ -261,7 +263,9 @@ namespace Elpis_CRM.Controllers
         {
             try
             {
-                await _dealService.DeleteAsync(dealId);
+                var deal = await _dealService.GetByIdAsync(dealId);
+                await _dealService.DeleteAsync(dealId, User?.Identity?.Name ?? User?.FindFirst(ClaimTypes.Email)?.Value ?? "System");
+                await _recycleBinService.CreateEntryAsync("Deal", dealId.ToString(), deal?.Name ?? "Unnamed Deal", "Deal deleted", User?.Identity?.Name ?? User?.FindFirst(ClaimTypes.Email)?.Value ?? "System", deal);
                 return Ok("Deleted Successfully");
             }
             catch (KeyNotFoundException)

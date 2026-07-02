@@ -16,14 +16,16 @@ namespace Elpis_CRM.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly ProductService _productService;
+        private readonly RecycleBinService _recycleBinService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ProductsController"/> class.
         /// </summary>
         /// <param name="productService">Service for product-related operations.</param>
-        public ProductsController(ProductService productService)
+        public ProductsController(ProductService productService, RecycleBinService recycleBinService)
         {
             _productService = productService;
+            _recycleBinService = recycleBinService;
         }
 
         /// <summary>
@@ -167,11 +169,19 @@ namespace Elpis_CRM.Controllers
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
         {
-            var deleted = await _productService.DeleteAsync(id);
+            var product = await _productService.GetByIdAsync(id);
+            if (product == null)
+            {
+                return NotFound($"Product with ID '{id}' not found.");
+            }
+
+            var deleted = await _productService.DeleteAsync(id, User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System");
             if (!deleted)
             {
                 return NotFound($"Product with ID '{id}' not found.");
             }
+
+            await _recycleBinService.CreateEntryAsync("Product", id.ToString(), product.Name ?? "Unnamed Product", "Product deleted", User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System", product);
             return Ok("Deleted Successfully");
         }
     }

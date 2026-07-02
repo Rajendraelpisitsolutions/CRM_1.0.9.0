@@ -34,6 +34,7 @@ namespace Elpis_CRM.Data
         public DbSet<NotesModel> Notes { get; set; }
         public DbSet<AppointmentsModel> Appointments { get; set; }
         public DbSet<AuditLogModel> AuditLogs { get; set; }
+        public DbSet<RecycleBinItemModel> RecycleBinItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

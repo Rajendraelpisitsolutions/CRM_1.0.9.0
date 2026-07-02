@@ -21,6 +21,7 @@ const ImportData = lazy(() => import("./pages/ImportData"));
 const Teams = lazy(() => import("./pages/Teams"));
 const Profile = lazy(() => import("./pages/Profile"));
 const CalendarPage = lazy(() => import("./pages/CalendarView"));
+const RecycleBin = lazy(() => import("./pages/RecycleBin"));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -73,6 +74,7 @@ function App() {
             <Route path="Teams" element={<Teams />} />
             <Route path="profile" element={<Profile />} />
             <Route path="Calendar" element={<CalendarPage />} />
+            <Route path="recycle-bin" element={<RecycleBin />} />
           </Route>
 
           {/* Role specific entry points */}

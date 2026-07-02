@@ -297,7 +297,7 @@ namespace Elpis_CRM.Services
         /// <param name="id">ID of the deal to delete.</param>
         /// <exception cref="KeyNotFoundException">Thrown when no deal has the given ID.</exception>
         // DELETE DEAL
-        public async Task DeleteAsync(long id)
+        public async Task DeleteAsync(long id, string deletedBy)
         {
             var deal = await _dealDb.Deals.FirstOrDefaultAsync(x => x.Id == id);
 
@@ -309,14 +309,15 @@ namespace Elpis_CRM.Services
             var relatedCallLogs = await _dealDb.CallLog
                 .Where(c => c.DealId == id)
                 .ToListAsync();
+            var relatedMeetings = await _dealDb.Meeting
+                .Where(m => m.DealId == id)
+                .ToListAsync();
+
             if (relatedCallLogs.Any())
             {
                 _dealDb.CallLog.RemoveRange(relatedCallLogs);
             }
 
-            var relatedMeetings = await _dealDb.Meeting
-                .Where(m => m.DealId == id)
-                .ToListAsync();
             if (relatedMeetings.Any())
             {
                 _dealDb.Meeting.RemoveRange(relatedMeetings);

@@ -175,6 +175,7 @@ builder.Services.AddScoped<AppointmentsService>();
 builder.Services.AddScoped<NotesService>();
 builder.Services.AddScoped<ContactUsService>();
 builder.Services.AddScoped<AuditLogService>();
+builder.Services.AddScoped<RecycleBinService>();
 
 // Azure Document Intelligence
 var azureSettings = builder.Configuration

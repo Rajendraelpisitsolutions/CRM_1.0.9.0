@@ -413,7 +413,7 @@ namespace Elpis_CRM.Services
         /// </summary>
         /// <param name="accountId">AccountId to delete.</param>
         /// <returns>True if the account existed and was deleted; false if no such account.</returns>
-        public async Task<bool> DeleteAsync(long accountId)
+        public async Task<bool> DeleteAsync(long accountId, string deletedBy)
         {
             var account = await _accountDb.Accounts
                 .FirstOrDefaultAsync(a => a.AccountId == accountId);
@@ -423,14 +423,12 @@ namespace Elpis_CRM.Services
                 return false;
             }
 
-            // Handle foreign key constraint: Delete or orphan related Deals first
             var relatedDeals = await _accountDb.Deals
                 .Where(d => d.AccountId == accountId)
                 .ToListAsync();
 
             if (relatedDeals.Any())
             {
-                // Delete related Deals (cascading delete)
                 _accountDb.Deals.RemoveRange(relatedDeals);
             }
 

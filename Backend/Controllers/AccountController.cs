@@ -17,14 +17,16 @@ namespace Elpis_CRM.Controllers
     public class AccountController : ControllerBase
     {
         private readonly AccountService _accountService;
+        private readonly RecycleBinService _recycleBinService;
 
         /// <summary>
         /// Creates the controller with the account data/service layer it delegates to.
         /// </summary>
         /// <param name="accountService">Service that performs the account queries and mutations against the database.</param>
-        public AccountController(AccountService accountService)
+        public AccountController(AccountService accountService, RecycleBinService recycleBinService)
         {
             _accountService = accountService;
+            _recycleBinService = recycleBinService;
         }
 
         /// <summary>
@@ -183,8 +185,13 @@ namespace Elpis_CRM.Controllers
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<IActionResult> Delete(long id)
         {
-            var deleted = await _accountService.DeleteAsync(id);
+            var account = await _accountService.GetByIdAsync(id);
+            if (account == null) return NotFound();
+
+            var deleted = await _accountService.DeleteAsync(id, User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System");
             if (!deleted) return NotFound();
+
+            await _recycleBinService.CreateEntryAsync("Account", id.ToString(), account.Name ?? "Unnamed Account", "Account deleted", User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System", account);
             return NoContent();
         }
 

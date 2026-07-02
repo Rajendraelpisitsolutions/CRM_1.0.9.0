@@ -34,9 +34,9 @@ import {
   getDealCreationTrend,
   getRecentlyUpdatedDeals
 } from '../utils/userAnalyticsUtils';
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// â”Œâ”€ CONSTANTS & CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”Œâ”€ CONSTANTS & CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const PIPELINE_STAGES = [
   "New Lead", "Enquiry Analysis", "Under Review", "Demo",
@@ -1078,6 +1078,8 @@ export default function Home() {
             createdBy: d.createdBy || d.CreatedBy,
             updatedBy: d.updatedBy || d.UpdatedBy,
             dealStage: d.dealStage || d.DealStage,
+            lostReason: d.lostReason || d.LostReason,
+            wonReason: d.wonReasons || d.WonReasons || d.wonReason || d.WonReason,
             // Normalized dealValue is the INR/base currency value (source of truth for calculations)
             dealValue: (
               d.dealValueInBaseCurrency ??
@@ -1329,6 +1331,72 @@ export default function Home() {
       deals: filteredDeals.filter(d => d.closedDate && toMonthLabel(d.closedDate) === month).length
     }));
 
+    // Win rate trend for last 6 months (percentage and closed deal counts)
+    const winRateTrend = (() => {
+      const now = new Date();
+      const slots = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`;
+        slots.push({ key: label, month: label, won: 0, closed: 0, winRate: 0, _m: d.getMonth(), _y: d.getFullYear() });
+      }
+
+      filteredDeals.forEach(dd => {
+        if (!dd.closedDate) return;
+        const c = new Date(dd.closedDate);
+        const slot = slots.find(s => s._m === c.getMonth() && s._y === c.getFullYear());
+        if (slot) {
+          slot.closed += 1;
+          if (dd.dealStage === 'Won') slot.won += 1;
+        }
+      });
+
+      return slots.map(s => ({ month: s.month, winRate: s.closed > 0 ? Number(((s.won / s.closed) * 100).toFixed(1)) : 0, closed: s.closed }));
+    })();
+
+    // Team activity: deals opened and closed for the current month (one entry per day)
+    const teamActivity = (() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0); // last day of month
+      const days = [];
+      for (let d = 1; d <= end.getDate(); d++) {
+        days.push({ day: String(d), opened: 0, closed: 0 });
+      }
+
+      // Count created (opened) and closed per day for the full deals set
+      deals.forEach(dd => {
+        if (dd.createdAt) {
+          const c = new Date(dd.createdAt);
+          if (c.getFullYear() === year && c.getMonth() === month) {
+            const idx = c.getDate() - 1;
+            days[idx].opened += 1;
+          }
+        }
+        if (dd.closedDate) {
+          const c = new Date(dd.closedDate);
+          if (c.getFullYear() === year && c.getMonth() === month) {
+            const idx = c.getDate() - 1;
+            days[idx].closed += 1;
+          }
+        }
+      });
+
+      // Trim trailing empty days after today for neatness
+      const today = new Date();
+      const lastIdx = (today.getFullYear() === year && today.getMonth() === month) ? today.getDate() - 1 : days.length - 1;
+      return days.slice(0, lastIdx + 1);
+    })();
+
+    // Totals for the current month
+    const teamActivityTotals = (() => {
+      const opened = teamActivity.reduce((s, x) => s + (x.opened || 0), 0);
+      const closed = teamActivity.reduce((s, x) => s + (x.closed || 0), 0);
+      return { opened, closed };
+    })();
+
     const dealAging = {
       '0-30': open.filter(d => d.createdAt && (today - d.createdAt) / 86400000 <= 30).length,
       '31-60': open.filter(d => d.createdAt && (today - d.createdAt) / 86400000 > 30 && (today - d.createdAt) / 86400000 <= 60).length,
@@ -1364,7 +1432,7 @@ export default function Home() {
 
     return {
       healthScore, totalRevenue, dealsWon, dealsLost, winRate, avgDealSize, pipelineValue, expectedRevenue, stalledDeals: stalledDeals.length,
-      pipelineByStage, revenueTrend, dealAging, winRateByOwner, territoryMetrics, industryData, highValueDeals, alerts, stalledDealsData: stalledDeals, lowWinRateDealsData: lowWinRateDeals,
+      pipelineByStage, revenueTrend, winRateTrend, teamActivity, teamActivityTotals, dealAging, winRateByOwner, territoryMetrics, industryData, highValueDeals, alerts, stalledDealsData: stalledDeals, lowWinRateDealsData: lowWinRateDeals,
       // Phase 2 additions
       userStats, teamStats, createdVsUpdated, userLeaderboard, dealCreationTrend, recentUpdates, uniqueCreators
     };
@@ -1469,20 +1537,14 @@ export default function Home() {
     const COLUMNS = [
       { header: 'Deal Name', key: 'dealName', width: 28 },
       { header: 'Account', key: 'accountName', width: 24 },
-      { header: 'Value (INR)', key: 'dealValue', width: 16, numeric: true },
-      { header: 'Stage', key: 'dealStage', width: 16 },
-      { header: 'Probability (%)', key: 'probability', width: 14, numeric: true },
-      { header: 'Owner', key: 'salesOwner', width: 18 },
-      { header: 'Territory', key: 'territory', width: 16 },
-      { header: 'Industry', key: 'industryType', width: 18 },
-      { header: 'Created By', key: 'createdBy', width: 18 },
-      { header: 'Created Date', key: 'createdAt', width: 15 },
-      { header: 'Updated By', key: 'updatedBy', width: 18 },
-      { header: 'Updated Date', key: 'updatedAt', width: 15 },
-      { header: 'Days in Pipeline', key: 'days', width: 15, numeric: true }
+      { header: 'Outcome', key: 'outcome', width: 16 },
+      { header: 'Reason Given', key: 'reasonGiven', width: 28 },
+      { header: 'Deal Size (INR)', key: 'dealValue', width: 18, numeric: true },
+      { header: 'Sales Cycle (Days)', key: 'salesCycle', width: 16, numeric: true },
+      { header: 'Salesperson', key: 'salesOwner', width: 20 }
     ];
-    const LAST_COL = COLUMNS.length; // 13
-    const lastColLetter = String.fromCharCode(64 + LAST_COL); // 'M'
+    const LAST_COL = COLUMNS.length; // 7
+    const lastColLetter = String.fromCharCode(64 + LAST_COL); // 'G'
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Elpis CRM';
@@ -1575,10 +1637,12 @@ export default function Home() {
       const e = String.fromCharCode(64 + endCol);
       ws.mergeCells(`${s}8:${e}8`);
       const cell = ws.getCell(`${s}8`);
-      cell.value = { richText: [
-        { text: `${label}\n`, font: { size: 8, color: { argb: MUTED }, bold: true } },
-        { text: value, font: { size: 12, bold: true, color: { argb: BRAND } } }
-      ] };
+      cell.value = {
+        richText: [
+          { text: `${label}\n`, font: { size: 8, color: { argb: MUTED }, bold: true } },
+          { text: value, font: { size: 12, bold: true, color: { argb: BRAND } } }
+        ]
+      };
       cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND_LIGHT } };
       cell.border = allBorders;
@@ -1604,22 +1668,28 @@ export default function Home() {
     };
     const outcomeCounts = { Won: 0, Lost: 0, Stalled: 0, Withdrew: 0, Open: 0 };
     const spMap = {};
-    const reasonMap = {};
+    const wonReasonMap = {};
+    const lostReasonMap = {};
     const cyc = [];
     filteredDeals.forEach(d => {
       const o = classifyOutcome(d);
       outcomeCounts[o] = (outcomeCounts[o] || 0) + 1;
       const sp = d.salesOwner || 'Unassigned';
       spMap[sp] = (spMap[sp] || 0) + 1;
+      if (o === 'Won') {
+        const key = (d.wonReason || '').trim() || 'Not specified';
+        wonReasonMap[key] = (wonReasonMap[key] || 0) + 1;
+      }
       if (['Lost', 'Withdrew'].includes(o)) {
         const key = (d.lostReason || '').trim() || 'Not specified';
-        reasonMap[key] = (reasonMap[key] || 0) + 1;
+        lostReasonMap[key] = (lostReasonMap[key] || 0) + 1;
       }
       const cd = cycleDays(d);
       if (cd != null) cyc.push(cd);
     });
     const bySales = Object.entries(spMap).sort((a, b) => b[1] - a[1]);
-    const byReason = Object.entries(reasonMap).sort((a, b) => b[1] - a[1]);
+    const byWonReason = Object.entries(wonReasonMap).sort((a, b) => b[1] - a[1]);
+    const byLostReason = Object.entries(lostReasonMap).sort((a, b) => b[1] - a[1]);
     const avgCycle = cyc.length ? Math.round(cyc.reduce((a, b) => a + b, 0) / cyc.length) : 0;
 
     const colLetter = (n) => String.fromCharCode(64 + n);
@@ -1631,42 +1701,69 @@ export default function Home() {
       c.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
       ws.getRow(rowNum).height = 18;
     };
-    // Place a count group (heading + item/value rows) side-by-side starting at startCol
-    const placeGroup = (startCol, heading, items, headRow) => {
-      const c1 = colLetter(startCol), c2 = colLetter(startCol + 1);
-      ws.mergeCells(`${c1}${headRow}:${c2}${headRow}`);
-      const h = ws.getCell(`${c1}${headRow}`);
-      h.value = heading; h.font = { name: 'Calibri', size: 8, bold: true, color: { argb: WHITE } };
+    // Clean vertical "card" layout: a brand sub-heading band, then label/value rows
+    // (label spans the left columns, value sits right-aligned in the last 2 columns).
+    // Returns the next free row after this section (including a blank-row gap).
+    const labelEndCol = Math.max(1, LAST_COL - 2);
+    const valueStartCol = labelEndCol + 1;
+    const placeSection = (startRow, heading, items) => {
+      ws.mergeCells(`A${startRow}:${lastColLetter}${startRow}`);
+      const h = ws.getCell(`A${startRow}`);
+      h.value = heading;
+      h.font = { name: 'Calibri', size: 9, bold: true, color: { argb: WHITE } };
       h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND } };
-      h.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true };
-      h.border = allBorders;
-      const h2 = ws.getCell(`${c2}${headRow}`); h2.border = allBorders; h2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND } };
+      h.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      ws.getRow(startRow).height = 17;
+
       items.forEach(([label, value], i) => {
-        const rr = headRow + 1 + i;
-        const lc = ws.getCell(`${c1}${rr}`); lc.value = label; lc.font = { name: 'Calibri', size: 8, color: { argb: 'FF1F2937' } }; lc.alignment = { vertical: 'middle', horizontal: 'left' }; lc.border = allBorders;
-        const vc = ws.getCell(`${c2}${rr}`); vc.value = value; vc.font = { name: 'Calibri', size: 8, bold: true, color: { argb: BRAND } }; vc.alignment = { vertical: 'middle', horizontal: 'right' }; vc.border = allBorders;
+        const r = startRow + 1 + i;
+        const bandFill = i % 2 === 1 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: BAND } } : null;
+
+        ws.mergeCells(`A${r}:${colLetter(labelEndCol)}${r}`);
+        const lc = ws.getCell(`A${r}`);
+        lc.value = label;
+        lc.font = { name: 'Calibri', size: 9, color: { argb: 'FF1F2937' } };
+        lc.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        for (let col = 1; col <= labelEndCol; col++) {
+          const cell = ws.getCell(`${colLetter(col)}${r}`);
+          cell.border = allBorders;
+          if (bandFill) cell.fill = bandFill;
+        }
+
+        ws.mergeCells(`${colLetter(valueStartCol)}${r}:${lastColLetter}${r}`);
+        const vc = ws.getCell(`${colLetter(valueStartCol)}${r}`);
+        vc.value = value;
+        vc.font = { name: 'Calibri', size: 9, bold: true, color: { argb: BRAND } };
+        vc.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        for (let col = valueStartCol; col <= LAST_COL; col++) {
+          const cell = ws.getCell(`${colLetter(col)}${r}`);
+          cell.border = allBorders;
+          if (bandFill) cell.fill = bandFill;
+        }
+        ws.getRow(r).height = 16;
       });
+
+      return startRow + 1 + items.length + 1; // heading + items + one blank-row gap
     };
 
     const outcomeItems = ['Won', 'Lost', 'Stalled', 'Withdrew', 'Open'].map(o => [o === 'Open' ? 'Open/In-Progress' : o, outcomeCounts[o] || 0]);
     const salesItems = bySales.length ? bySales.map(([name, count]) => [name, count]) : [['—', 0]];
-    const reasonItems = byReason.length ? byReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
+    const wonReasonItems = byWonReason.length ? byWonReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
+    const lostReasonItems = byLostReason.length ? byLostReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
     const dealSizeItems = [['Total (INR)', totalValue.toLocaleString('en-IN')], ['Average (INR)', avgValue.toLocaleString('en-IN')]];
     const cycleItems = [['Average (Days)', avgCycle]];
 
     let cs = 10;
     titleBand(cs, 'Count Summary'); cs++;
-    const groupHeadRow = cs;
-    // 5 groups laid out horizontally across columns A–J
-    placeGroup(1, 'Outcome', outcomeItems, groupHeadRow);
-    placeGroup(3, 'Salesperson', salesItems, groupHeadRow);
-    placeGroup(5, 'Reason (Lost/Withdrew)', reasonItems, groupHeadRow);
-    placeGroup(7, 'Deal Size', dealSizeItems, groupHeadRow);
-    placeGroup(9, 'Sales Cycle', cycleItems, groupHeadRow);
-    const maxItems = Math.max(outcomeItems.length, salesItems.length, reasonItems.length, dealSizeItems.length, cycleItems.length);
+    cs = placeSection(cs, 'Outcome', outcomeItems);
+    cs = placeSection(cs, 'Salesperson', salesItems);
+    cs = placeSection(cs, 'Reason (Won)', wonReasonItems);
+    cs = placeSection(cs, 'Reason (Lost / Withdrew)', lostReasonItems);
+    cs = placeSection(cs, 'Deal Size', dealSizeItems);
+    cs = placeSection(cs, 'Sales Cycle', cycleItems);
 
-    // ── Table header (dynamic, below the horizontal count summary) ──────────
-    const HEADER_ROW = groupHeadRow + 1 + maxItems + 1; // heading + tallest group + blank gap
+    // ── Table header (dynamic, below the stacked count summary) ─────────────
+    const HEADER_ROW = cs;
     ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`; // repeat column headers on every A4 page
     const headerRow = ws.getRow(HEADER_ROW);
     COLUMNS.forEach((c, idx) => {
@@ -1683,20 +1780,20 @@ export default function Home() {
     filteredDeals.forEach((d, i) => {
       const rowNum = HEADER_ROW + 1 + i;
       const row = ws.getRow(rowNum);
+      const outcome = classifyOutcome(d);
+      const cycle = cycleDays(d);
       const values = {
         dealName: d.dealName || '—',
         accountName: d.accountName || '—',
+        outcome: outcome === 'Open' ? 'Open/In-Progress' : outcome,
+        reasonGiven: ['Lost', 'Withdrew'].includes(outcome)
+          ? ((d.lostReason || '').trim() || 'Not specified')
+          : outcome === 'Won'
+            ? ((d.wonReason || '').trim() || 'Not specified')
+            : '—',
         dealValue: d.dealValue || 0,
-        dealStage: d.dealStage || '—',
-        probability: d.probability ?? 0,
-        salesOwner: d.salesOwner || '—',
-        territory: d.territory || '—',
-        industryType: d.industryType || '—',
-        createdBy: d.createdBy || '—',
-        createdAt: fmtDate(d.createdAt),
-        updatedBy: d.updatedBy || '—',
-        updatedAt: fmtDate(d.updatedAt),
-        days: d.createdAt ? Math.floor((new Date() - new Date(d.createdAt)) / 86400000) : 0
+        salesCycle: cycle != null ? cycle : '—',
+        salesOwner: d.salesOwner || '—'
       };
       COLUMNS.forEach((c, idx) => {
         const cell = row.getCell(idx + 1);
@@ -1792,18 +1889,13 @@ export default function Home() {
       { header: 'S.No', key: 'sno', width: 6, numeric: true },
       { header: 'Deal Name', key: 'dealName', width: 28 },
       { header: 'Account', key: 'accountName', width: 24 },
-      { header: 'Value (INR)', key: 'dealValue', width: 16, numeric: true, money: true },
-      { header: 'Stage', key: 'dealStage', width: 16 },
-      { header: 'Probability (%)', key: 'probability', width: 14, numeric: true },
-      { header: 'Owner', key: 'salesOwner', width: 18 },
-      { header: 'Territory', key: 'territory', width: 16 },
-      { header: 'Industry', key: 'industryType', width: 18 },
-      { header: 'Created By', key: 'createdBy', width: 18 },
-      { header: 'Created Date', key: 'createdAt', width: 15 },
-      { header: 'Updated By', key: 'updatedBy', width: 18 },
-      { header: 'Updated Date', key: 'updatedAt', width: 15 }
+      { header: 'Outcome', key: 'outcome', width: 16 },
+      { header: 'Reason Given', key: 'reasonGiven', width: 28 },
+      { header: 'Deal Size (INR)', key: 'dealValue', width: 18, numeric: true, money: true },
+      { header: 'Sales Cycle (Days)', key: 'salesCycle', width: 16, numeric: true },
+      { header: 'Salesperson', key: 'salesOwner', width: 20 }
     ];
-    const LAST_COL = COLUMNS.length; // 13
+    const LAST_COL = COLUMNS.length; // 8
     const lastColLetter = String.fromCharCode(64 + LAST_COL);
 
     const wb = new ExcelJS.Workbook();
@@ -1861,30 +1953,55 @@ export default function Home() {
       ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'center' };
     }
 
-    // ── Report Information section ───────────────────────────────────────────
-    const infoRows = [
-      ['Report Name', 'Custom Range Report'],
-      ['Date Range', `From: ${toDMY(fromStr)}    To: ${toDMY(toStr)}`],
-      ['Generated By', userName || '—'],
-      ['Generated On', generatedOn]
+    // Brand divider row (row 5) — matches the main export's title band
+    ws.mergeCells(`A5:${lastColLetter}5`);
+    const titleCell = ws.getCell('A5');
+    titleCell.value = `CRM Deals Report   —   Custom Range (${toDMY(fromStr)} to ${toDMY(toStr)})`;
+    titleCell.font = { name: 'Calibri', size: 13, bold: true, color: { argb: WHITE } };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND } };
+    ws.getRow(5).height = 24;
+
+    // Meta line (row 6)
+    ws.mergeCells(`A6:${lastColLetter}6`);
+    const metaCell = ws.getCell('A6');
+    metaCell.value = `Generated: ${generatedOn}    |    Prepared by: ${userName || '—'}`;
+    metaCell.font = { name: 'Calibri', size: 9, italic: true, color: { argb: MUTED } };
+    metaCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+    ws.getRow(6).height = 16;
+
+    // ── KPI strip (row 8): label/value pairs ────────────────────────────────
+    const totalValueC = records.reduce((s, d) => s + (d.dealValue || 0), 0);
+    const wonDealsC = records.filter(d => ['Won', 'PO Received'].includes(d.dealStage)).length;
+    const avgValueC = records.length ? Math.round(totalValueC / records.length) : 0;
+    const kpis = [
+      ['Total Deals', String(records.length)],
+      ['Total Value', `INR ${totalValueC.toLocaleString('en-IN')}`],
+      ['Won Deals', String(wonDealsC)],
+      ['Avg Value', `INR ${avgValueC.toLocaleString('en-IN')}`]
     ];
-    let infoRowNum = 5;
-    infoRows.forEach(([label, value]) => {
-      const labelCell = ws.getCell(`A${infoRowNum}`);
-      ws.mergeCells(`A${infoRowNum}:B${infoRowNum}`);
-      labelCell.value = label;
-      labelCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: BRAND } };
-      labelCell.alignment = { vertical: 'middle', horizontal: 'left' };
-
-      ws.mergeCells(`C${infoRowNum}:${lastColLetter}${infoRowNum}`);
-      const valueCell = ws.getCell(`C${infoRowNum}`);
-      valueCell.value = value;
-      valueCell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1F2937' } };
-      valueCell.alignment = { vertical: 'middle', horizontal: 'left' };
-
-      ws.getRow(infoRowNum).height = 18;
-      infoRowNum++;
+    // Each KPI spans evenly across the table width, styled box
+    let kpiCol = 1;
+    const kpiSpan = Math.floor(LAST_COL / kpis.length);
+    kpis.forEach(([label, value], i) => {
+      const startCol = kpiCol;
+      const endCol = i === kpis.length - 1 ? LAST_COL : kpiCol + kpiSpan - 1;
+      const s = String.fromCharCode(64 + startCol);
+      const e = String.fromCharCode(64 + endCol);
+      ws.mergeCells(`${s}8:${e}8`);
+      const cell = ws.getCell(`${s}8`);
+      cell.value = {
+        richText: [
+          { text: `${label}\n`, font: { size: 8, color: { argb: MUTED }, bold: true } },
+          { text: value, font: { size: 12, bold: true, color: { argb: BRAND } } }
+        ]
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDE7F1' } };
+      cell.border = allBorders;
+      kpiCol = endCol + 1;
     });
+    ws.getRow(8).height = 34;
 
     // ── Count Summary (between header and data) ─────────────────────────────
     const classifyOutcome = (d) => {
@@ -1903,25 +2020,29 @@ export default function Home() {
     };
     const outcomeCounts = { Won: 0, Lost: 0, Stalled: 0, Withdrew: 0, Open: 0 };
     const spMap = {};
-    const reasonMap = {};
+    const wonReasonMap = {};
+    const lostReasonMap = {};
     const cyc = [];
     records.forEach(d => {
       const o = classifyOutcome(d);
       outcomeCounts[o] = (outcomeCounts[o] || 0) + 1;
       const sp = d.salesOwner || 'Unassigned';
       spMap[sp] = (spMap[sp] || 0) + 1;
+      if (o === 'Won') {
+        const key = (d.wonReason || '').trim() || 'Not specified';
+        wonReasonMap[key] = (wonReasonMap[key] || 0) + 1;
+      }
       if (['Lost', 'Withdrew'].includes(o)) {
         const key = (d.lostReason || '').trim() || 'Not specified';
-        reasonMap[key] = (reasonMap[key] || 0) + 1;
+        lostReasonMap[key] = (lostReasonMap[key] || 0) + 1;
       }
       const cd = cycleDaysC(d);
       if (cd != null) cyc.push(cd);
     });
     const bySales = Object.entries(spMap).sort((a, b) => b[1] - a[1]);
-    const byReason = Object.entries(reasonMap).sort((a, b) => b[1] - a[1]);
+    const byWonReason = Object.entries(wonReasonMap).sort((a, b) => b[1] - a[1]);
+    const byLostReason = Object.entries(lostReasonMap).sort((a, b) => b[1] - a[1]);
     const avgCycle = cyc.length ? Math.round(cyc.reduce((a, b) => a + b, 0) / cyc.length) : 0;
-    const totalValueC = records.reduce((s, d) => s + (d.dealValue || 0), 0);
-    const avgValueC = records.length ? Math.round(totalValueC / records.length) : 0;
 
     const colLetter = (n) => String.fromCharCode(64 + n);
     const titleBand = (rowNum, text) => {
@@ -1932,41 +2053,68 @@ export default function Home() {
       c.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
       ws.getRow(rowNum).height = 18;
     };
-    const placeGroup = (startCol, heading, items, headRow) => {
-      const c1 = colLetter(startCol), c2 = colLetter(startCol + 1);
-      ws.mergeCells(`${c1}${headRow}:${c2}${headRow}`);
-      const h = ws.getCell(`${c1}${headRow}`);
-      h.value = heading; h.font = { name: 'Calibri', size: 8, bold: true, color: { argb: WHITE } };
+    // Clean vertical "card" layout: a brand sub-heading band, then label/value rows
+    // (label spans the left columns, value sits right-aligned in the last 2 columns).
+    const labelEndCol = Math.max(1, LAST_COL - 2);
+    const valueStartCol = labelEndCol + 1;
+    const placeSection = (startRow, heading, items) => {
+      ws.mergeCells(`A${startRow}:${lastColLetter}${startRow}`);
+      const h = ws.getCell(`A${startRow}`);
+      h.value = heading;
+      h.font = { name: 'Calibri', size: 9, bold: true, color: { argb: WHITE } };
       h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND } };
-      h.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true };
-      h.border = allBorders;
-      const h2 = ws.getCell(`${c2}${headRow}`); h2.border = allBorders; h2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND } };
+      h.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      ws.getRow(startRow).height = 17;
+
       items.forEach(([label, value], i) => {
-        const rr = headRow + 1 + i;
-        const lc = ws.getCell(`${c1}${rr}`); lc.value = label; lc.font = { name: 'Calibri', size: 8, color: { argb: 'FF1F2937' } }; lc.alignment = { vertical: 'middle', horizontal: 'left' }; lc.border = allBorders;
-        const vc = ws.getCell(`${c2}${rr}`); vc.value = value; vc.font = { name: 'Calibri', size: 8, bold: true, color: { argb: BRAND } }; vc.alignment = { vertical: 'middle', horizontal: 'right' }; vc.border = allBorders;
+        const r = startRow + 1 + i;
+        const bandFill = i % 2 === 1 ? { type: 'pattern', pattern: 'solid', fgColor: { argb: BAND } } : null;
+
+        ws.mergeCells(`A${r}:${colLetter(labelEndCol)}${r}`);
+        const lc = ws.getCell(`A${r}`);
+        lc.value = label;
+        lc.font = { name: 'Calibri', size: 9, color: { argb: 'FF1F2937' } };
+        lc.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        for (let col = 1; col <= labelEndCol; col++) {
+          const cell = ws.getCell(`${colLetter(col)}${r}`);
+          cell.border = allBorders;
+          if (bandFill) cell.fill = bandFill;
+        }
+
+        ws.mergeCells(`${colLetter(valueStartCol)}${r}:${lastColLetter}${r}`);
+        const vc = ws.getCell(`${colLetter(valueStartCol)}${r}`);
+        vc.value = value;
+        vc.font = { name: 'Calibri', size: 9, bold: true, color: { argb: BRAND } };
+        vc.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        for (let col = valueStartCol; col <= LAST_COL; col++) {
+          const cell = ws.getCell(`${colLetter(col)}${r}`);
+          cell.border = allBorders;
+          if (bandFill) cell.fill = bandFill;
+        }
+        ws.getRow(r).height = 16;
       });
+
+      return startRow + 1 + items.length + 1; // heading + items + one blank-row gap
     };
 
     const outcomeItems = ['Won', 'Lost', 'Stalled', 'Withdrew', 'Open'].map(o => [o === 'Open' ? 'Open/In-Progress' : o, outcomeCounts[o] || 0]);
     const salesItems = bySales.length ? bySales.map(([name, count]) => [name, count]) : [['—', 0]];
-    const reasonItems = byReason.length ? byReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
+    const wonReasonItems = byWonReason.length ? byWonReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
+    const lostReasonItems = byLostReason.length ? byLostReason.map(([reason, count]) => [reason, count]) : [['None', 0]];
     const dealSizeItems = [['Total (INR)', totalValueC.toLocaleString('en-IN')], ['Average (INR)', avgValueC.toLocaleString('en-IN')]];
     const cycleItems = [['Average (Days)', avgCycle]];
 
-    let cs = infoRowNum + 1; // one blank row gap
+    let cs = 10;
     titleBand(cs, 'Count Summary'); cs++;
-    const groupHeadRow = cs;
-    // 5 groups laid out horizontally across columns B–K (col A is the narrow S.No)
-    placeGroup(2, 'Outcome', outcomeItems, groupHeadRow);
-    placeGroup(4, 'Salesperson', salesItems, groupHeadRow);
-    placeGroup(6, 'Reason (Lost/Withdrew)', reasonItems, groupHeadRow);
-    placeGroup(8, 'Deal Size', dealSizeItems, groupHeadRow);
-    placeGroup(10, 'Sales Cycle', cycleItems, groupHeadRow);
-    const maxItems = Math.max(outcomeItems.length, salesItems.length, reasonItems.length, dealSizeItems.length, cycleItems.length);
+    cs = placeSection(cs, 'Outcome', outcomeItems);
+    cs = placeSection(cs, 'Salesperson', salesItems);
+    cs = placeSection(cs, 'Reason (Won)', wonReasonItems);
+    cs = placeSection(cs, 'Reason (Lost / Withdrew)', lostReasonItems);
+    cs = placeSection(cs, 'Deal Size', dealSizeItems);
+    cs = placeSection(cs, 'Sales Cycle', cycleItems);
 
-    // ── Table header (dynamic, below the horizontal count summary) ──────────
-    const HEADER_ROW = groupHeadRow + 1 + maxItems + 1; // heading + tallest group + blank gap
+    // ── Table header (dynamic, below the stacked count summary) ─────────────
+    const HEADER_ROW = cs;
     ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`; // repeat column headers on every A4 page
     const headerRow = ws.getRow(HEADER_ROW);
     COLUMNS.forEach((c, idx) => {
@@ -1983,20 +2131,21 @@ export default function Home() {
     records.forEach((d, i) => {
       const rowNum = HEADER_ROW + 1 + i;
       const row = ws.getRow(rowNum);
+      const outcome = classifyOutcome(d);
+      const cycle = cycleDaysC(d);
       const values = {
         sno: i + 1,
         dealName: d.dealName || '—',
         accountName: d.accountName || '—',
+        outcome: outcome === 'Open' ? 'Open/In-Progress' : outcome,
+        reasonGiven: ['Lost', 'Withdrew'].includes(outcome)
+          ? ((d.lostReason || '').trim() || 'Not specified')
+          : outcome === 'Won'
+            ? ((d.wonReason || '').trim() || 'Not specified')
+            : '—',
         dealValue: d.dealValue || 0,
-        dealStage: d.dealStage || '—',
-        probability: d.probability ?? 0,
-        salesOwner: d.salesOwner || '—',
-        territory: d.territory || '—',
-        industryType: d.industryType || '—',
-        createdBy: d.createdBy || '—',
-        createdAt: fmtDate(d.createdAt),
-        updatedBy: d.updatedBy || '—',
-        updatedAt: fmtDate(d.updatedAt)
+        salesCycle: cycle != null ? cycle : '—',
+        salesOwner: d.salesOwner || '—'
       };
       COLUMNS.forEach((c, idx) => {
         const cell = row.getCell(idx + 1);
@@ -2227,17 +2376,27 @@ export default function Home() {
           })()}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Revenue Trend */}
-            <ChartCard title="Revenue Trend (6 Months)" subtitle="Actual revenue vs expected pipeline conversion">
-              <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={analytics.revenueTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#666' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#666' }} />
-                  <Tooltip content={<CustomTooltip isCurrency />} />
-                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                  <Area type="monotone" dataKey="actual" fill="#3b82f6" stroke="#1e40af" fillOpacity={0.1} name="Actual" />
-                  <Line type="monotone" dataKey="expected" stroke="#8b5cf6" strokeDasharray="5 5" name="Expected" />
+            {/* Win Rate Trend */}
+            <ChartCard title="Win Rate Trend (Last 6 Months)" subtitle="Win rate percentage and closed deals by month">
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={analytics.winRateTrend}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tickFormatter={(value) => value.split(" ")[0]} />
+
+                  <YAxis yAxisId="left" axisLine={false} tickLine={false} domain={[0, 100]} tickFormatter={(v) => `${v}%`} >
+                  <Label value="Win Percentage (%)" angle={-90} position="insideLeft" style={{ textAnchor: "middle", fill: "#04785791", fontSize: 12, fontWeight: 600 }} />
+                  </YAxis>
+
+                  <YAxis yAxisId="right"  orientation="right" axisLine={false} tickLine={false} >
+                    <Label value="Closed Deals Count"  angle={90} position="insideRight"  style={{textAnchor: "middle", fill: "#4573d8a4", fontSize: 12, fontWeight: 600 }}/>
+                  </YAxis>
+
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar yAxisId="right" dataKey="closed" name="Closed Deals" fill="#4574d8d5" radius={[8, 8, 0, 0]} barSize={26} />
+                  {/* <Area yAxisId="left" type="monotone" dataKey="winRate" name="Win Rate" fill="#10b981" stroke="#10b981" fillOpacity={0.12} /> */}
+                  <Line yAxisId="left" type="monotone" dataKey="winRate" name="Win Rate" stroke="#047857" strokeWidth={2} dot={{ r: 4 }} label={({ value }) => `${value}%`} />
                 </ComposedChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -2669,15 +2828,31 @@ export default function Home() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             {/* System Activity Heatmap */}
-            <ChartCard title="Team Activity Timeline" subtitle="Recent engagement and deal activity">
+            <ChartCard title="Team Activity Timeline" subtitle="Total opened and closed deals this month (click to view)">
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={analytics.revenueTrend.slice(-7)}>
+                <BarChart data={[
+                  { name: 'Opened', value: analytics.teamActivityTotals?.opened ?? 0, key: 'opened' },
+                  { name: 'Closed', value: analytics.teamActivityTotals?.closed ?? 0, key: 'closed' }
+                ]}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="deals" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Deals Closed" />
-                </LineChart>
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} fill="#3b82f6" onClick={(data) => {
+                    if (!data || !data.payload) return;
+                    const key = data.payload.key;
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = now.getMonth();
+                    if (key === 'opened') {
+                      const monthDeals = deals.filter(d => d.createdAt && (() => { const c = new Date(d.createdAt); return c.getFullYear() === year && c.getMonth() === month; })());
+                      handleDrillDown(`Deals Opened This Month (${monthDeals.length})`, monthDeals);
+                    } else if (key === 'closed') {
+                      const monthDeals = deals.filter(d => d.closedDate && (() => { const c = new Date(d.closedDate); return c.getFullYear() === year && c.getMonth() === month; })());
+                      handleDrillDown(`Deals Closed This Month (${monthDeals.length})`, monthDeals);
+                    }
+                  }} />
+                </BarChart>
               </ResponsiveContainer>
             </ChartCard>
 
@@ -3003,4 +3178,4 @@ export default function Home() {
 
     </div>
   );
-} 
+}

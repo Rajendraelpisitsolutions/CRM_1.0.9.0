@@ -4,10 +4,10 @@ import {
   Mail, MailOpen, Paperclip, Plus, Pencil, FileText, Archive,
   AlertTriangle, Flag, Tag, Bell, Settings, Search, Sun, Moon,
   ChevronDown, ChevronRight, ChevronLeft, Star, Clock, Calendar,
-  Users, CheckSquare, Download, Filter, Sparkles,
+  Users, CheckSquare, Download, Filter,
   X, Printer, RefreshCw, Link, UserPlus, Eye,
   Check, Pin, Activity, User,
-  MessageSquare, LogOut, HelpCircle, FolderOpen, AlertCircle,
+  MessageSquare, FolderOpen, AlertCircle,
   AtSign, ArrowUpDown,
   MapPin, Video, Link2, Smile, Copy, Globe, Mic, ExternalLink, Bookmark, Lock, Menu,
   CheckCircle2, Image as ImageIcon,
@@ -251,12 +251,16 @@ function FileIcon({ name, size = 14 }) {
 }
 
 // ─── App-rail item ────────────────────────────────────────────────────────────
-function RailItem({ icon: Icon, label, active, onClick, badge }) {
+function RailItem({ icon: Icon, label, active, onClick, badge, isDark }) {
   return (
     <button
       onClick={onClick}
       title={label}
-      className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all ${active ? "bg-white/20 text-white" : "text-blue-200 hover:bg-white/10 hover:text-white"
+      className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all ${active
+        ? "bg-indigo-600 text-white"
+        : isDark
+          ? "text-gray-300 hover:bg-white/10 hover:text-white"
+          : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
         }`}
     >
       <Icon size={20} />
@@ -275,7 +279,7 @@ function FolderRow({ icon: Icon, label, active, count, pinned, onPin, onClick, i
     <button
       onClick={onClick}
       className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition ${active
-        ? isDark ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"
+        ? isDark ? "bg-indigo-600 text-white" : "bg-blue-100 text-blue-700"
         : isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"
         }`}
     >
@@ -383,9 +387,7 @@ function OutlookEmail({ onToast }) {
 
   // ── Side Panels ───────────────────────────────────────────────────────────
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showCopilot, setShowCopilot] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // ── Templates ─────────────────────────────────────────────────────────────
   const [openedTemplateIdx, setOpenedTemplateIdx] = useState(null);
@@ -507,7 +509,6 @@ function OutlookEmail({ onToast }) {
       setShowFilterMenu(false);
       setShowCategoryMenu(null);
       setShowSnoozeMenu(null);
-      setShowUserMenu(false);
     };
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
@@ -1667,87 +1668,33 @@ function OutlookEmail({ onToast }) {
         </div>
       )}
 
-      {/* ── Copilot Panel ────────────────────────────────────────────────── */}
-      {showCopilot && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowCopilot(false)}>
-          {/* MOBILE: full-screen overlay; DESKTOP: right-side panel */}
-          <div
-            className={`absolute inset-0 md:inset-auto md:top-12 md:right-0 md:w-96 ${th.card} md:border-l md:border-b ${th.border} shadow-2xl overflow-hidden flex flex-col`}
-            onClick={e => e.stopPropagation()}
-            style={{ maxHeight: "100vh" }}>
-            <div className={`flex items-center justify-between px-4 py-3 border-b ${th.border} bg-gradient-to-r from-blue-600 to-purple-600 shrink-0`}>
-              <div className="flex items-center gap-2 text-white">
-                <Sparkles size={16} /><span className="font-semibold text-sm">Copilot</span>
-              </div>
-              <button onClick={() => setShowCopilot(false)} className="text-white/80 hover:text-white p-1 rounded"><X size={16} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {copilotHistory.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role === "assistant" && (
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
-                      <Sparkles size={12} className="text-white" />
-                    </div>
-                  )}
-                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === "user" ? "bg-blue-600 text-white rounded-br-sm" : isDark ? "bg-gray-700 text-gray-100 rounded-bl-sm" : "bg-gray-100 text-gray-800 rounded-bl-sm"}`}>
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {openedMail && (
-              <div className={`px-4 py-2 border-t ${th.border} flex gap-2 overflow-x-auto shrink-0`}>
-                {["Summarize", "Draft reply", "Extract tasks", "Meeting summary"].map(a => (
-                  <button key={a} onClick={() => { setCopilotInput(a); }}
-                    className={`whitespace-nowrap text-xs px-2.5 py-1.5 rounded-full border ${th.border} ${th.hover} flex-shrink-0`}>
-                    {a}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className={`p-3 border-t ${th.border} flex gap-2 shrink-0`}>
-              <input
-                value={copilotInput}
-                onChange={e => setCopilotInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && copilotSend()}
-                placeholder="Ask Copilot..."
-                className={`flex-1 px-3 py-2 rounded-xl text-sm border ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-              />
-              <button onClick={copilotSend} className="px-3 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition">
-                <Send size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Top Header ───────────────────────────────────────────────────── */}
-      <header className="h-12 bg-blue-700 flex items-center justify-between px-2 sm:px-3 gap-2 shrink-0 z-20">
+      <header className={`h-12 ${isDark ? "bg-gray-950 border-gray-800 text-gray-100" : "bg-white border-gray-200 text-gray-900"} border-b flex items-center justify-between px-2 sm:px-3 gap-2 shrink-0 z-20`}>
         {/* Left: Hamburger + Logo */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button onClick={() => setShowMobileSidebar(p => !p)}
-            className="md:hidden p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition">
+            className={`md:hidden p-2 rounded-lg transition ${isDark ? "text-gray-300 hover:text-white hover:bg-white/10" : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"}`}>
             <Menu size={18} />
           </button>
-          <div className="w-7 h-7 bg-white/20 rounded flex items-center justify-center shrink-0">
-            <Mail size={16} className="text-white" />
+          <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 ${isDark ? "bg-white/10" : "bg-gray-100"}`}>
+            <Mail size={16} className={isDark ? "text-white" : "text-gray-700"} />
           </div>
-          <span className="text-white font-semibold text-sm hidden sm:block">Outlook</span>
+          <span className={`font-semibold text-sm hidden sm:block ${isDark ? "text-white" : "text-gray-900"}`}>Outlook</span>
         </div>
 
         {/* Center: Search */}
         <div className="flex-1 max-w-lg mx-1 sm:mx-2">
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" />
+            <Search size={14} className={`absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none ${isDark ? "text-gray-400" : "text-gray-500"}`} />
             <input
               type="text"
               placeholder="Search..."
               value={emailSearch}
               onChange={e => { setEmailSearch(e.target.value); setOpenedMailId(null); }}
-              className="w-full pl-8 pr-7 py-1.5 text-sm bg-white/20 text-white placeholder-white/60 border border-white/30 rounded-lg focus:outline-none focus:bg-white/30 focus:border-white/60 transition"
+              className={`w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border transition ${isDark ? "bg-gray-800 text-gray-100 placeholder-gray-400 border-gray-700 focus:bg-gray-700 focus:border-gray-600" : "bg-gray-100 text-gray-900 placeholder-gray-500 border-gray-300 focus:bg-white focus:border-gray-400"}`}
             />
             {emailSearch && (
-              <button onClick={() => setEmailSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 hover:text-white">
+              <button onClick={() => setEmailSearch("")} className={`absolute right-2 top-1/2 -translate-y-1/2 ${isDark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900"}`}>
                 <X size={14} />
               </button>
             )}
@@ -1755,58 +1702,7 @@ function OutlookEmail({ onToast }) {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button onClick={() => setIsDark(p => !p)}
-            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition hidden md:flex">
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-          <button className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition hidden md:flex">
-            <HelpCircle size={16} />
-          </button>
-          <button onClick={e => {
-                e.stopPropagation();
-                setShowCopilot(false);
-                setShowUserMenu(false);
-                setShowNotifications(p => !p);
-              }}
-            className="relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition">
-            <Bell size={16} />
-            {unreadNotifCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-bold">
-                {unreadNotifCount}
-              </span>
-            )}
-          </button>
-          <button onClick={e => { e.stopPropagation(); setShowSettings(true); }}
-            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition hidden md:flex">
-            <Settings size={16} />
-          </button>
-          {/* User avatar */}
-          <div className="relative">
-            <button onClick={e => { e.stopPropagation(); setShowUserMenu(p => !p); }}
-              className={`w-8 h-8 rounded-full ${getAvatarColor(accounts[0]?.name || "")} flex items-center justify-center text-white text-xs font-bold border-2 border-white/30`}>
-              {getInitials(accounts[0]?.name || accounts[0]?.username || "U")}
-            </button>
-            {showUserMenu && (
-              <div className={`absolute right-0 top-10 w-52 ${th.card} border ${th.border} rounded-xl shadow-xl z-50 overflow-hidden`}>
-                <div className={`px-4 py-3 border-b ${th.border}`}>
-                  <p className="text-sm font-semibold">{accounts[0]?.name || "User"}</p>
-                  <p className={`text-xs ${th.textMuted} truncate`}>{accounts[0]?.username || ""}</p>
-                </div>
-                {[
-                  { label: "My profile", icon: User },
-                  { label: "Settings", icon: Settings, action: () => setShowSettings(true) },
-                  { label: "Sign out", icon: LogOut, danger: true },
-                ].map(({ label, icon: Icon, action, danger }) => (
-                  <button key={label} onClick={action}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm ${th.hover} transition ${danger ? "text-red-500" : th.text}`}>
-                    <Icon size={15} />{label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <div className="flex items-center gap-0.5 shrink-0" />
       </header>
 
       {/* ── Mobile Sidebar Overlay ───────────────────────────────────────── */}
@@ -1864,10 +1760,10 @@ function OutlookEmail({ onToast }) {
       <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* ── Left App Rail (desktop only) ────────────────────────────────── */}
-        <nav className="hidden md:flex flex-col items-center py-3 gap-1 w-14 bg-blue-800 shrink-0">
+        <nav className={`hidden md:flex flex-col items-center py-3 gap-1 w-14 shrink-0 ${isDark ? "bg-gray-950 border-r border-gray-800" : "bg-white border-r border-gray-200"}`}>
           <button onClick={() => setShowFolderPane(p => !p)}
             title={showFolderPane ? "Collapse folder pane" : "Expand folder pane"}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10 transition mb-1">
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition mb-1 ${isDark ? "text-gray-300 hover:bg-white/10 hover:text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"}`}>
             <Menu size={20} />
           </button>
           {[
@@ -1878,11 +1774,16 @@ function OutlookEmail({ onToast }) {
             { key: "Files", icon: FolderOpen },
           ].map(({ key, icon: Icon, badge }) => (
             <RailItem key={key} icon={Icon} label={key} active={activeApp === key}
-              onClick={() => setActiveApp(key)} badge={badge || 0} />
+              onClick={() => setActiveApp(key)} badge={badge || 0} isDark={isDark} />
           ))}
           <div className="flex-1" />
-          <RailItem icon={Sparkles} label="Copilot" active={showCopilot}
-            onClick={e => { e.stopPropagation(); setShowCopilot(p => !p); }} badge={0} />
+          <button
+            onClick={() => setIsDark(p => !p)}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition ${isDark ? "text-gray-300 hover:bg-white/10 hover:text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"}`}
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
         </nav>
 
         {/* ── Mail App ─────────────────────────────────────────────────── */}

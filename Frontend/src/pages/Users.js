@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
 import SignupPanel from "./SignupPanel";
 import EditUserModal from "../components/modals/EditUserModal";
@@ -14,20 +15,42 @@ import {
   FiLock,
 } from "react-icons/fi";
 
-function Users() {
-  // All Users
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+const STATUS_STYLES = {
+  Active: "bg-green-100 text-green-700 border-green-200",
+  Inactive: "bg-red-100 text-red-700 border-red-200",
+};
 
-  // Modal & Form State
+const ROLE_STYLES = {
+  Admin: "bg-purple-100 text-purple-700",
+  Manager: "bg-blue-100 text-blue-700",
+  User: "bg-gray-100 text-gray-700",
+};
+
+function Users() {
+  const navigate = useNavigate();
+
+  // Users Data & State
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Filters
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [roles, setRoles] = useState([]);
+
+  // Modal State
   const [showSignupPanel, setShowSignupPanel] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
-  // Edit Form State
+  // Edit & Delete State
   const [editData, setEditData] = useState({
     loginId: null,
     name: "",
@@ -37,47 +60,85 @@ function Users() {
     isActive: true,
   });
 
-  // Password Modal State
   const [passwordData, setPasswordData] = useState({
     loginId: null,
     newPassword: "",
     confirmPassword: "",
   });
+
   const [deleteId, setDeleteId] = useState(null);
-
-  // Error & Success
   const [errors, setErrors] = useState({});
-  const [successMessage, setSuccessMessage] = useState("");
 
-  // Fetch all users on mount
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  // Filter users based on search term
-  useEffect(() => {
-    const filtered = users.filter(
-      (user) =>
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.phone?.includes(searchTerm)
-    );
-    setFilteredUsers(filtered);
-  }, [searchTerm, users]);
-
-  const fetchUsers = async () => {
-    setLoadingUsers(true);
+  // Fetch users with filters
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const response = await apiClient.get("/Login/all");
-      setUsers(response.data);
+      let users = Array.isArray(response.data) ? response.data : [];
+
+      // Apply filters
+      if (search) {
+        const searchLower = search.toLowerCase();
+        users = users.filter(
+          (u) =>
+            (u.name?.toLowerCase().includes(searchLower)) ||
+            (u.email?.toLowerCase().includes(searchLower)) ||
+            (u.phone?.includes(search))
+        );
+      }
+
+      if (roleFilter) {
+        users = users.filter((u) => u.role === roleFilter);
+      }
+
+      if (statusFilter) {
+        const isActive = statusFilter === "Active";
+        users = users.filter((u) => u.isActive === isActive);
+      }
+
+      // Sort by name
+      users.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+      setTotal(users.length);
+
+      // Apply pagination
+      const start = (page - 1) * pageSize;
+      const paginated = users.slice(start, start + pageSize);
+      setRows(paginated);
       setErrors({});
-    } catch (error) {
-      setErrors({ general: "Failed to load users" });
-      console.error("Error fetching users:", error);
+    } catch (err) {
+      console.error("User fetch failed", err);
+      setError(err?.response?.data?.message || err?.message || "Failed to load users.");
+      setRows([]);
+      setTotal(0);
     } finally {
-      setLoadingUsers(false);
+      setLoading(false);
     }
-  };
+  }, [search, roleFilter, statusFilter, page, pageSize]);
+
+  // Extract unique roles for filter dropdown
+  const extractRoles = useCallback(async () => {
+    try {
+      const response = await apiClient.get("/Login/all");
+      const users = Array.isArray(response.data) ? response.data : [];
+      const uniqueRoles = [...new Set(users.map((u) => u.role).filter(Boolean))];
+      setRoles(uniqueRoles.sort());
+    } catch (err) {
+      console.error("Failed to extract roles", err);
+      setRoles([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    extractRoles();
+  }, [extractRoles]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleOpenForm = (user = null) => {
     if (user) {
@@ -258,174 +319,254 @@ function Users() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 rounded-lg p-6 overflow-y-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Management</h1>
-        <button
-          onClick={() => handleOpenForm()}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        >
-          <FiPlus size={18} />
-          Add User
-        </button>
-      </div>
+    <div className="p-4 sm:p-6 h-full overflow-hidden bg-gray-50">
+      <div className="max-w-7xl mx-auto h-full flex flex-col min-h-0">
+        <div className="sticky top-0 z-10 bg-gray-50 pb-3">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 font-medium mb-3"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-3">
-          <FiCheck size={20} />
-          <span className="text-sm font-medium">{successMessage}</span>
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">User Management</h1>
+              <p className="text-sm text-gray-500">Manage users, roles, and permissions</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">{total} user{total !== 1 ? "s" : ""}</span>
+              <button
+                onClick={() => handleOpenForm()}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+              >
+                <FiPlus size={16} />
+                Add User
+              </button>
+            </div>
+          </div>
+
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm flex items-center gap-3">
+              <FiCheck size={18} />
+              {successMessage}
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-3">
+              <FiX size={18} />
+              {error}
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search by name, email, or phone…"
+              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All roles</option>
+              {roles.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">All statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+            <button
+              onClick={() => fetchUsers()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* Error Message */}
-      {errors.general && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-3">
-          <FiX size={20} />
-          <span className="text-sm font-medium">{errors.general}</span>
-        </div>
-      )}
-
-      {/* Search Bar */}
-      <div className="mb-6 relative">
-        <FiSearch className="absolute left-3 top-3 text-gray-400" size={18} />
-        <input
-          type="text"
-          placeholder="Search by name, email, or phone..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-        />
-      </div>
-
-      {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-0 flex-1">
-        {loadingUsers ? (
-          <div className="p-8 text-center text-gray-500">Loading users...</div>
-        ) : filteredUsers.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">No users found</div>
-        ) : (
-          <div className="overflow-auto flex-1">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+        {/* Table */}
+        <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-200 rounded-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide sticky top-0 z-10">
                 <tr>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                    Name
-                  </th>
-                  <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                    Email
-                  </th>
-                  <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                    Phone
-                  </th>
-                  <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                    Role
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-700">
-                    Status
-                  </th>
-                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-semibold text-gray-700">
-                    Actions
-                  </th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Name</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Email</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Phone</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Role</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Status</th>
+                  <th className="text-right font-semibold px-4 py-3 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr
-                    key={user.loginId}
-                    className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors"
-                  >
-                    <td className="px-4 sm:px-6 py-4 text-sm font-medium text-gray-900">
-                      {user.name}
-                    </td>
-                    <td className="hidden sm:table-cell px-6 py-4 text-sm text-gray-600">
-                      {user.email}
-                    </td>
-                    <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-600">
-                      {user.phone}
-                    </td>
-                    <td className="hidden lg:table-cell px-6 py-4 text-sm">
-                      <span className="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm">
-                      {user.isActive ? (
-                        <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                          Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 sm:px-6 py-4 text-sm">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleOpenForm(user)}
-                          className="p-2 text-blue-600 hover:bg-blue-100 rounded transition"
-                          title="Edit"
-                        >
-                          <FiEdit2 size={16} />
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenPasswordModal(user.loginId)}
-                          className="p-2 text-orange-600 hover:bg-orange-100 rounded transition"
-                          title="Change Password"
-                        >
-                          <FiLock size={16} />
-                        </button>
-
-                        {user.isActive ? (
-                          <button
-                            onClick={() => handleDeactivate(user.loginId)}
-                            className="p-2 text-yellow-600 hover:bg-yellow-100 rounded transition"
-                            title="Deactivate"
-                          >
-                            <FiX size={16} />
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleActivate(user.loginId)}
-                            className="p-2 text-green-600 hover:bg-green-100 rounded transition"
-                            title="Activate"
-                          >
-                            <FiCheck size={16} />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => {
-                            setDeleteId(user.loginId);
-                            setShowDeleteConfirm(true);
-                          }}
-                          className="p-2 text-red-600 hover:bg-red-100 rounded transition"
-                          title="Delete"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
-                      </div>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                      Loading…
                     </td>
                   </tr>
-                ))}
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                      No users found.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((u) => (
+                    <tr key={u.loginId} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">{u.name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-600">{u.email}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-600">{u.phone}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            ROLE_STYLES[u.role] || "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
+                            STATUS_STYLES[u.isActive ? "Active" : "Inactive"]
+                          }`}
+                        >
+                          {u.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleOpenForm(u)}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded transition"
+                            title="Edit"
+                          >
+                            <FiEdit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenPasswordModal(u.loginId)}
+                            className="p-2 text-orange-600 hover:bg-orange-100 rounded transition"
+                            title="Change Password"
+                          >
+                            <FiLock size={16} />
+                          </button>
+                          {u.isActive ? (
+                            <button
+                              onClick={() => handleDeactivate(u.loginId)}
+                              className="p-2 text-yellow-600 hover:bg-yellow-100 rounded transition"
+                              title="Deactivate"
+                            >
+                              <FiX size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleActivate(u.loginId)}
+                              className="p-2 text-green-600 hover:bg-green-100 rounded transition"
+                              title="Activate"
+                            >
+                              <FiCheck size={16} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setDeleteId(u.loginId);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="p-2 text-red-600 hover:bg-red-100 rounded transition"
+                            title="Delete"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => setPage(i + 1)}
+                  className={`px-3 py-1 rounded border ${
+                    page === i + 1
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Signup Panel for Adding Users */}
+      {/* Modals */}
       {showSignupPanel && (
-        <SignupPanel onClose={() => {
-          setShowSignupPanel(false);
-          fetchUsers();
-        }} />
+        <SignupPanel
+          onClose={() => {
+            setShowSignupPanel(false);
+            fetchUsers();
+          }}
+        />
       )}
 
-      {/* Edit User Modal */}
       <EditUserModal
         isOpen={showEditModal}
         editData={editData}
@@ -436,7 +577,6 @@ function Users() {
         onSubmit={handleEditSubmit}
       />
 
-      {/* Password Modal */}
       <PasswordModal
         isOpen={showPasswordModal}
         passwordData={passwordData}
@@ -450,7 +590,6 @@ function Users() {
         onSubmit={handleChangePassword}
       />
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={showDeleteConfirm}
         onConfirm={() => handleDelete(deleteId)}

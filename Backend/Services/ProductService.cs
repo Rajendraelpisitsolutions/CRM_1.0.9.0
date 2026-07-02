@@ -41,7 +41,8 @@ namespace Elpis_CRM.Services
         /// <returns>The matching product, or null when no row has that ID.</returns>
         public async Task<ProductsModel?> GetByIdAsync(int productId)
         {
-            return await _productDb.Products.FindAsync(productId);
+            var product = await _productDb.Products.FindAsync(productId);
+            return product;
         }
 
         /// <summary>
@@ -114,7 +115,7 @@ namespace Elpis_CRM.Services
         /// </summary>
         /// <param name="productId">Primary key of the product to remove.</param>
         /// <returns>True when a row was found and deleted; false when the ID was not present.</returns>
-        public async Task<bool> DeleteAsync(int productId)
+        public async Task<bool> DeleteAsync(int productId, string deletedBy)
         {
             var product = await _productDb.Products.FindAsync(productId);
 
@@ -122,6 +123,7 @@ namespace Elpis_CRM.Services
             {
                 return false;
             }
+
             _productDb.Products.Remove(product);
             await _productDb.SaveChangesAsync();
             return true;

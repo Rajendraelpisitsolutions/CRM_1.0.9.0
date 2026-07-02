@@ -505,7 +505,11 @@ namespace Elpis_CRM.Services
 
             if (!string.IsNullOrWhiteSpace(contact.WorkEmail))
             {
-                emailList.Add(contact.WorkEmail.Trim().ToLower());
+                emailList.AddRange(
+                    contact.WorkEmail
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(e => e.Trim().ToLower())
+                );
             }
 
             if (!string.IsNullOrWhiteSpace(contact.Emails))
@@ -530,17 +534,29 @@ namespace Elpis_CRM.Services
                     .ToListAsync();
 
                 var duplicateExists = contacts.Any(c =>
-                    emailList.Any(email =>
-                        (!string.IsNullOrWhiteSpace(c.WorkEmail) &&
-                         c.WorkEmail.Trim().ToLower() == email)
-                        ||
-                        (!string.IsNullOrWhiteSpace(c.Emails) &&
-                         c.Emails
-                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                            .Select(x => x.Trim().ToLower())
-                            .Contains(email))
-                    )
-                );
+                {
+                    var existingEmails = new List<string>();
+
+                    if (!string.IsNullOrWhiteSpace(c.WorkEmail))
+                    {
+                        existingEmails.AddRange(
+                            c.WorkEmail
+                                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                .Select(x => x.Trim().ToLower())
+                        );
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(c.Emails))
+                    {
+                        existingEmails.AddRange(
+                            c.Emails
+                                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                .Select(x => x.Trim().ToLower())
+                        );
+                    }
+
+                    return existingEmails.Intersect(emailList).Any();
+                });
 
                 if (duplicateExists)
                 {
@@ -667,7 +683,7 @@ namespace Elpis_CRM.Services
         /// <param name="id">Primary key of the contact to delete.</param>
         /// <returns>True when a contact was deleted; false when no contact has that ID.</returns>
         // Delete contact
-        public async Task<bool> DeleteAsync(long id)
+        public async Task<bool> DeleteAsync(long id, string deletedBy)
         {
             var contact = await _contactContext.Contacts
                 .FirstOrDefaultAsync(c => c.ContactId == id);
@@ -677,48 +693,36 @@ namespace Elpis_CRM.Services
                 return false;
             }
 
-            //  Handle foreign key constraints: Delete related records first
-            try
+            var relatedCallLogs = await _contactContext.CallLog
+                .Where(cl => cl.ContactId == id)
+                .ToListAsync();
+
+            var relatedTasks = await _contactContext.Tasks
+                .Where(t => t.ContactId == id)
+                .ToListAsync();
+
+            var relatedNotes = await _contactContext.Notes
+                .Where(n => n.ContactId == id)
+                .ToListAsync();
+
+            if (relatedCallLogs.Any())
             {
-                // Delete related CallLogs
-                var relatedCallLogs = await _contactContext.CallLog
-                    .Where(cl => cl.ContactId == id)
-                    .ToListAsync();
-                if (relatedCallLogs.Any())
-                {
-                    _contactContext.CallLog.RemoveRange(relatedCallLogs);
-                }
-
-                // Delete related Tasks
-                var relatedTasks = await _contactContext.Tasks
-                    .Where(t => t.Id == id)
-                    .ToListAsync();
-                if (relatedTasks.Any())
-                {
-                    _contactContext.Tasks.RemoveRange(relatedTasks);
-                }
-
-                // Delete related Notes
-                var relatedNotes = await _contactContext.Notes
-                    .Where(n => n.Id == id)
-                    .ToListAsync();
-                if (relatedNotes.Any())
-                {
-                    _contactContext.Notes.RemoveRange(relatedNotes);
-                }
-
-                // Now delete the contact
-                _contactContext.Contacts.Remove(contact);
-                await _contactContext.SaveChangesAsync();
-                return true;
+                _contactContext.CallLog.RemoveRange(relatedCallLogs);
             }
-            catch (Exception)
+
+            if (relatedTasks.Any())
             {
-                // If any foreign key constraints still fail, just remove the contact
-                _contactContext.Contacts.Remove(contact);
-                await _contactContext.SaveChangesAsync();
-                return true;
+                _contactContext.Tasks.RemoveRange(relatedTasks);
             }
+
+            if (relatedNotes.Any())
+            {
+                _contactContext.Notes.RemoveRange(relatedNotes);
+            }
+
+            _contactContext.Contacts.Remove(contact);
+            await _contactContext.SaveChangesAsync();
+            return true;
         }
         /// <summary>
         /// Returns all contacts created within the calendar day of <paramref name="createdAt"/>; the time

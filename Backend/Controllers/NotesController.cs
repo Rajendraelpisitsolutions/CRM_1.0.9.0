@@ -18,14 +18,16 @@ namespace Elpis_CRM.Controllers
     public class NotesController : ControllerBase
     {
         private readonly NotesService _notesService;
+        private readonly RecycleBinService _recycleBinService;
 
         /// <summary>
         /// Creates the controller with the note service used to persist and query notes.
         /// </summary>
         /// <param name="notesService">Service that handles note storage, mirroring, and lookups.</param>
-        public NotesController(NotesService notesService)
+        public NotesController(NotesService notesService,RecycleBinService recycleBinService)
         {
             _notesService = notesService;
+            _recycleBinService = recycleBinService;
         }
 
         /// <summary>
@@ -125,12 +127,34 @@ namespace Elpis_CRM.Controllers
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
         {
-            var deleted = await _notesService.DeleteNote(id);
+            var note = await _notesService.GetById(id);
+
+            if (note == null)
+            {
+                return NotFound("Note not found");
+            }
+
+            var deleted = await _notesService.DeleteNote(
+                id,
+                User?.Identity?.Name ??
+                User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ??
+                "System");
 
             if (!deleted)
             {
                 return NotFound("Note not found");
             }
+
+            await _recycleBinService.CreateEntryAsync(
+             "Note",
+             note.Id.ToString(),
+             note.RelatedToType == "Contact" ? "Contact Note" : "Deal Note",
+             note.Description,
+             User?.Identity?.Name ??
+             User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ??
+             "System",
+             note);
+
             return Ok("Note deleted successfully");
         }
 

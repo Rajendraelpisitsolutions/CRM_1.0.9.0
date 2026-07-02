@@ -17,14 +17,16 @@ namespace Elpis_CRM.Controllers
     public class ContactController : ControllerBase
     {
         private readonly ContactService _contactService;
+        private readonly RecycleBinService _recycleBinService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ContactController"/>.
         /// </summary>
         /// <param name="contactService">Service for contact operations.</param>
-        public ContactController(ContactService contactService)
+        public ContactController(ContactService contactService, RecycleBinService recycleBinService)
         {
             _contactService = contactService;
+            _recycleBinService = recycleBinService;
         }
 
         /// <summary>
@@ -315,13 +317,20 @@ namespace Elpis_CRM.Controllers
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
         public async Task<ActionResult> DeleteAsync(long contactId)
         {
-            var deleted = await _contactService.DeleteAsync(contactId);
+            var contact = await _contactService.GetByIdAsync(contactId);
+            if (contact == null)
+            {
+                return NotFound($"Contact with ID '{contactId}' not found.");
+            }
+
+            var deleted = await _contactService.DeleteAsync(contactId, User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System");
 
             if (!deleted)
             {
                 return NotFound($"Contact with ID '{contactId}' not found.");
             }
 
+            await _recycleBinService.CreateEntryAsync("Contact", contactId.ToString(), $"{contact.FirstName} {contact.LastName}".Trim(), "Contact deleted", User?.Identity?.Name ?? User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "System", contact);
             return Ok(new
             {
                 Message = "Contact deleted successfully"

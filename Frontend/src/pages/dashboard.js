@@ -21,6 +21,7 @@ import Teams from "./Teams";
 import CalendarView from "./CalendarView";
 import Users from "./Users";
 import AuditLogs from "./AuditLogs";
+import RecycleBin from "./RecycleBin";
 
 import AddForms from "./add";
 import FilterPanel from "./FilterPanel";
@@ -333,6 +334,7 @@ function Dashboard() {
     else if (path.includes("/dashboard/outlookemail")) tab = "outlookEmail";
     else if (path.includes("/dashboard/users")) tab = "users";
     else if (path.includes("/dashboard/audit-logs")) tab = "auditLogs";
+    else if (path.includes("/dashboard/recycle-bin")) tab = "recycle-bin";
     else if (path.includes("/dashboard/calllogs")) tab = "calllogs";
     else if (path.includes("/dashboard/profile")) return; // profile renders via Outlet, don't touch activeContent
     else if (path.includes("/dashboard/calendar")) return; // calendar renders via Outlet
@@ -379,6 +381,7 @@ function Dashboard() {
     auditLogs: "Audit Logs",
     calllogs: "Call Logs",
     calendar: "Calendar",
+    "recycle-bin": "Recycle Bin",
   };
   // Highlight search matches in text
   function highlightMatch(text, search) {
@@ -416,6 +419,7 @@ function Dashboard() {
     else if (tabId === "auditLogs") url = "/dashboard/audit-logs";
     else if (tabId === "calllogs") url = "/dashboard/calllogs";
     else if (tabId === "calendar") url = "/dashboard/Calendar";
+    else if (tabId === "recycle-bin") url = "/dashboard/recycle-bin";
     window.history.pushState({}, "", url);
   };
 
@@ -1072,6 +1076,11 @@ function Dashboard() {
                 {/* Call Logs Tab */}
                 {activeContent === "calllogs" && openTabs.includes("calllogs") && (
                   <CallLogs onToast={addToast} />
+                )}
+
+                {/* Recycle Bin Tab */}
+                {activeContent === "recycle-bin" && openTabs.includes("recycle-bin") && (
+                  <RecycleBin onToast={addToast} />
                 )}
               </div>
             )}
