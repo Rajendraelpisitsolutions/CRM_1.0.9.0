@@ -17,6 +17,12 @@ namespace Elpis_CRM.Model
         public long? ContactId { get; set; }
         public string? RelatedToType { get; set; }
         public long? DealId { get; set; }
+
+        // True for notes created under the shared model (Option A): the note is a single
+        // row and its associations live in NoteTargets. Legacy notes stay false and keep
+        // their old per-copy behaviour, so existing data is read exactly as before.
+        public bool IsShared { get; set; }
+
         [NotMapped]
         public List<long>? MirrorToContactIds { get; set; }
 

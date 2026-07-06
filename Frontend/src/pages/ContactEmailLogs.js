@@ -1149,6 +1149,7 @@ export default function ContactEmailLogs({
           Description: note.Description ?? note.description ?? "",
           CreatedAt: note.CreatedAt ?? note.createdAt ?? null,
           UpdatedAt: note.UpdatedAt ?? note.updatedAt ?? null,
+          SharedWithDeals: note.SharedWithDeals ?? note.sharedWithDeals ?? [],
         }))
         : [];
 
@@ -1174,6 +1175,7 @@ export default function ContactEmailLogs({
             Description: note.Description ?? note.description ?? "",
             CreatedAt: note.CreatedAt ?? note.createdAt ?? null,
             UpdatedAt: note.UpdatedAt ?? note.updatedAt ?? null,
+            SharedWithContacts: note.SharedWithContacts ?? note.sharedWithContacts ?? [],
           }))
         : [];
       setDealNotesMap((prev) => ({ ...prev, [dealId]: normalized }));
@@ -1217,19 +1219,24 @@ export default function ContactEmailLogs({
 
     const url = editNote ? `/Notes/${noteForm.NoteId}` : `/Notes`;
 
-    if (noteDealSelections.size === 0 && !noteDealOnlySelected) {
+    // Destination only matters when creating a note. On edit the note's
+    // associations are unchanged, so skip the dropdown and its validation.
+    if (!editNote && noteDealSelections.size === 0 && !noteDealOnlySelected) {
       setNoteDestinationError("Choose where this note should appear before saving.");
       return;
     }
 
-    const payload = {
-      id: editNote ? noteForm.NoteId : undefined,
-      description: noteForm.Description,
-      contactId: Number(contactId),
-      mirrorToDealIds: Array.from(noteDealSelections),
-    };
-
-    if (!editNote) delete payload.Id;
+    const payload = editNote
+      ? {
+          id: noteForm.NoteId,
+          description: noteForm.Description,
+          contactId: Number(contactId),
+        }
+      : {
+          description: noteForm.Description,
+          contactId: Number(contactId),
+          mirrorToDealIds: Array.from(noteDealSelections),
+        };
 
     try {
       await (editNote
@@ -1266,6 +1273,11 @@ export default function ContactEmailLogs({
       Description: note.Description,
     });
 
+    // Editing doesn't touch destinations — clear any add-mode dropdown state.
+    setShowDealDropdown(false);
+    setNoteDealSelections(new Set());
+    setNoteDealOnlySelected(false);
+    setNoteDestinationError("");
     setShowNoteForm(true);
   };
 
@@ -2539,6 +2551,25 @@ export default function ContactEmailLogs({
                                   key={note.NoteId}
                                   className="bg-white p-4 mb-3 rounded shadow"
                                 >
+                                  {(() => {
+                                    const shared =
+                                      (note.SharedWithDeals && note.SharedWithDeals.length
+                                        ? note.SharedWithDeals
+                                        : note.SharedWithContacts) || [];
+                                    return shared.length > 0 ? (
+                                      <div className="mb-2 pb-2 border-b border-gray-100 flex flex-wrap items-center gap-1">
+                                        <span className="text-[11px] font-medium text-gray-500">Shared with:</span>
+                                        {shared.map((t) => (
+                                          <span
+                                            key={t.id || t.Id}
+                                            className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-medium"
+                                          >
+                                            {t.name || t.Name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null;
+                                  })()}
                                   <p className="text-gray-600">
                                     {note.Description}
                                   </p>
@@ -2880,6 +2911,25 @@ export default function ContactEmailLogs({
                     <div className="px-6 py-4">
                       {/* LEFT */}
                       <>
+                        {(() => {
+                          const shared =
+                            (note.SharedWithDeals && note.SharedWithDeals.length
+                              ? note.SharedWithDeals
+                              : note.SharedWithContacts) || [];
+                          return shared.length > 0 ? (
+                            <div className="mb-2 pb-2 border-b border-gray-100 flex flex-wrap items-center gap-1">
+                              <span className="text-[11px] font-medium text-gray-500">Shared with:</span>
+                              {shared.map((t) => (
+                                <span
+                                  key={t.id || t.Id}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-medium"
+                                >
+                                  {t.name || t.Name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                         <div
                           onClick={() =>
                             setExpandedNotes((prev) => ({
@@ -2984,6 +3034,7 @@ export default function ContactEmailLogs({
                       className="flex-1 flex flex-col overflow-hidden"
                     >
                       <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                        {!editNote && (
                         <div className="space-y-2" ref={dealDropdownRef} onMouseDown={(e) => e.stopPropagation()}>
                           <div className="rounded-2xl border-2 border-gray-200 bg-white p-4">
                             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
@@ -3050,6 +3101,7 @@ export default function ContactEmailLogs({
                             </div>
                           </div>
                         </div>
+                        )}
 
                         <div className="space-y-2">
                           <label className="text-sm text-gray-700 flex items-center gap-2">

@@ -298,6 +298,8 @@ function Deals({
 
   // DealNotes state
   const [dealNotes, setDealNotes] = useState([]);
+  // null = show all notes; otherwise a contactId to filter the deal's notes by.
+  const [dealNotesContactFilter, setDealNotesContactFilter] = useState(null);
   const [newDealNote, setNewDealNote] = useState("");
   const [notesLoading, setNotesLoading] = useState(false);
   const [showAddNoteBox, setShowAddNoteBox] = useState(false);
@@ -750,19 +752,11 @@ function Deals({
 
     try {
       setNotesLoading(true);
+      setDealNotesContactFilter(null); // reset the contact filter for the new list
 
-      const res = await fetch(`/Notes/deal/${dealId}`);
-
-      if (res.ok) {
-        const data = await res.json();
-        setDealNotes(Array.isArray(data) ? data : []);
-      } else {
-        setDealNotes([]);
-
-        if (onToast) {
-          onToast("Failed to fetch deal notes", "error");
-        }
-      }
+      const res = await apiClient.get(`/Notes/deal/${dealId}`);
+      const data = res.data;
+      setDealNotes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to fetch notes:", err);
 
@@ -951,6 +945,18 @@ function Deals({
     });
   }, [selectedDealDetails, dealSlideContacts]);
 
+  // Deal notes after applying the contact filter (null = all). A note matches
+  // when it is shared with the selected contact (from sharedWithContacts, which
+  // also covers legacy notes via the backend's description/timestamp fallback).
+  const displayedDealNotes = useMemo(() => {
+    if (dealNotesContactFilter == null) return dealNotes;
+    return dealNotes.filter((n) =>
+      (n.sharedWithContacts || n.SharedWithContacts || []).some(
+        (c) => String(c.id ?? c.Id) === String(dealNotesContactFilter)
+      )
+    );
+  }, [dealNotes, dealNotesContactFilter]);
+
   const handleSaveDealNote = async () => {
     if (!newDealNote.trim() || !selectedDealDetails) return;
 
@@ -975,33 +981,22 @@ function Deals({
         mirrorToContactIds: Array.from(noteContactSelections),
       };
 
-      // Dummy endpoint
-      const res = await fetch(`/Notes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const res = await apiClient.post(`/Notes`, payload);
+      const savedNote = res.data;
 
-      if (res.ok) {
-        const savedNote = await res.json();
+      setDealNotes((prev) => [savedNote, ...prev]);
+      setNewDealNote("");
+      setShowAddNoteBox(false);
+      setShowContactDropdown(false);
+      setNoteContactSelections(new Set());
+      setNoteDealOnlySelected(false);
+      setNoteDestinationError("");
 
-        setDealNotes((prev) => [savedNote, ...prev]);
-        setNewDealNote("");
-        setShowAddNoteBox(false);
-        setShowContactDropdown(false);
-        setNoteContactSelections(new Set());
-        setNoteDealOnlySelected(false);
-        setNoteDestinationError("");
+      // Reload from the server so the new note carries its shared-contact chips.
+      fetchDealNotes(dealId);
 
-        if (onToast) {
-          onToast("Note added successfully", "success");
-        }
-      } else {
-        if (onToast) {
-          onToast("Failed to add note", "error");
-        }
+      if (onToast) {
+        onToast("Note added successfully", "success");
       }
     } catch (err) {
       console.error(err);
@@ -1021,37 +1016,25 @@ function Deals({
         description: editingNoteText,
       };
 
-      const res = await fetch(`/Notes/${noteId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      await apiClient.put(`/Notes/${noteId}`, payload);
 
-      if (res.ok) {
-        setDealNotes((prev) =>
-          prev.map((n) =>
-            (n.id || n.Id) === noteId
-              ? {
-                ...n,
-                description: editingNoteText,
-                Description: editingNoteText,
-              }
-              : n
-          )
-        );
+      setDealNotes((prev) =>
+        prev.map((n) =>
+          (n.id || n.Id) === noteId
+            ? {
+              ...n,
+              description: editingNoteText,
+              Description: editingNoteText,
+            }
+            : n
+        )
+      );
 
-        setEditingNoteId(null);
-        setEditingNoteText("");
+      setEditingNoteId(null);
+      setEditingNoteText("");
 
-        if (onToast) {
-          onToast("Note updated successfully", "success");
-        }
-      } else {
-        if (onToast) {
-          onToast("Failed to update note", "error");
-        }
+      if (onToast) {
+        onToast("Note updated successfully", "success");
       }
     } catch (err) {
       console.error(err);
@@ -1111,24 +1094,16 @@ function Deals({
     // NOTE DELETE
     if (deleteDealName === "this note") {
       try {
-        const res = await fetch(`/Notes/${deleteDealId}`, {
-          method: "DELETE",
-        });
+        await apiClient.delete(`/Notes/${deleteDealId}`);
 
-        if (res.ok) {
-          setDealNotes((prev) =>
-            prev.filter(
-              (n) => String(n.id || n.Id) !== String(deleteDealId)
-            )
-          );
+        setDealNotes((prev) =>
+          prev.filter(
+            (n) => String(n.id || n.Id) !== String(deleteDealId)
+          )
+        );
 
-          if (onToast) {
-            onToast("Note deleted successfully", "success");
-          }
-        } else {
-          if (onToast) {
-            onToast("Failed to delete note", "error");
-          }
+        if (onToast) {
+          onToast("Note deleted successfully", "success");
         }
       } catch (err) {
         console.error(err);
@@ -1543,19 +1518,46 @@ function Deals({
                 )}
               </div>
 
+              {/* Contact filter */}
+              {noteEligibleContacts.length > 0 && (
+                <div className="px-5 pt-3 pb-2 flex items-center gap-2 flex-wrap border-b">
+                  <span className="text-xs font-medium text-gray-400 shrink-0">Filter by contact:</span>
+                  <button
+                    type="button"
+                    onClick={() => setDealNotesContactFilter(null)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition ${dealNotesContactFilter == null ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                  >
+                    All
+                  </button>
+                  {noteEligibleContacts.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setDealNotesContactFilter(c.id)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition ${String(dealNotesContactFilter) === String(c.id) ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Notes List */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {notesLoading ? (
                   <div className="flex justify-center py-10">Loading...</div>
-                ) : dealNotes.length === 0 ? (
+                ) : displayedDealNotes.length === 0 ? (
                   <div className="text-center text-gray-400 py-10">
-                    No notes found
+                    {dealNotesContactFilter == null
+                      ? "No notes found"
+                      : "No notes for this contact"}
                   </div>
                 ) : (
-                  dealNotes.map((note, index) => {
+                  displayedDealNotes.map((note, index) => {
                     const noteId = note.id || note.Id;
                     const noteText = note.description || note.Description;
                     const noteDate = note.createdAt || note.CreatedAt;
+                    const sharedContacts = note.sharedWithContacts || note.SharedWithContacts || [];
                     return (
                       <div
                         key={noteId || index}
@@ -1581,6 +1583,19 @@ function Deals({
                         ) : (
 
                           <>
+                            {sharedContacts.length > 0 && (
+                              <div className="mb-2 pb-2 border-b border-gray-100 flex flex-wrap items-center gap-1">
+                                <span className="text-[11px] font-medium text-gray-500">Shared with:</span>
+                                {sharedContacts.map((c) => (
+                                  <span
+                                    key={c.id || c.Id}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium"
+                                  >
+                                    {c.name || c.Name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <div
                               onClick={() =>
                                 setExpandedNotes((prev) => ({
@@ -2192,6 +2207,16 @@ function Deals({
                         ) : dealNotes.length > 0 ? (
                           dealNotes.map((note, index) => (
                             <div key={note.id || note.Id || index} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                              {(note.sharedWithContacts || note.SharedWithContacts || []).length > 0 && (
+                                <div className="mb-2 pb-2 border-b border-gray-200 flex flex-wrap items-center gap-1">
+                                  <span className="text-[11px] font-medium text-gray-500">Shared with:</span>
+                                  {(note.sharedWithContacts || note.SharedWithContacts || []).map((c) => (
+                                    <span key={c.id || c.Id} className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium">
+                                      {c.name || c.Name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                               <div className="flex justify-between gap-3">
                                 <div className="space-y-2">
                                   {editingNoteId === (note.id || note.Id) ? (

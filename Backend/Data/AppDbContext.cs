@@ -32,6 +32,7 @@ namespace Elpis_CRM.Data
         public DbSet<TaskModel> Tasks { get; set; }
         public DbSet<MeetingModel> Meeting { get; set; }
         public DbSet<NotesModel> Notes { get; set; }
+        public DbSet<NoteTargetModel> NoteTargets { get; set; }
         public DbSet<AppointmentsModel> Appointments { get; set; }
         public DbSet<AuditLogModel> AuditLogs { get; set; }
         public DbSet<RecycleBinItemModel> RecycleBinItems { get; set; }
@@ -66,6 +67,21 @@ namespace Elpis_CRM.Data
                 .WithMany()
                 .HasForeignKey(x => x.ContactId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Shared-note associations (Option A). Cascade so deleting a note clears its links;
+            // the lookup index covers "which notes appear under this deal/contact".
+            modelBuilder.Entity<NoteTargetModel>()
+                .HasOne(x => x.Note)
+                .WithMany()
+                .HasForeignKey(x => x.NoteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<NoteTargetModel>()
+                .HasIndex(x => new { x.TargetType, x.TargetId });
+
+            modelBuilder.Entity<NoteTargetModel>()
+                .HasIndex(x => new { x.NoteId, x.TargetType, x.TargetId })
+                .IsUnique();
 
             modelBuilder.Entity<AuditLogModel>().HasIndex(x => new { x.EntityName, x.EntityId });
             modelBuilder.Entity<AuditLogModel>().HasIndex(x => x.ChangedAt);

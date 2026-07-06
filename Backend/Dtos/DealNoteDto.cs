@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 namespace Elpis_CRM.Model.DTOs
@@ -12,6 +13,9 @@ namespace Elpis_CRM.Model.DTOs
         public DateTime? UpdatedAt { get; set; }
         [Required]
         public long DealId { get; set; }
-        // No ContactId or RelatedToType - Deal-specific
-    }
+
+        // Contacts this note is shared with (from NoteTargets). Empty for legacy notes.
+        public List<NoteShareTargetDto> SharedWithContacts { get; set; } = new();
+        // No ContactId or RelatedToType - Deal-specific
+    }
 }
