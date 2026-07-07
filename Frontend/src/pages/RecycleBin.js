@@ -16,7 +16,21 @@ const entityLabel = (type) => {
 
 function fmt(dt) {
   if (!dt) return "—";
-  try { return new Date(dt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }); } catch { return String(dt); }
+  try {
+    // DeletedAt is stored already in IST (the server converts UTC→IST before saving)
+    // and carries no timezone marker. Render its wall-clock parts directly so the
+    // value isn't shifted a second time by the viewer's browser timezone.
+    const m = String(dt).match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      const [, y, mo, d, h, mi, s] = m;
+      const local = new Date(
+        Number(y), Number(mo) - 1, Number(d),
+        Number(h), Number(mi), Number(s || 0)
+      );
+      return local.toLocaleString("en-IN");
+    }
+    return new Date(dt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  } catch { return String(dt); }
 }
 
 // Builds a compact page list with ellipses, e.g. [1, 2, 3, '…', 8, 9, 10]

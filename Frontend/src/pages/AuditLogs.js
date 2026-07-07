@@ -33,7 +33,14 @@ function TabButton({ active, onClick, label, accent }) {
 
 function fmt(dt) {
   if (!dt) return "-";
-  try { return new Date(dt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }); } catch { return String(dt); }
+  try {
+    // Audit timestamps are stored in UTC. If the string has no timezone marker
+    // (no 'Z' / offset), treat it as UTC before converting to IST — otherwise the
+    // browser parses it as local time and the conversion is off by the UTC offset.
+    let s = dt;
+    if (typeof s === "string" && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += "Z";
+    return new Date(s).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  } catch { return String(dt); }
 }
 
 function getLogCategory(row) {

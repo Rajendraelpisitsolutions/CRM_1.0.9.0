@@ -58,6 +58,13 @@ namespace Elpis_CRM.Service
                 .Take(pageSize)
                 .ToListAsync();
 
+            // ChangedAt is stored as UTC (DateTime.UtcNow) in a datetime2 column, which EF
+            // reads back with Kind=Unspecified — serialized without a 'Z' and then mis-parsed
+            // as local time on the client. Re-stamp as UTC so the JSON carries the 'Z' and the
+            // UI's IST (Asia/Kolkata) conversion is applied to the correct instant.
+            foreach (var a in items)
+                a.ChangedAt = DateTime.SpecifyKind(a.ChangedAt, DateTimeKind.Utc);
+
             return new { items, totalCount = total, page, pageSize };
         }
 
