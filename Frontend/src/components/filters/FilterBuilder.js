@@ -1,5 +1,5 @@
-import React from "react";
-import { Filter, Plus } from "lucide-react";
+import React, { useState } from "react";
+import { Filter, Plus, Search } from "lucide-react";
 import FilterItem from "./FilterItem";
 
 function FilterBuilder({
@@ -16,6 +16,7 @@ function FilterBuilder({
   getOperatorsByType,
   allowAddFilter = true,
 }) {
+  const [tagSearch, setTagSearch] = useState("");
   if (
     typeof tagOptions !== "undefined" &&
     tagOptions &&
@@ -24,6 +25,10 @@ function FilterBuilder({
     const sel = Array.isArray(selectedTags) ? selectedTags : [];
     const toggle = (t) =>
       onTagsChange(sel.includes(t) ? sel.filter((x) => x !== t) : [...sel, t]);
+    const q = tagSearch.trim().toLowerCase();
+    const shown = (Array.isArray(tagOptions) ? tagOptions : []).filter(
+      (t) => !q || String(t).toLowerCase().includes(q)
+    );
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -40,9 +45,20 @@ function FilterBuilder({
             </button>
           )}
         </div>
+        {/* Search — find a tag instead of scrolling the whole list */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            placeholder="Search tags…"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+          />
+        </div>
         <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
-          {Array.isArray(tagOptions) && tagOptions.length > 0 ? (
-            tagOptions.map((t) => (
+          {shown.length > 0 ? (
+            shown.map((t) => (
               <label
                 key={t}
                 className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm select-none"
@@ -58,7 +74,7 @@ function FilterBuilder({
             ))
           ) : (
             <div className="px-3 py-4 text-sm text-gray-400 text-center">
-              No tags available
+              {q ? "No matching tags" : "No tags available"}
             </div>
           )}
         </div>

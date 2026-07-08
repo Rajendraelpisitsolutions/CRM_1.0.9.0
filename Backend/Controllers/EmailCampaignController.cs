@@ -35,6 +35,17 @@ namespace Elpis_CRM.Controllers
         private string BaseUrl() =>
             (_config["Tracking:PublicBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}").TrimEnd('/');
 
+        /// <summary>The signed-in user's email — every read/write is scoped to campaigns they created,
+        /// so one user never sees another user's tracking.</summary>
+        private string? CurrentUserEmail() =>
+            User?.FindFirst(ClaimTypes.Email)?.Value ?? User?.Identity?.Name;
+
+        private Task<bool> OwnsCampaignAsync(long id)
+        {
+            var me = CurrentUserEmail();
+            return _db.EmailCampaigns.AnyAsync(c => c.Id == id && c.CreatedBy == me);
+        }
+
         /// <summary>Queues a tracked bulk email. The background sender delivers it recipient-by-recipient.</summary>
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] EmailCampaignCreateDto dto)
@@ -99,6 +110,7 @@ namespace Elpis_CRM.Controllers
         public async Task<IActionResult> Status(long id, [FromBody] SendStatusDto dto)
         {
             if (dto?.Results == null || dto.Results.Count == 0) return Ok();
+            if (!await OwnsCampaignAsync(id)) return NotFound();
             await _tracking.RecordSendResultsAsync(
                 id, dto.Results.Select(r => (r.RecipientId, r.Status, r.Error)));
             return Ok();
@@ -108,7 +120,8 @@ namespace Elpis_CRM.Controllers
         [HttpGet("overview")]
         public async Task<IActionResult> Overview()
         {
-            var c = await _db.EmailCampaigns.AsNoTracking().ToListAsync();
+            var me = CurrentUserEmail();
+            var c = await _db.EmailCampaigns.AsNoTracking().Where(x => x.CreatedBy == me).ToListAsync();
             int sent = c.Sum(x => x.SentCount);
             int opened = c.Sum(x => x.OpenedCount);
             int clicked = c.Sum(x => x.ClickedCount);
@@ -141,7 +154,9 @@ namespace Elpis_CRM.Controllers
         [HttpGet]
         public async Task<IActionResult> List()
         {
+            var me = CurrentUserEmail();
             var campaigns = await _db.EmailCampaigns.AsNoTracking()
+                .Where(x => x.CreatedBy == me)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
 
@@ -174,7 +189,8 @@ namespace Elpis_CRM.Controllers
         [HttpGet("{id:long}")]
         public async Task<IActionResult> Get(long id)
         {
-            var x = await _db.EmailCampaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+            var me = CurrentUserEmail();
+            var x = await _db.EmailCampaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.CreatedBy == me);
             if (x == null) return NotFound();
 
             return Ok(new
@@ -209,6 +225,9 @@ namespace Elpis_CRM.Controllers
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 500);
+
+            if (!await OwnsCampaignAsync(id))
+                return Ok(new { total = 0, page, pageSize, items = new List<object>() });
 
             var q = _db.EmailRecipients.AsNoTracking().Where(r => r.CampaignId == id);
             q = (filter ?? "").ToLowerInvariant() switch
@@ -261,6 +280,7 @@ namespace Elpis_CRM.Controllers
         {
             var r = await _db.EmailRecipients.AsNoTracking().FirstOrDefaultAsync(x => x.Id == recipientId);
             if (r == null) return NotFound();
+            if (!await OwnsCampaignAsync(r.CampaignId)) return NotFound();
 
             var events = await _db.EmailEvents.AsNoTracking()
                 .Where(e => e.RecipientId == recipientId)
@@ -289,6 +309,7 @@ namespace Elpis_CRM.Controllers
         public async Task<IActionResult> Replies(long id, [FromBody] RepliesDto dto)
         {
             if (dto?.Emails == null || dto.Emails.Count == 0) return Ok();
+            if (!await OwnsCampaignAsync(id)) return NotFound();
             await _tracking.RecordRepliesAsync(id, dto.Emails);
             return Ok();
         }
@@ -301,6 +322,7 @@ namespace Elpis_CRM.Controllers
         public async Task<IActionResult> Receipts(long id, [FromBody] ReceiptsDto dto)
         {
             if (dto == null) return Ok();
+            if (!await OwnsCampaignAsync(id)) return NotFound();
             await _tracking.RecordReceiptsAsync(id, dto.Opens, dto.Delivered, dto.Replies);
             return Ok();
         }
