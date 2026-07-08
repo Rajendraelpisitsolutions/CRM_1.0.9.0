@@ -154,7 +154,7 @@ namespace Elpis_CRM.Services
                 {
                     return m.Value; // leave internal / non-web links untouched
                 }
-                var tracked = $"{b}/track/c/{token}?u={Uri.EscapeDataString(url)}";
+                var tracked = $"{b}/api/track/c/{token}?u={Uri.EscapeDataString(url)}";
                 return $"href=\"{tracked}\"";
             });
 
@@ -162,10 +162,10 @@ namespace Elpis_CRM.Services
             html += $"<div style=\"margin-top:18px;padding-top:10px;border-top:1px solid #eee;" +
                     $"font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;\">" +
                     $"If you no longer wish to receive these emails, you can " +
-                    $"<a href=\"{b}/track/u/{token}\" style=\"color:#6b7280;\">unsubscribe</a>.</div>";
+                    $"<a href=\"{b}/api/track/u/{token}\" style=\"color:#6b7280;\">unsubscribe</a>.</div>";
 
             // 3) Open pixel (last, so it loads after the body).
-            html += $"<img src=\"{b}/track/o/{token}\" width=\"1\" height=\"1\" " +
+            html += $"<img src=\"{b}/api/track/o/{token}\" width=\"1\" height=\"1\" " +
                     $"style=\"display:none;width:1px;height:1px;\" alt=\"\" />";
 
             return html;

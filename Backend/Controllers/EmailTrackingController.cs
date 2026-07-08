@@ -8,12 +8,16 @@ namespace Elpis_CRM.Controllers
 {
     /// <summary>
     /// Public, unauthenticated endpoints that recipients' mail clients hit: the open pixel, the
-    /// click-through redirect, and the unsubscribe link. Routed at /track/* (not /api) so the URLs
-    /// embedded in emails stay short. These must be reachable from the public internet.
+    /// click-through redirect, and the unsubscribe link. Reachable at BOTH /track/* and
+    /// /api/track/* — the emails use the /api/track/* form so they ride the same reverse-proxy
+    /// rule that already forwards /api to the backend in production (a plain /track/* path is
+    /// typically NOT proxied to the API, which is why opens/clicks were never recorded).
+    /// These must be reachable from the public internet.
     /// </summary>
     [ApiController]
     [AllowAnonymous]
     [Route("track")]
+    [Route("api/track")]
     public class EmailTrackingController : ControllerBase
     {
         private readonly EmailTrackingService _tracking;
