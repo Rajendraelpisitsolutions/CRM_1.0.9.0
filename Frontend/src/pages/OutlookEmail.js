@@ -57,6 +57,32 @@ function parseTemplateBody(raw) {
   return { body: "", footer: b, logo, text: b };
 }
 
+// Ensures an Outlook mail folder with the given name exists (creating it once if not) and
+// returns its id. Campaign copies are filed here (instead of Sent Items) so a big send
+// doesn't clog the mailbox. Returns null on any failure, so the caller falls back cleanly.
+async function ensureMailFolderId(accessToken, name) {
+  try {
+    const listRes = await window.fetch(
+      "https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=id,displayName",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const list = await listRes.json();
+    const found = (list.value || []).find(
+      (f) => (f.displayName || "").toLowerCase() === name.toLowerCase()
+    );
+    if (found) return found.id;
+    const createRes = await window.fetch("https://graph.microsoft.com/v1.0/me/mailFolders", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: name }),
+    });
+    const created = await createRes.json();
+    return created.id || null;
+  } catch {
+    return null;
+  }
+}
+
 function replaceCidImages(html, attachments = []) {
   if (!html) return html;
   let result = html;
@@ -2739,7 +2765,7 @@ function OutlookEmail({ onToast }) {
                               </div>
                               </>
                               ); })()}
-                              <button onClick={() => { const p = parseTemplateBody(tpl.body); startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: p.body }); setFooterText(p.footer); setFooterLogo(p.logo); }}
+                              <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: tpl.body }); }}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition">
                                 <Mail size={14} />Use Template
                               </button>
@@ -3918,9 +3944,10 @@ useEffect(() => {
       setSubject(replyData.subject || "");
 
       if (replyData.type === "new" && replyData.body) {
-        // "Use Template" passed a specific template body (may carry a logo).
-        const { logo, text } = parseTemplateBody(replyData.body);
-        setFooterText(text);
+        // "Use Template" passed a packed template body (body + footer + optional logo).
+        const { body, footer, logo } = parseTemplateBody(replyData.body);
+        if (body) setBody(body);
+        setFooterText(footer);
         setFooterLogo(logo);
         setQuoteHtml("");
       } else if (replyData.type === "reply" || replyData.type === "replyAll") {
@@ -4313,6 +4340,10 @@ useEffect(() => {
       return;
     }
 
+    // Get (or create) a dedicated Outlook folder to file campaign copies into, so a large
+    // send doesn't pile up in Sent Items / the mailbox. Falls back to Sent Items if unavailable.
+    const campaignFolderId = await ensureMailFolderId(accessToken, "CRM Campaigns");
+
     // 2) Send each recipient their own tracked email, collecting outcomes.
     const results = [];
     for (let i = 0; i < tracked.items.length; i++) {
@@ -4331,7 +4362,8 @@ useEffect(() => {
         const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          // If we have a campaign folder, keep Sent Items clean and file a copy there instead.
+          body: JSON.stringify({ message, saveToSentItems: !campaignFolderId }),
         });
         const ok = res.ok || res.status === 202;
         let errMsg = null;
@@ -4341,6 +4373,16 @@ useEffect(() => {
             const parsed = txt && txt.trim().startsWith("{") ? JSON.parse(txt) : null;
             errMsg = parsed?.error?.message || (txt ? txt.slice(0, 300) : "") || `HTTP ${res.status}`;
           } catch { errMsg = `HTTP ${res.status}`; }
+        }
+        // File a copy of the sent email into the campaign folder (non-fatal).
+        if (ok && campaignFolderId) {
+          try {
+            await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders/${campaignFolderId}/messages`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ ...message, isRead: true }),
+            });
+          } catch { /* copy is best-effort */ }
         }
         results.push({ recipientId: item.recipientId, status: ok ? "Sent" : "Failed", error: errMsg });
       } catch (err) {

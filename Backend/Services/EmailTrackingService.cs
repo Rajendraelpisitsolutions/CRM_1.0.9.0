@@ -174,13 +174,17 @@ namespace Elpis_CRM.Services
                 return $"href=\"{tracked}\"";
             });
 
-            // 2) Subscription footer — both a subscribe and an unsubscribe link.
-            html += $"<div style=\"margin-top:18px;padding-top:10px;border-top:1px solid #eee;" +
-                    $"font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;\">" +
-                    $"Manage your subscription: " +
-                    $"<a href=\"{b}/api/track/s/{token}\" style=\"color:#2563eb;\">Subscribe</a>" +
-                    $" &nbsp;·&nbsp; " +
-                    $"<a href=\"{b}/api/track/u/{token}\" style=\"color:#6b7280;\">Unsubscribe</a></div>";
+            // 2) Subscription footer — clear Unsubscribe / Subscribe BUTTONS (email-safe styled links).
+            html += $"<div style=\"margin-top:24px;padding-top:16px;border-top:1px solid #eee;" +
+                    $"text-align:center;font-family:Arial,Helvetica,sans-serif;\">" +
+                    $"<p style=\"font-size:12px;color:#9ca3af;margin:0 0 12px;\">Don't want to receive these emails?</p>" +
+                    $"<a href=\"{b}/api/track/u/{token}\" style=\"display:inline-block;background:#4b5563;" +
+                    $"color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;" +
+                    $"border-radius:8px;\">Unsubscribe</a>" +
+                    $"&nbsp;&nbsp;" +
+                    $"<a href=\"{b}/api/track/s/{token}\" style=\"display:inline-block;background:#eff6ff;" +
+                    $"color:#2563eb;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;" +
+                    $"border-radius:8px;border:1px solid #bfdbfe;\">Subscribe</a></div>";
 
             // 3) Open pixel (last, so it loads after the body).
             html += $"<img src=\"{b}/api/track/o/{token}\" width=\"1\" height=\"1\" " +
