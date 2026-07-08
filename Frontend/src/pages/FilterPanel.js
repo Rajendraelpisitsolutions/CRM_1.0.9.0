@@ -28,12 +28,19 @@ function FilterPanel({
   const [selectedCreatedBy, setSelectedCreatedBy] = useState("all");
   const [columnsCollapsed, setColumnsCollapsed] = useState(!defaultColumnsExpanded);
 
-  const [tempSelectedTag, setTempSelectedTag] = useState("");
+  // Multiple tags can be selected; the applied filter value is a comma-joined string
+  // which every consumer already understands (Contacts/Accounts split it server-side,
+  // Products' applyFilters splits on comma and matches any).
+  const [tempSelectedTags, setTempSelectedTags] = useState([]);
 
-  // initialize selected tag from incoming filters if present
+  // initialize selected tags from incoming filters if present
   useEffect(() => {
     const tagFilter = (filters || []).find(f => String(f.field).toLowerCase().includes("tag"));
-    setTempSelectedTag(tagFilter ? tagFilter.value : "");
+    const v = tagFilter ? tagFilter.value : "";
+    const arr = Array.isArray(v)
+      ? v
+      : (v ? String(v).split(",").map(s => s.trim()).filter(Boolean) : []);
+    setTempSelectedTags(arr);
   }, [filters]);
 
   // Reset columns expand/collapse state each time the panel is (re)opened,
@@ -238,7 +245,7 @@ function FilterPanel({
       tempFilters,
       tagOptions: tagOptions?.length || 0,
       hasDealPipelineColumn,
-      tempSelectedTag,
+      tempSelectedTags,
       selectedPipeline,
       selectedCreatedBy,
     });
@@ -264,7 +271,7 @@ function FilterPanel({
         });
       }
     } else if (tagOptions && tagOptions.length > 0) {
-      if (tempSelectedTag) {
+      if (tempSelectedTags && tempSelectedTags.length > 0) {
         const tagField =
           (columns &&
             columns.find(c =>
@@ -276,7 +283,7 @@ function FilterPanel({
             id: Date.now(),
             field: tagField,
             operator: "contains",
-            value: tempSelectedTag,
+            value: tempSelectedTags.join(","),
             dataType: getFieldType(tagField),
           },
         ];
@@ -303,6 +310,7 @@ function FilterPanel({
     setTempFilters([]);
     setSelectedPipeline("all");
     setSelectedCreatedBy("all");
+    setTempSelectedTags([]);
     if (typeof onClear === "function") onClear();
   };
 
@@ -445,11 +453,11 @@ function FilterPanel({
                   filters={tempFilters}
                   columns={columns}
                   tagOptions={tagOptions}
-                  selectedTag={tempSelectedTag}
+                  selectedTags={tempSelectedTags}
                   onAddFilter={handleAddFilter}
                   onRemoveFilter={handleRemoveFilter}
                   onFilterChange={handleFilterChange}
-                  onTagChange={setTempSelectedTag}
+                  onTagsChange={setTempSelectedTags}
                   getFilterableFields={getFilterableFields}
                   getFieldType={getFieldType}
                   getOperatorsByType={getOperatorsByType}

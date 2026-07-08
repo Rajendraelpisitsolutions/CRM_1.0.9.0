@@ -6,11 +6,11 @@ function FilterBuilder({
   filters,
   columns,
   tagOptions,
-  selectedTag,
+  selectedTags,
   onAddFilter,
   onRemoveFilter,
   onFilterChange,
-  onTagChange,
+  onTagsChange,
   getFilterableFields,
   getFieldType,
   getOperatorsByType,
@@ -21,29 +21,47 @@ function FilterBuilder({
     tagOptions &&
     tagOptions.length > 0
   ) {
+    const sel = Array.isArray(selectedTags) ? selectedTags : [];
+    const toggle = (t) =>
+      onTagsChange(sel.includes(t) ? sel.filter((x) => x !== t) : [...sel, t]);
     return (
       <div className="space-y-3">
-        <div className="text-sm text-gray-600 mb-2">
-          Select a tag to filter rows in this table
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm text-gray-600">
+            Select tags to filter <span className="text-gray-400">(matches any)</span>
+          </div>
+          {sel.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onTagsChange([])}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap"
+            >
+              Clear ({sel.length})
+            </button>
+          )}
         </div>
-        <select
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
-          value={selectedTag}
-          onChange={(e) => onTagChange(e.target.value)}
-        >
-          <option value="">-- All tags --</option>
+        <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
           {Array.isArray(tagOptions) && tagOptions.length > 0 ? (
             tagOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+              <label
+                key={t}
+                className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={sel.includes(t)}
+                  onChange={() => toggle(t)}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-gray-700 truncate">{t}</span>
+              </label>
             ))
           ) : (
-            <option value="" disabled>
-              -- No tags available --
-            </option>
+            <div className="px-3 py-4 text-sm text-gray-400 text-center">
+              No tags available
+            </div>
           )}
-        </select>
+        </div>
       </div>
     );
   }
