@@ -152,7 +152,7 @@ function Login() {
 
   return (
     <div
-      className="min-h-[125vh] flex items-center justify-center bg-gray-100 p-4 md:p-8"
+      className="min-h-[125vh] flex items-center justify-center bg-gradient-to-br from-[#1f1c2c] to-[#928dab] p-4 md:p-8"
       style={{ fontFamily: "Poppins, sans-serif" }}
     >
       {/* Logo - centered on mobile, top-left on desktop */}
@@ -166,9 +166,10 @@ function Login() {
 
       {/* Main Container */}
       <div className="w-full max-w-4xl mx-auto mt-16 md:mt-0">
-        <div className="flex flex-col md:flex-row w-full min-h-[600px] bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+        <div className="flex flex-col md:flex-row w-full min-h-[600px] bg-white/10 rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden backdrop-blur-xl border border-white/20">
           {/* Left Side - Image (hidden on mobile) */}
           <div className="hidden md:flex md:w-1/2 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#f9f6f6]/80 to-[#928dab]/80 z-0" />
             <img
               src={hero}
               alt="Login visual"
@@ -177,12 +178,12 @@ function Login() {
           </div>
 
           {/* Right Side - Login Form */}
-          <div className="flex-1 md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-16 bg-white">
+          <div className="flex-1 md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-16 bg-[#ceccd6] backdrop-blur-sm">
             <div className="w-full max-w-[420px] space-y-8">
               {/* Header */}
               <div className="space-y-1 text-center md:text-left">
-                <h2 className="text-2xl font-semibold text-gray-900">Welcome back</h2>
-                <p className="text-sm text-gray-500">Login to your account</p>
+                <h2 className="text-3xl font-semibold text-[#8a7594]">Welcome!</h2>
+                <p className="text-gray-500">Login to your account</p>
               </div>
 
               {/* Form */}
@@ -191,7 +192,7 @@ function Login() {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="email"
-                    className="block text-xs font-medium text-gray-700"
+                    className="block text-xs font-medium text-[#6d516d]"
                   >
                     Email or Phone
                   </label>
@@ -201,14 +202,14 @@ function Login() {
                     placeholder="Enter your email or phone"
                     value={EmailOrPhone}
                     onChange={(e) => setEmailOrPhone(e.target.value)}
-                    className={`w-full h-11 px-3 rounded-lg border ${
+                    className={`w-full h-12 px-4 rounded-xl border ${
                       errors.EmailOrPhone
-                        ? "border-red-400 bg-red-50"
-                        : "border-gray-300 bg-white"
-                    } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                        ? "border-red-400 bg-red-50/50"
+                        : "border-[#0f1724]/10 bg-white/80"
+                    } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
                   />
                   {errors.EmailOrPhone && (
-                    <p className="text-red-600 text-xs mt-1">{errors.EmailOrPhone}</p>
+                    <p className="text-[#e05c5c] text-xs mt-1">{errors.EmailOrPhone}</p>
                   )}
                 </div>
 
@@ -216,7 +217,7 @@ function Login() {
                 <div className="space-y-1.5">
                   <label
                     htmlFor="password"
-                    className="block text-xs font-medium text-gray-700"
+                    className="block text-xs font-medium text-[#6d516d]"
                   >
                     Password
                   </label>
@@ -227,11 +228,11 @@ function Login() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full h-11 px-3 pr-12 rounded-lg border ${
+                      className={`w-full h-12 px-4 pr-12 rounded-xl border ${
                         errors.password
-                          ? "border-red-400 bg-red-50"
-                          : "border-gray-300 bg-white"
-                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                          ? "border-red-400 bg-red-50/50"
+                          : "border-[#0f1724]/10 bg-white/80"
+                      } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
                     />
                     <button
                       type="button"
@@ -247,7 +248,7 @@ function Login() {
                     </button>
                   </div>
                   {errors.password && (
-                    <p className="text-red-600 text-xs mt-1">{errors.password}</p>
+                    <p className="text-[#e05c5c] text-xs mt-1">{errors.password}</p>
                   )}
                 </div>
 
@@ -255,7 +256,7 @@ function Login() {
                 <div className="flex justify-end">
                   <a
                     href="/forgot"
-                    className="text-sm text-gray-600 hover:text-gray-900 transition-colors font-medium"
+                    className="text-sm text-[#613a6b] hover:text-[#8a5a9a] transition-colors font-medium"
                   >
                     Forgot password?
                   </a>
@@ -263,14 +264,14 @@ function Login() {
 
                 {/* General Error */}
                 {errors.general && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="p-3 bg-red-100 border border-red-300 rounded-xl">
                     <p className="text-sm text-red-700">{errors.general}</p>
                   </div>
                 )}
 
                 {/* Success Message */}
                 {message && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-xl">
                     <p className="text-sm text-green-700">{message}</p>
                   </div>
                 )}
@@ -279,12 +280,12 @@ function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-11 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
+                  className="w-full h-12 rounded-xl bg-[#573c66] text-[#e6cdf2] font-medium shadow-lg hover:bg-[#6d4d7a] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-200 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
                       <svg
-                        className="animate-spin h-5 w-5 text-white"
+                        className="animate-spin h-5 w-5 text-[#e6cdf2]"
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
                         viewBox="0 0 24 24"
