@@ -4401,9 +4401,14 @@ useEffect(() => {
     // 1) Register the campaign + get each recipient's tracked HTML (open pixel + links woven in).
     let tracked = null;
     try {
+      // Tell the backend the exact origin we reach the API at, so the tracking / unsubscribe
+      // links in the email resolve to the backend in production (not the SPA host).
+      let publicBaseUrl = (apiClient?.defaults?.baseURL || "").replace(/\/api\/?$/i, "");
+      if (!publicBaseUrl || publicBaseUrl.startsWith("/")) publicBaseUrl = window.location.origin;
       const prep = await apiClient.post("/EmailCampaign/prepare", {
         subject,
         body: html,
+        publicBaseUrl,
         recipients: toEmails.map((e) => ({ email: e })),
       });
       const items = Array.isArray(prep.data?.items) ? prep.data.items : null;
@@ -4421,6 +4426,24 @@ useEffect(() => {
     // send doesn't pile up in Sent Items / the mailbox. Falls back to Sent Items if unavailable.
     const campaignFolderId = await ensureMailFolderId(accessToken, "CRM Campaigns");
 
+    // Build the attachment payload once (shared by every recipient). Handles both freshly-picked
+    // File objects and pre-encoded template attachments ({name, contentBytes}).
+    let campaignAttachments = [];
+    try {
+      for (const file of attachments) {
+        if (file && file.contentBytes) {
+          campaignAttachments.push({ "@odata.type": "#microsoft.graph.fileAttachment", name: file.name, contentBytes: file.contentBytes, contentType: file.contentType || "application/octet-stream" });
+        } else {
+          const base64 = await fileToBase64(file);
+          campaignAttachments.push({ "@odata.type": "#microsoft.graph.fileAttachment", name: file.name, contentBytes: base64 });
+        }
+      }
+      for (const file of images) {
+        const base64 = await fileToBase64(file);
+        campaignAttachments.push({ "@odata.type": "#microsoft.graph.fileAttachment", name: file.name, contentBytes: base64 });
+      }
+    } catch (e) { console.error("Campaign attachment prep failed:", e); }
+
     // 2) Send each recipient their own tracked email, collecting outcomes.
     const results = [];
     for (let i = 0; i < tracked.items.length; i++) {
@@ -4430,6 +4453,7 @@ useEffect(() => {
         body: { contentType: "HTML", content: item.html },
         toRecipients: [{ emailAddress: { address: item.email } }],
         ccRecipients: i === 0 ? ccEmails.map((a) => ({ emailAddress: { address: a } })) : [],
+        ...(campaignAttachments.length ? { attachments: campaignAttachments } : {}),
         // Ask for read + delivery receipts so we can confirm opens/delivery even when
         // the recipient's client blocks the tracking pixel (images turned off).
         isReadReceiptRequested: true,

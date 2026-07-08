@@ -90,7 +90,11 @@ namespace Elpis_CRM.Controllers
                 dto.Recipients.Select(r => (r.Email, r.ContactId)),
                 status: "Sending");
 
-            var baseUrl = BaseUrl();
+            // Prefer the origin the frontend actually reaches the API at, so tracking links resolve
+            // to the backend in production regardless of how PublicBaseUrl is configured.
+            var baseUrl = !string.IsNullOrWhiteSpace(dto.PublicBaseUrl)
+                ? dto.PublicBaseUrl.TrimEnd('/')
+                : BaseUrl();
             var recipients = await _db.EmailRecipients.AsNoTracking()
                 .Where(r => r.CampaignId == campaign.Id)
                 .ToListAsync();

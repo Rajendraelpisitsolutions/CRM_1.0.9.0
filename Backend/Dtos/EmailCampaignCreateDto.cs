@@ -10,6 +10,10 @@ namespace Elpis_CRM.Model.DTOs
         public string? Body { get; set; }
         /// <summary>The mailbox to send from (defaults to the signed-in user server-side).</summary>
         public string? FromEmail { get; set; }
+        /// <summary>The public origin the frontend reaches the API at (e.g. https://crm.example.com).
+        /// The open pixel / click / (un)subscribe links are built on this so they resolve to the
+        /// backend in production. Falls back to the Tracking:PublicBaseUrl config when absent.</summary>
+        public string? PublicBaseUrl { get; set; }
         public List<EmailRecipientInputDto> Recipients { get; set; } = new();
     }
 
