@@ -4878,7 +4878,7 @@ useEffect(() => {
             {/* Message body + footer in a single box (footer = logo on the left + text) */}
             <div
               className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
-                quoteHtml ? "min-h-[200px]" : "flex-1 min-h-[400px]"
+                quoteHtml ? "min-h-[220px]" : "flex-1 min-h-[480px]"
               } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -4888,7 +4888,7 @@ useEffect(() => {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… or drop files"}
-                className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400`}
+                className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
               />
               {(footerText || footerLogo) && (
                 <div className={`flex gap-3 items-center p-3 border-t ${d.border}`}>
