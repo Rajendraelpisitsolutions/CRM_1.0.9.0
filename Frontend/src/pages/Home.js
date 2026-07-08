@@ -2846,7 +2846,7 @@ export default function Home() {
                 ]}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} />
+                  <YAxis allowDecimals={false} domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="value" radius={[6, 6, 0, 0]} onClick={(data) => {
                     if (!data || !data.payload) return;
