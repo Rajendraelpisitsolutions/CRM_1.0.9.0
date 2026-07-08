@@ -49,6 +49,22 @@ namespace Elpis_CRM.Services
                 if (seen.Add(email)) cleaned.Add((email, r.ContactId));
             }
 
+            // Honour opt-outs: never build a campaign for anyone who has unsubscribed.
+            if (cleaned.Count > 0)
+            {
+                var emails = cleaned.Select(c => c.Email).ToList();
+                var suppressed = await _db.EmailRecipients
+                    .Where(x => x.Unsubscribed && emails.Contains(x.Email))
+                    .Select(x => x.Email)
+                    .Distinct()
+                    .ToListAsync();
+                if (suppressed.Count > 0)
+                {
+                    var supSet = new HashSet<string>(suppressed, StringComparer.OrdinalIgnoreCase);
+                    cleaned = cleaned.Where(c => !supSet.Contains(c.Email)).ToList();
+                }
+            }
+
             var campaign = new EmailCampaignModel
             {
                 Subject = subject,
@@ -158,11 +174,13 @@ namespace Elpis_CRM.Services
                 return $"href=\"{tracked}\"";
             });
 
-            // 2) Unsubscribe footer.
+            // 2) Subscription footer — both a subscribe and an unsubscribe link.
             html += $"<div style=\"margin-top:18px;padding-top:10px;border-top:1px solid #eee;" +
                     $"font-size:12px;color:#9ca3af;font-family:Arial,Helvetica,sans-serif;\">" +
-                    $"If you no longer wish to receive these emails, you can " +
-                    $"<a href=\"{b}/api/track/u/{token}\" style=\"color:#6b7280;\">unsubscribe</a>.</div>";
+                    $"Manage your subscription: " +
+                    $"<a href=\"{b}/api/track/s/{token}\" style=\"color:#2563eb;\">Subscribe</a>" +
+                    $" &nbsp;·&nbsp; " +
+                    $"<a href=\"{b}/api/track/u/{token}\" style=\"color:#6b7280;\">Unsubscribe</a></div>";
 
             // 3) Open pixel (last, so it loads after the body).
             html += $"<img src=\"{b}/api/track/o/{token}\" width=\"1\" height=\"1\" " +
@@ -251,8 +269,12 @@ namespace Elpis_CRM.Services
             if (r == null || r.Unsubscribed) return;
 
             var now = DateTime.UtcNow;
-            r.Unsubscribed = true;
-            r.UnsubscribedAt = now;
+
+            // Mark this address unsubscribed on every campaign it appears in, so future sends skip it.
+            var rows = await _db.EmailRecipients
+                .Where(x => x.Email == r.Email && !x.Unsubscribed)
+                .ToListAsync();
+            foreach (var x in rows) { x.Unsubscribed = true; x.UnsubscribedAt = now; }
 
             _db.EmailEvents.Add(new EmailEventModel
             {
@@ -266,6 +288,45 @@ namespace Elpis_CRM.Services
 
             var c = await _db.EmailCampaigns.FindAsync(r.CampaignId);
             if (c != null) c.UnsubscribedCount++;
+
+            // Reflect the opt-out on the CRM contact record.
+            if (r.ContactId != null)
+            {
+                var ct = await _db.Contacts.FindAsync(r.ContactId.Value);
+                if (ct != null) ct.SubscriptionStatus = "Unsubscribed";
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        /// <summary>Re-subscribes an address (clears the opt-out everywhere + on the CRM contact) so it
+        /// resumes receiving campaigns. Hit from the "Subscribe" link in the email footer.</summary>
+        public async Task RecordSubscribeAsync(string token, string? ip, string? userAgent)
+        {
+            var r = await _db.EmailRecipients.FirstOrDefaultAsync(x => x.TrackingToken == token);
+            if (r == null) return;
+
+            var now = DateTime.UtcNow;
+            var rows = await _db.EmailRecipients
+                .Where(x => x.Email == r.Email && x.Unsubscribed)
+                .ToListAsync();
+            foreach (var x in rows) { x.Unsubscribed = false; x.UnsubscribedAt = null; }
+
+            _db.EmailEvents.Add(new EmailEventModel
+            {
+                RecipientId = r.Id,
+                CampaignId = r.CampaignId,
+                Type = "Subscribe",
+                OccurredAt = now,
+                IpAddress = ip,
+                UserAgent = Trim(userAgent, 512)
+            });
+
+            if (r.ContactId != null)
+            {
+                var ct = await _db.Contacts.FindAsync(r.ContactId.Value);
+                if (ct != null) ct.SubscriptionStatus = "Subscribed";
+            }
 
             await _db.SaveChangesAsync();
         }

@@ -87,6 +87,7 @@ const EVENT_META = {
   Click: { metric: "clicked", label: "Clicked a link" },
   Reply: { metric: "replied", label: "Replied" },
   Unsubscribe: { metric: "unsubscribed", label: "Unsubscribed" },
+  Subscribe: { metric: "opened", label: "Re-subscribed" },
   Failed: { metric: "failed", label: "Send failed" },
 };
 

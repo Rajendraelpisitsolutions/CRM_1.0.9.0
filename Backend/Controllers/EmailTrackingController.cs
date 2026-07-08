@@ -62,25 +62,49 @@ namespace Elpis_CRM.Controllers
             return ok ? Redirect(dest) : NotFound();
         }
 
-        /// <summary>Unsubscribe link. Records the opt-out and shows a small confirmation page.</summary>
+        /// <summary>Unsubscribe link. Records the opt-out and shows a confirmation page.</summary>
         [HttpGet("u/{token}")]
         public async Task<IActionResult> Unsubscribe(string token)
         {
             try { await _tracking.RecordUnsubscribeAsync(token, ClientIp(), UserAgent()); }
             catch { /* show the page regardless */ }
 
-            const string page = "<!doctype html><html><head><meta charset=\"utf-8\">" +
-                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-                "<title>Unsubscribed</title></head>" +
-                "<body style=\"font-family:Arial,Helvetica,sans-serif;background:#f8fafc;margin:0;\">" +
-                "<div style=\"max-width:480px;margin:12vh auto;background:#fff;border:1px solid #e5e7eb;" +
-                "border-radius:16px;padding:36px;text-align:center;\">" +
-                "<div style=\"font-size:40px\">✓</div>" +
-                "<h2 style=\"color:#111827;margin:8px 0;\">You've been unsubscribed</h2>" +
-                "<p style=\"color:#6b7280;\">You won't receive further emails from this list. " +
-                "You can close this window.</p></div></body></html>";
-            return Content(page, "text/html");
+            return Content(ConfirmPage(
+                "Unsubscribed",
+                "Unsubscribed successfully",
+                "You have been unsubscribed. You will not receive any further emails from us. " +
+                "Changed your mind? Use the Subscribe link in any earlier email to opt back in."
+            ), "text/html");
         }
+
+        /// <summary>Subscribe link. Clears the opt-out and shows a confirmation page.</summary>
+        [HttpGet("s/{token}")]
+        public async Task<IActionResult> Subscribe(string token)
+        {
+            try { await _tracking.RecordSubscribeAsync(token, ClientIp(), UserAgent()); }
+            catch { /* show the page regardless */ }
+
+            return Content(ConfirmPage(
+                "Subscribed",
+                "Subscribed successfully",
+                "You're subscribed. You'll keep receiving the emails we send. " +
+                "You can unsubscribe at any time using the link in our emails."
+            ), "text/html");
+        }
+
+        // Small self-contained confirmation page shown to recipients.
+        private static string ConfirmPage(string title, string heading, string message) =>
+            "<!doctype html><html><head><meta charset=\"utf-8\">" +
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+            $"<title>{title}</title></head>" +
+            "<body style=\"font-family:Arial,Helvetica,sans-serif;background:#f8fafc;margin:0;\">" +
+            "<div style=\"max-width:480px;margin:12vh auto;background:#fff;border:1px solid #e5e7eb;" +
+            "border-radius:16px;padding:36px;text-align:center;\">" +
+            "<div style=\"width:56px;height:56px;border-radius:50%;background:#ecfdf5;color:#059669;" +
+            "font-size:30px;line-height:56px;margin:0 auto 12px;\">✓</div>" +
+            $"<h2 style=\"color:#111827;margin:8px 0;\">{heading}</h2>" +
+            $"<p style=\"color:#6b7280;line-height:1.6;\">{message} You can close this window.</p>" +
+            "</div></body></html>";
 
         private string? ClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
         private string? UserAgent() => Request.Headers["User-Agent"].ToString();
