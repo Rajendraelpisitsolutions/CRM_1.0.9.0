@@ -46,6 +46,10 @@ namespace Elpis_CRM.Model
         public bool Replied { get; set; }
         public DateTime? RepliedAt { get; set; }
 
+        /// <summary>Confirmed delivered to the recipient's mail server (via a delivery receipt).</summary>
+        public bool Delivered { get; set; }
+        public DateTime? DeliveredAt { get; set; }
+
         public EmailCampaignModel? Campaign { get; set; }
     }
 }

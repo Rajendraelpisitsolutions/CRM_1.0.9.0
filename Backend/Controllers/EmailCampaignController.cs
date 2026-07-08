@@ -116,6 +116,7 @@ namespace Elpis_CRM.Controllers
             int failed = c.Sum(x => x.FailedCount);
             int recipients = c.Sum(x => x.TotalRecipients);
             int replied = c.Sum(x => x.RepliedCount);
+            int delivered = c.Sum(x => x.DeliveredCount);
 
             return Ok(new
             {
@@ -127,9 +128,11 @@ namespace Elpis_CRM.Controllers
                 clicked,
                 unsubscribed = unsub,
                 replied,
+                delivered,
                 openRate = Rate(opened, sent),
                 clickRate = Rate(clicked, sent),
                 replyRate = Rate(replied, sent),
+                deliveryRate = Rate(delivered, sent),
                 unsubscribeRate = Rate(unsub, sent)
             });
         }
@@ -158,6 +161,7 @@ namespace Elpis_CRM.Controllers
                 x.ClickedCount,
                 x.UnsubscribedCount,
                 x.RepliedCount,
+                x.DeliveredCount,
                 openRate = Rate(x.OpenedCount, x.SentCount),
                 clickRate = Rate(x.ClickedCount, x.SentCount),
                 replyRate = Rate(x.RepliedCount, x.SentCount)
@@ -190,6 +194,7 @@ namespace Elpis_CRM.Controllers
                 x.ClickedCount,
                 x.UnsubscribedCount,
                 x.RepliedCount,
+                x.DeliveredCount,
                 openRate = Rate(x.OpenedCount, x.SentCount),
                 clickRate = Rate(x.ClickedCount, x.SentCount),
                 replyRate = Rate(x.RepliedCount, x.SentCount),
@@ -211,6 +216,7 @@ namespace Elpis_CRM.Controllers
                 "opened" => q.Where(r => r.FirstOpenedAt != null),
                 "clicked" => q.Where(r => r.FirstClickedAt != null),
                 "replied" => q.Where(r => r.Replied),
+                "delivered" => q.Where(r => r.Delivered),
                 "unsubscribed" => q.Where(r => r.Unsubscribed),
                 "unopened" => q.Where(r => r.Status == "Sent" && r.FirstOpenedAt == null),
                 "failed" => q.Where(r => r.Status == "Failed"),
@@ -239,7 +245,9 @@ namespace Elpis_CRM.Controllers
                     r.Unsubscribed,
                     r.UnsubscribedAt,
                     r.Replied,
-                    r.RepliedAt
+                    r.RepliedAt,
+                    r.Delivered,
+                    r.DeliveredAt
                 })
                 .ToListAsync();
 
@@ -285,6 +293,18 @@ namespace Elpis_CRM.Controllers
             return Ok();
         }
 
+        /// <summary>
+        /// Records the results of a client-side inbox scan: read-receipt opens (confirm opens even
+        /// when the tracking pixel is blocked), delivery receipts, and genuine replies.
+        /// </summary>
+        [HttpPost("{id:long}/receipts")]
+        public async Task<IActionResult> Receipts(long id, [FromBody] ReceiptsDto dto)
+        {
+            if (dto == null) return Ok();
+            await _tracking.RecordReceiptsAsync(id, dto.Opens, dto.Delivered, dto.Replies);
+            return Ok();
+        }
+
         private static double Rate(int part, int whole) =>
             whole <= 0 ? 0 : Math.Round(part * 100.0 / whole, 1);
     }
@@ -292,5 +312,12 @@ namespace Elpis_CRM.Controllers
     public class RepliesDto
     {
         public List<string> Emails { get; set; } = new();
+    }
+
+    public class ReceiptsDto
+    {
+        public List<string> Opens { get; set; } = new();
+        public List<string> Delivered { get; set; } = new();
+        public List<string> Replies { get; set; } = new();
     }
 }

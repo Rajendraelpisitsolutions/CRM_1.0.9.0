@@ -302,6 +302,13 @@ IF COL_LENGTH('dbo.EmailRecipients','Replied') IS NULL
     ALTER TABLE dbo.EmailRecipients ADD Replied BIT NOT NULL DEFAULT 0;
 IF COL_LENGTH('dbo.EmailRecipients','RepliedAt') IS NULL
     ALTER TABLE dbo.EmailRecipients ADD RepliedAt DATETIME2 NULL;
+-- Add delivery-receipt columns (schema is hand-managed).
+IF COL_LENGTH('dbo.EmailCampaigns','DeliveredCount') IS NULL
+    ALTER TABLE dbo.EmailCampaigns ADD DeliveredCount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.EmailRecipients','Delivered') IS NULL
+    ALTER TABLE dbo.EmailRecipients ADD Delivered BIT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.EmailRecipients','DeliveredAt') IS NULL
+    ALTER TABLE dbo.EmailRecipients ADD DeliveredAt DATETIME2 NULL;
 IF OBJECT_ID(N'dbo.EmailEvents', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.EmailEvents (

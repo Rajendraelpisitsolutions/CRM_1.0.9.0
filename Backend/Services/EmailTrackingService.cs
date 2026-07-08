@@ -310,6 +310,87 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
+        /// Records inbox-derived signals the client reports after scanning the sender's mailbox via
+        /// Graph: read receipts (→ open, works even when the pixel is blocked), delivery receipts
+        /// (→ delivered), and genuine replies. Each is applied at most once per recipient.
+        /// </summary>
+        public async Task RecordReceiptsAsync(
+            long campaignId,
+            IEnumerable<string>? opens,
+            IEnumerable<string>? delivered,
+            IEnumerable<string>? replies)
+        {
+            HashSet<string> ToSet(IEnumerable<string>? e) => new(
+                (e ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+
+            var openSet = ToSet(opens);
+            var delivSet = ToSet(delivered);
+            var replySet = ToSet(replies);
+            if (openSet.Count == 0 && delivSet.Count == 0 && replySet.Count == 0) return;
+
+            var campaign = await _db.EmailCampaigns.FindAsync(campaignId);
+            if (campaign == null) return;
+
+            var recips = await _db.EmailRecipients
+                .Where(r => r.CampaignId == campaignId)
+                .ToListAsync();
+
+            var now = DateTime.UtcNow;
+            foreach (var r in recips)
+            {
+                // Read receipt → first open (independent of the tracking pixel).
+                if (openSet.Contains(r.Email) && r.FirstOpenedAt == null)
+                {
+                    r.FirstOpenedAt = now;
+                    r.LastOpenedAt = now;
+                    r.OpenCount++;
+                    campaign.OpenedCount++;
+                    _db.EmailEvents.Add(new EmailEventModel
+                    {
+                        RecipientId = r.Id,
+                        CampaignId = campaignId,
+                        Type = "Open",
+                        OccurredAt = now,
+                        UserAgent = "Read receipt"
+                    });
+                }
+
+                // Delivery receipt → delivered (once).
+                if (delivSet.Contains(r.Email) && !r.Delivered)
+                {
+                    r.Delivered = true;
+                    r.DeliveredAt = now;
+                    campaign.DeliveredCount++;
+                    _db.EmailEvents.Add(new EmailEventModel
+                    {
+                        RecipientId = r.Id,
+                        CampaignId = campaignId,
+                        Type = "Delivered",
+                        OccurredAt = now
+                    });
+                }
+
+                // Genuine reply (once).
+                if (replySet.Contains(r.Email) && !r.Replied)
+                {
+                    r.Replied = true;
+                    r.RepliedAt = now;
+                    campaign.RepliedCount++;
+                    _db.EmailEvents.Add(new EmailEventModel
+                    {
+                        RecipientId = r.Id,
+                        CampaignId = campaignId,
+                        Type = "Reply",
+                        OccurredAt = now
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        /// <summary>
         /// Turns a raw User-Agent into a friendly device + client, and flags image-proxy pre-fetches.
         /// Gmail/Yahoo proxy-preload every pixel, so those "opens" are automated, not human reads —
         /// surfacing that is more honest than Freshsales, which just counts them as opens.

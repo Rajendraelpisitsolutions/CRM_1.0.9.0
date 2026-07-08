@@ -344,7 +344,7 @@ function Dashboard() {
 
     setActiveContent(tab);
     setOpenTabs([tab]);
-    // ✅ ALWAYS CLOSE the add panel when navigating between tabs
+    //  ALWAYS CLOSE the add panel when navigating between tabs
     setShowPanel(false);
   }, [location.pathname]);
 

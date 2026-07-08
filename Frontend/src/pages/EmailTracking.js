@@ -81,7 +81,8 @@ const StatTile = ({ metric, label, value, sub }) => {
 
 // ── Per-recipient event timeline ──────────────────────────────────────────────
 const EVENT_META = {
-  Sent: { metric: "sent", label: "Delivered" },
+  Sent: { metric: "sent", label: "Sent" },
+  Delivered: { metric: "sent", label: "Delivered (confirmed)" },
   Open: { metric: "opened", label: "Opened" },
   Click: { metric: "clicked", label: "Clicked a link" },
   Reply: { metric: "replied", label: "Replied" },
@@ -161,21 +162,46 @@ function CampaignDetail({ campaignId, onBack }) {
     }
   };
 
+  // Scans the signed-in mailbox once and derives three signals per recipient:
+  //   • read receipts (subject "Read: …", sent by the recipient) → confirmed OPEN (works even
+  //     when the tracking pixel was blocked by images-off clients),
+  //   • delivery receipts (subject "Delivered: …", sent by the mail system) → DELIVERED,
+  //   • any other message from a recipient → genuine REPLY.
   const checkReplies = async () => {
     if (!accounts || accounts.length === 0) { setReplyMsg("Sign in to Outlook to check replies."); return; }
     setCheckingReplies(true); setReplyMsg("");
     try {
       const tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.Read"] });
-      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=from,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
       const data = await res.json();
-      const senders = new Set((data.value || []).map((mm) => (mm.from?.emailAddress?.address || "").toLowerCase()).filter(Boolean));
-      const matched = recipients.map((r) => (r.email || "")).filter((e) => senders.has(e.toLowerCase()));
-      if (matched.length) {
-        await apiClient.post(`/EmailCampaign/${campaignId}/replies`, { emails: matched });
-        setReplyMsg(`Found ${matched.length} repl${matched.length === 1 ? "y" : "ies"}.`);
+      const recEmails = recipients.map((r) => (r.email || "").toLowerCase()).filter(Boolean);
+      const recSet = new Set(recEmails);
+      const opens = new Set(), delivered = new Set(), replies = new Set();
+      for (const mm of (data.value || [])) {
+        const from = (mm.from?.emailAddress?.address || "").toLowerCase();
+        const subj = (mm.subject || "").trim();
+        const isRead = /^(read:|read receipt)/i.test(subj);
+        const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:)/i.test(subj);
+        if (isRead) {
+          if (recSet.has(from)) opens.add(from);           // read receipt → open
+        } else if (isDelivered) {
+          const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
+          for (const e of recEmails) if (hay.includes(e)) delivered.add(e);  // delivery receipt → delivered
+        } else if (recSet.has(from)) {
+          replies.add(from);                                // real reply
+        }
+      }
+      const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
+      if (oArr.length || dArr.length || rArr.length) {
+        await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr });
+        const parts = [];
+        if (rArr.length) parts.push(`${rArr.length} repl${rArr.length === 1 ? "y" : "ies"}`);
+        if (oArr.length) parts.push(`${oArr.length} read receipt${oArr.length === 1 ? "" : "s"}`);
+        if (dArr.length) parts.push(`${dArr.length} delivered`);
+        setReplyMsg(`Found ${parts.join(", ")}.`);
         loadDetail(); loadRecipients();
-      } else setReplyMsg("No replies from these recipients found in your inbox.");
-    } catch { setReplyMsg("Couldn't check replies (Outlook sign-in / permission needed)."); }
+      } else setReplyMsg("No replies or receipts from these recipients found in your inbox.");
+    } catch { setReplyMsg("Couldn't check inbox (Outlook sign-in / permission needed)."); }
     finally { setCheckingReplies(false); }
   };
 

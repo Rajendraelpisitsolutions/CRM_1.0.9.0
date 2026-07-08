@@ -37,5 +37,6 @@ namespace Elpis_CRM.Model
         public int ClickedCount { get; set; }
         public int UnsubscribedCount { get; set; }
         public int RepliedCount { get; set; }
+        public int DeliveredCount { get; set; }
     }
 }

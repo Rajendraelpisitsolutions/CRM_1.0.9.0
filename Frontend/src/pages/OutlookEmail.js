@@ -4262,6 +4262,10 @@ useEffect(() => {
         body: { contentType: "HTML", content: item.html },
         toRecipients: [{ emailAddress: { address: item.email } }],
         ccRecipients: i === 0 ? ccEmails.map((a) => ({ emailAddress: { address: a } })) : [],
+        // Ask for read + delivery receipts so we can confirm opens/delivery even when
+        // the recipient's client blocks the tracking pixel (images turned off).
+        isReadReceiptRequested: true,
+        isDeliveryReceiptRequested: true,
       };
       try {
         const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
