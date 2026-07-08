@@ -12,3 +12,6 @@
 # Node
 node_modules/
 build/
+
+# Build archives / exports (should not be committed)
+*.zip
