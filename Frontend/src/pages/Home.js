@@ -2865,20 +2865,20 @@ export default function Home() {
             {/* Summary Statistics */}
             <ChartCard title="Dashboard Summary" subtitle="Key metrics overview">
               <div className="space-y-4">
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Deals</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{filteredDeals.length}</p>
-                  <p className="text-xs text-gray-500 mt-1">{analytics.dealsWon} won | {analytics.dealsLost} lost</p>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-600">Total Deals</p>
+                  <p className="text-2xl font-semibold text-blue-700 mt-1">{filteredDeals.length}</p>
+                  <p className="text-xs text-blue-600/70 mt-1">{analytics.dealsWon} won | {analytics.dealsLost} lost</p>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Revenue</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.totalRevenue)}</p>
-                  <p className="text-xs text-gray-500 mt-1">from {analytics.dealsWon} closed deals</p>
+                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Total Revenue</p>
+                  <p className="text-2xl font-semibold text-emerald-700 mt-1">{formatCurrency(analytics.totalRevenue)}</p>
+                  <p className="text-xs text-emerald-600/70 mt-1">from {analytics.dealsWon} closed deals</p>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pipeline Value</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.pipelineValue)}</p>
-                  <p className="text-xs text-gray-500 mt-1">{filteredDeals.filter(d => !['Won', 'Lost', 'PO Received'].includes(d.dealStage)).length} open deals</p>
+                <div className="p-4 bg-violet-50 rounded-lg border border-violet-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-600">Pipeline Value</p>
+                  <p className="text-2xl font-semibold text-violet-700 mt-1">{formatCurrency(analytics.pipelineValue)}</p>
+                  <p className="text-xs text-violet-600/70 mt-1">{filteredDeals.filter(d => !['Won', 'Lost', 'PO Received'].includes(d.dealStage)).length} open deals</p>
                 </div>
               </div>
             </ChartCard>
