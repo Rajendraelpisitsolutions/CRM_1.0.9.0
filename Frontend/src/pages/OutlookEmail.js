@@ -4878,7 +4878,7 @@ useEffect(() => {
             {/* Message body + footer in a single box (footer = logo on the left + text) */}
             <div
               className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
-                quoteHtml ? "min-h-[120px]" : "flex-1 min-h-[220px]"
+                quoteHtml ? "min-h-[200px]" : "flex-1 min-h-[400px]"
               } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
