@@ -31,7 +31,7 @@ function FilterItem({
 
       {/* Field Select */}
       <select
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 bg-white"
         value={filter.field}
         onChange={(e) => onFieldChange(filter.id, e.target.value)}
       >
@@ -44,7 +44,7 @@ function FilterItem({
 
       {/* Operator Select */}
       <select
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 bg-white"
         value={filter.operator}
         onChange={(e) => onOperatorChange(filter.id, e.target.value)}
       >
@@ -61,14 +61,14 @@ function FilterItem({
           {filter.dataType === "date" ? (
             <input
               type="date"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
               value={filter.value}
               onChange={(e) => onValueChange(filter.id, e.target.value)}
             />
           ) : filter.dataType === "number" ? (
             <input
               type="number"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
               value={filter.value}
               onChange={(e) => onValueChange(filter.id, e.target.value)}
               placeholder="Enter number..."
@@ -76,7 +76,7 @@ function FilterItem({
           ) : (
             <input
               type="text"
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
               value={filter.value}
               onChange={(e) => onValueChange(filter.id, e.target.value)}
               placeholder="Enter value..."

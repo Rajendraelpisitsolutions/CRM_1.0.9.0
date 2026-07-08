@@ -142,8 +142,59 @@ namespace Elpis_CRM.Services
             existing.CreatedById = note.CreatedById;
             existing.UpdatedAt = DateTime.UtcNow;
 
+            // 1) Always record the note's OWN record in NoteTargets. For a legacy note this
+            //    migrates it into the shared model the first time it is edited; if the link
+            //    already exists nothing is added (idempotent).
+            if (existing.ContactId.HasValue && existing.ContactId.Value > 0)
+                await EnsureTargetAsync(existing.Id, "Contact", existing.ContactId.Value);
+            if (existing.DealId.HasValue && existing.DealId.Value > 0)
+                await EnsureTargetAsync(existing.Id, "Deal", existing.DealId.Value);
+
+            // 2) Checklist-driven sharing: the update UI shows the related contacts/deals and the
+            //    user ticks who this note should also appear under. Each ticked id becomes a
+            //    NoteTargets reference here (same shape as create's MirrorTo* on AddNote). This
+            //    lets old duplicate-style notes be linked to their relations without new copies,
+            //    so the contact/deal notes panels can segregate them. Additive and idempotent —
+            //    an already-linked target is skipped and nothing is removed.
+            if (note.MirrorToContactIds != null)
+                foreach (var cid in note.MirrorToContactIds.Where(x => x > 0).Distinct())
+                    await EnsureTargetAsync(existing.Id, "Contact", cid);
+            if (note.MirrorToDealIds != null)
+                foreach (var did in note.MirrorToDealIds.Where(x => x > 0).Distinct())
+                    await EnsureTargetAsync(existing.Id, "Deal", did);
+
             await _notesDb.SaveChangesAsync();
             return existing;
+        }
+
+        /// <summary>
+        /// Ensures a single (NoteId, TargetType, TargetId) association exists in NoteTargets.
+        /// It checks both the rows already saved and any staged in this unit of work, and only
+        /// adds the row when absent, so calling this repeatedly never creates duplicate links.
+        /// The new row (if any) is staged on the context; the caller runs SaveChangesAsync.
+        /// </summary>
+        /// <param name="noteId">The note the association belongs to.</param>
+        /// <param name="targetType">"Contact" or "Deal".</param>
+        /// <param name="targetId">The Contacts.ContactId or Deals.Id being linked.</param>
+        private async Task EnsureTargetAsync(int noteId, string targetType, long targetId)
+        {
+            // Already staged (added but not yet saved) in this same update?
+            bool staged = _notesDb.NoteTargets.Local.Any(t =>
+                t.NoteId == noteId && t.TargetType == targetType && t.TargetId == targetId);
+            if (staged) return;
+
+            bool exists = await _notesDb.NoteTargets.AnyAsync(t =>
+                t.NoteId == noteId && t.TargetType == targetType && t.TargetId == targetId);
+
+            if (!exists)
+            {
+                _notesDb.NoteTargets.Add(new NoteTargetModel
+                {
+                    NoteId = noteId,
+                    TargetType = targetType,
+                    TargetId = targetId
+                });
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────

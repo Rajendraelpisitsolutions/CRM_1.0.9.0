@@ -3,13 +3,13 @@ import apiClient from "../api/client";
 import AuthContext from "../auth/AuthContext";
 import { Country, State, City } from "country-state-city";
 import ContactEmailLogs from "./ContactEmailLogs";
-import { FiTrash2 } from "react-icons/fi";
+import { FiTrash2, FiMail } from "react-icons/fi";
 import { exportTableToExcel } from "../utils/excelExport";
 import { useServerPagination } from "../hooks/useServerPagination";
 import { LAZY_LOADING_CONFIG } from "../config/lazyLoadingConfig";
 import SearchBar from "../utils/SearchBar";
 import { searchAccounts } from "../api/entitySearch";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 // Compatibility wrapper: route same-origin fetch calls through axios client
 async function fetchApi(url, options) {
@@ -83,6 +83,8 @@ function Contacts({
   searchHighlight,
   onSearchHighlightDone,
 }) {
+  const navigate = useNavigate();
+
   // Get user role from AuthContext
   const auth = useContext(AuthContext);
   const userRole = auth?.getRole?.();
@@ -259,6 +261,11 @@ function Contacts({
   // State for selected rows
   const [selected, setSelected] = useState(() => new Set());
   const [isExportingAll, setIsExportingAll] = useState(false);
+  // When true, the selection means "every contact across all pages" (Gmail-style),
+  // not just the rows currently loaded on the visible page.
+  const [selectAllAcrossPages, setSelectAllAcrossPages] = useState(false);
+  // True while we page through the backend to gather every contact's email for a bulk send.
+  const [emailPreparing, setEmailPreparing] = useState(false);
 
   // Server-side pagination hook - fetch contacts in pages
   const fetchContactsPage = React.useCallback(async (page, pageSize) => {
@@ -393,6 +400,13 @@ function Contacts({
 
   // Slide-in details state - declare early for use in dependencies
   const [selectedContactDetails, setSelectedContactDetails] = useState(null);
+  // Detail slide-in shows populated fields first; empties hide behind a toggle.
+  const [showContactEmpty, setShowContactEmpty] = useState(false);
+  const contactHasData = (key) => {
+    if (!selectedContactDetails) return false;
+    const v = getField(selectedContactDetails, key);
+    return v !== null && v !== undefined && String(v).trim() !== "";
+  };
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState(null);
   const hasEnquiryNo = Boolean(selectedContactDetails?.EnquiryNo || selectedContactDetails?.enquiryNo);
@@ -579,6 +593,9 @@ function Contacts({
   useEffect(() => {
     clearCache();
     goToPage(1);
+    // A new result set invalidates any "all across pages" selection.
+    setSelected(new Set());
+    setSelectAllAcrossPages(false);
   }, [filters, debouncedSearch, goToPage, clearCache]);
 
   // Refetch when an import completes for Contacts
@@ -603,10 +620,16 @@ function Contacts({
     return () => window.removeEventListener("contactAdded", handler);
   }, [clearCache, goToPage]);
 
-  // Select or deselect all rows
+  // Select or deselect all rows.
+  // Checking the header checkbox selects EVERY contact (across all pages), not just
+  // the rows currently loaded, so the counter reflects the full total. When there is
+  // only a single page, the in-memory selection already is "all", so no across-pages
+  // fetch is needed.
   const toggleAll = () => {
     const next = selected.size === (sortedData?.length || 0) ? new Set() : new Set((sortedData || []).map((_, idx) => idx));
     setSelected(next);
+    const isSelectingAll = next.size > 0;
+    setSelectAllAcrossPages(isSelectingAll && totalItems > (sortedData?.length || 0));
     // persist selected emails and tags to localStorage
     const emails = Array.from(next)
       .map((i) => getField(sortedData[i], "WorkEmail"))
@@ -628,6 +651,8 @@ function Contacts({
 
   // Toggle a single row selection
   const toggleRow = (idx) => {
+    // Changing an individual row breaks the "all contacts across pages" meaning.
+    setSelectAllAcrossPages(false);
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(idx) ? next.delete(idx) : next.add(idx);
@@ -727,11 +752,123 @@ function Contacts({
     }
   };
 
-  // Delete selected rows
+  // Gather emails from an array of contact rows (WorkEmail + the multi-value fields).
+  const emailsFromRows = React.useCallback(
+    (rows) =>
+      extractUniqueEmails(
+        ...rows.map((row) => [
+          getField(row, "WorkEmail"),
+          getField(row, "Email"),
+          getField(row, "Emails"),
+          getField(row, "EmailIds"),
+        ])
+      ),
+    []
+  );
+
+  // Fetch EVERY contact's email across all pages, honoring the active tag filter /
+  // search so "all" matches what the table is currently showing.
+  const fetchAllContactEmails = React.useCallback(async () => {
+    const normalizedSearch = debouncedSearch.trim();
+    const tagFilter = (filters || []).find((f) => String(f.field).toLowerCase().includes("tag"));
+
+    // A tag filter has a dedicated endpoint that returns the emails directly.
+    if (tagFilter && tagFilter.value) {
+      const tagValue = Array.isArray(tagFilter.value) ? tagFilter.value.join(",") : String(tagFilter.value);
+      const res = await fetch(`/Contact/tags/emails?tags=${encodeURIComponent(tagValue)}`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const joined = await res.json(); // comma-joined string of addresses
+      return extractUniqueEmails(joined);
+    }
+
+    // General case: one fast, projected call for ALL emails (no paging through full contact
+    // rows / image blobs), honoring the active search.
+    const searchParam = normalizedSearch ? `?search=${encodeURIComponent(normalizedSearch)}` : "";
+    const res = await fetch(`/Contact/emails/all${searchParam}`);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    const joined = await res.json(); // comma-joined string of addresses
+    return extractUniqueEmails(joined);
+  }, [debouncedSearch, filters]);
+
+  // Send email to selected contacts: gather all their emails FIRST (showing a brief
+  // "Preparing…" state while paging the backend for "all across pages"), then open the
+  // Outlook composer with the recipients already filled into the To field.
+  const handleSendEmailToSelected = async () => {
+    if (emailPreparing) return;
+    try {
+      let emails;
+      if (selectAllAcrossPages) {
+        setEmailPreparing(true);
+        emails = await fetchAllContactEmails();
+      } else {
+        emails = emailsFromRows(Array.from(selected).map((i) => sortedData[i]));
+      }
+      if (!emails || emails.length === 0) {
+        onToast?.("No email addresses found for the selected contacts", "error");
+        return;
+      }
+      localStorage.setItem("selectedContactEmails", JSON.stringify(emails));
+      // Open the composer straight away with these recipients already loaded.
+      localStorage.setItem("openComposeOnLoad", "1");
+      onToast?.(
+        `Composing email to ${emails.length} recipient${emails.length > 1 ? "s" : ""}`,
+        "success"
+      );
+      navigate("/dashboard/OutlookEmail");
+    } catch (err) {
+      console.error("Failed to gather emails for bulk send:", err);
+      onToast?.("Failed to gather contact emails", "error");
+    } finally {
+      setEmailPreparing(false);
+    }
+  };
+
+  // Fetch EVERY matching contact's id across all pages, honoring the active tag filter /
+  // search — used when "all contacts" is selected so bulk delete covers every row.
+  const fetchAllContactIds = React.useCallback(async () => {
+    const normalizedSearch = debouncedSearch.trim();
+    const tagFilter = (filters || []).find((f) => String(f.field).toLowerCase().includes("tag"));
+    let rows = [];
+    if (tagFilter && tagFilter.value) {
+      const tagValue = Array.isArray(tagFilter.value) ? tagFilter.value.join(",") : String(tagFilter.value);
+      const res = await fetch(`/Contact/tags/contacts?tags=${encodeURIComponent(tagValue)}`);
+      if (res.ok) {
+        const json = await res.json();
+        rows = Array.isArray(json) ? json : [];
+      }
+    } else {
+      const pageSize = 500;
+      const searchParam = normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : "";
+      const first = await fetch(`/Contact?page=1&pageSize=${pageSize}${searchParam}`);
+      if (first.ok) {
+        const firstJson = await first.json();
+        rows = Array.isArray(firstJson.items) ? [...firstJson.items] : [];
+        const totalPages = Math.max(1, Math.ceil((firstJson.totalCount || 0) / pageSize));
+        for (let p = 2; p <= totalPages; p++) {
+          const res = await fetch(`/Contact?page=${p}&pageSize=${pageSize}${searchParam}`);
+          if (!res.ok) break;
+          const json = await res.json();
+          if (Array.isArray(json.items)) rows = rows.concat(json.items);
+        }
+      }
+    }
+    return rows.map((r) => getField(r, "ContactId")).filter((v) => v !== undefined && v !== null);
+  }, [debouncedSearch, filters]);
+
+  // Delete selected rows (or every contact when "all across pages" is selected)
   const handleDeleteClick = () => {
+    if (selectAllAcrossPages) {
+      if (!totalItems) {
+        onToast?.("No contacts selected to delete", "error");
+        return;
+      }
+      setDeleteCount(totalItems);
+      setDeleteContactName(`all ${totalItems} contacts`);
+      setShowDeleteModal(true);
+      return;
+    }
     const indexes = Array.from(selected);
     const ids = indexes.map((i) => getField(sortedData[i], "ContactId")).filter((v) => v !== undefined && v !== null);
-    console.log("handleDeleteClick selected indexes:", indexes, "ids:", ids);
     if (ids.length === 0) {
       onToast?.("No contacts selected to delete", "error");
       return;
@@ -739,39 +876,44 @@ function Contacts({
     setDeleteCount(ids.length);
     const _names = indexes.map((i) => { const _r = sortedData[i]; const fn = getField(_r, 'FirstName') || ''; const ln = getField(_r, 'LastName') || ''; return (fn + ' ' + ln).trim() || 'Contact'; }); setDeleteContactName(_names.join(', '));
     setShowDeleteModal(true);
-    onToast?.(`Delete ${ids.length} contact(s) selected`, "info");
   };
 
   const confirmDelete = async () => {
-    const indexes = Array.from(selected);
-    const ids = indexes
-      .map((i) => getField(sortedData[i], "ContactId"))
-      .filter(Boolean);
-
     setShowDeleteModal(false);
-    if (ids.length === 0) return;
-
     try {
-      console.log("Deleting contacts", ids);
+      let ids;
+      if (selectAllAcrossPages) {
+        onToast?.("Preparing to delete all contacts...", "info");
+        ids = await fetchAllContactIds();
+      } else {
+        ids = Array.from(selected)
+          .map((i) => getField(sortedData[i], "ContactId"))
+          .filter(Boolean);
+      }
+      if (!ids || ids.length === 0) return;
+
       onToast?.(`Deleting ${ids.length} contact(s)...`, "info");
-      await Promise.all(
-        ids.map(async (id) => {
-          const res = await fetch(`/Contact/${id}`, {
-            method: "DELETE",
-          });
-          console.log(`DELETE /Contact/${id} -> ${res.status}`);
-          if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            console.error(`Delete failed for ${id}:`, res.status, text);
-            throw new Error(`Failed to delete contact ${id}: ${res.status}`);
-          }
-          return res;
-        })
-      );
+      // Delete in batches so a very large "delete all" doesn't fire thousands of
+      // requests at once.
+      const BATCH = 20;
+      for (let i = 0; i < ids.length; i += BATCH) {
+        const slice = ids.slice(i, i + BATCH);
+        await Promise.all(
+          slice.map(async (id) => {
+            const res = await fetch(`/Contact/${id}`, { method: "DELETE" });
+            if (!res.ok) {
+              const text = await res.text().catch(() => "");
+              throw new Error(`Failed to delete contact ${id}: ${res.status} ${text}`);
+            }
+            return res;
+          })
+        );
+      }
 
       clearCache();
       await refetch();
       setSelected(new Set());
+      setSelectAllAcrossPages(false);
       // notify parent to refresh its list (Dashboard)
       try { onRefetch?.(); } catch (_) { }
       onToast?.(`Deleted ${ids.length} contacts`, "success");
@@ -779,7 +921,10 @@ function Contacts({
       try { handleCloseContactDetails(); } catch (e) { /* ignore */ }
     } catch (err) {
       console.error(err);
-      onToast?.("Failed to delete contacts", "error");
+      onToast?.("Failed to delete some contacts", "error");
+      // Refresh so the list reflects whatever was already deleted.
+      clearCache();
+      await refetch();
     }
   };
 
@@ -1022,51 +1167,71 @@ function Contacts({
       <div className="relative flex flex-col flex-1 w-full h-full min-h-0 overflow-hidden font-[poppins,sans-serif]">
         {paginationLoading && (
           <div className="absolute inset-0 z-40 bg-white/75 backdrop-blur-sm flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800" />
           </div>
         )}
         {selected.size > 0 && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-blue-50 rounded-lg sm:rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-blue-100 mb-4 w-full backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-semibold text-sm">
-                {selected.size}
+          <div className="flex flex-col gap-2 mb-4 w-full">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 w-full">
+              <div className="flex items-center gap-2">
+                <div className="min-w-8 h-8 px-2 bg-slate-800 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                  {selectAllAcrossPages ? totalItems : selected.size}
+                </div>
+                <span className="text-sm sm:text-base text-gray-700">selected</span>
               </div>
-              <span className="text-sm sm:text-base text-gray-700">selected</span>
-            </div>
-            <div className="hidden sm:flex flex-1" />
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 hover:shadow-sm transition-all duration-200"
-                onClick={exportCsv}
-              >
-                Export Selected
-              </button>
-              <button
-                className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 hover:shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={exportAllCsv}
-                disabled={isExportingAll}
-              >
-                {isExportingAll ? (
-                  <span className="inline-block animate-spin mr-2"></span>
-                ) : null}
-                Export All
-              </button>
-              {isAdminOnly && (
+              <div className="hidden sm:flex flex-1" />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Send Email — always available for any selection (one, some, or all) */}
                 <button
-                  aria-label="Delete selected"
-                  className="flex-1 sm:flex-none bg-white border border-red-200 text-red-600 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium hover:bg-red-50 transition-all duration-200"
-                  onClick={handleDeleteClick}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-slate-800 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-white font-medium hover:bg-slate-900 transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                  onClick={handleSendEmailToSelected}
+                  disabled={emailPreparing}
                 >
-                  <FiTrash2 className="inline mr-1" /> Delete
+                  {emailPreparing ? (
+                    <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FiMail className="w-4 h-4" />
+                  )}
+                  {emailPreparing ? "Preparing…" : "Send Email"}
                 </button>
-              )}
+                {/* Export: All when everything is selected, otherwise just the selection */}
+                {allSelected ? (
+                  <button
+                    className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 hover:shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={exportAllCsv}
+                    disabled={isExportingAll}
+                  >
+                    {isExportingAll ? (
+                      <span className="inline-block animate-spin mr-2"></span>
+                    ) : null}
+                    Export All
+                  </button>
+                ) : (
+                  <button
+                    className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 hover:shadow-sm transition-all duration-200"
+                    onClick={exportCsv}
+                  >
+                    Export Selected
+                  </button>
+                )}
+                {/* Bulk delete — available in both scenarios */}
+                {isAdminOnly && (
+                  <button
+                    aria-label="Delete selected"
+                    className="flex-1 sm:flex-none bg-white border border-red-200 text-red-600 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium hover:bg-red-50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleDeleteClick}
+                  >
+                    <FiTrash2 className="inline mr-1" /> Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
-            <div className="bg-white w-full sm:w-96 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
+            <div className="bg-white w-full sm:w-96 rounded-xl shadow-xl border border-gray-200 p-6 transform animate-in zoom-in-95 duration-200">
               <div className="mb-6 text-center">
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1078,7 +1243,7 @@ function Contacts({
               </div>
               <div className="flex gap-3 justify-center">
                 <button type="button" onClick={() => setShowDeleteModal(false)}
-                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:outline-none">
                   Cancel
                 </button>
                 <button type="button" onClick={confirmDelete}
@@ -1093,7 +1258,7 @@ function Contacts({
         {/* Business Card Modal */}
         {showBusinessCard && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
-            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl p-4 sm:p-5 transform animate-in zoom-in-95 duration-200 max-h-[86vh] overflow-hidden">
+            <div className="bg-white w-full max-w-2xl rounded-xl shadow-xl border border-gray-200 p-4 sm:p-5 transform animate-in zoom-in-95 duration-200 max-h-[86vh] overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-gray-200 pb-3 mb-4">
                 <div>
                   <h4 className="text-base font-semibold text-gray-900">Business Card</h4>
@@ -1115,7 +1280,7 @@ function Contacts({
 
               {businessCardLoading ? (
                 <div className="flex items-center justify-center py-10">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-800"></div>
                 </div>
               ) : (
                 <>
@@ -1126,14 +1291,14 @@ function Contacts({
                         <button
                           type="button"
                           onClick={() => setBusinessCardSide('front')}
-                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'front' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'front' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
                           Front
                         </button>
                         <button
                           type="button"
                           onClick={() => setBusinessCardSide('back')}
-                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'back' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'back' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
                           Back
                         </button>
@@ -1141,7 +1306,7 @@ function Contacts({
                     )}
                   </div>
 
-                  <div className="rounded-3xl border border-gray-200 bg-gray-50 overflow-hidden shadow-sm">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden shadow-sm">
                     <div className="text-sm font-medium text-gray-900 px-4 py-3 border-b border-gray-200 bg-white">
                       {businessCardSide === 'front' ? 'Front' : 'Back'}
                     </div>
@@ -1207,14 +1372,14 @@ function Contacts({
                         if (el) el.indeterminate = someSelected;
                       }}
                       onChange={toggleAll}
-                      className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
                     />
                   </th>
                   {/* Column Headers with Sorting */}
                   {columns.map((col) => (
                     <th
                       key={col.key}
-                      className={`px-4 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 select-none cursor-pointer hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap ${col.key === "Name"
+                      className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 select-none cursor-pointer hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap ${col.key === "Name"
                         ? "sticky left-10 sm:left-12 z-30 min-w-40 bg-gray-50"
                         : "hidden sm:table-cell min-w-20 sm:min-w-32"
                         }`}
@@ -1223,7 +1388,7 @@ function Contacts({
                       <div className="flex items-center gap-2">
                         <span className="truncate">{col.label}</span>
                         {sortConfig.key === col.key && (
-                          <span className="text-blue-600 flex-shrink-0">
+                          <span className="text-gray-600 flex-shrink-0">
                             {sortConfig.direction === "asc" ? "↑" : "↓"}
                           </span>
                         )}
@@ -1238,7 +1403,7 @@ function Contacts({
                 {paginatedData.map((contact, index) => (
                   <tr
                     key={getField(contact, "ContactId") ?? getField(contact, "FirstName") + getField(contact, "LastName") ?? index}
-                    className={`transition-all duration-150 hover:bg-gray-50 ${selected.has(index) ? "bg-blue-50" : "bg-white"
+                    className={`transition-colors duration-150 hover:bg-gray-50 ${selected.has(index) ? "bg-slate-50" : "bg-white"
                       }`}
                   >
                     {/* Row Selection Checkbox */}
@@ -1250,7 +1415,7 @@ function Contacts({
                         aria-label={`Select row ${index + 1}`}
                         checked={selected.has(index)}
                         onChange={() => toggleRow(index)}
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
                       />
                     </td>
 
@@ -1290,10 +1455,10 @@ function Contacts({
                                 e.preventDefault();
                                 handleShowContactDetails(getField(contact, "ContactId"));
                               }}
-                              className="flex items-center gap-2 font-medium text-blue-600 cursor-pointer hover:text-blue-700 transition-colors duration-150 group w-full min-w-0"
+                              className="flex items-center gap-2 font-medium text-gray-900 cursor-pointer hover:text-slate-700 transition-colors duration-150 group w-full min-w-0"
                             >
                               <span
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg shadow-sm font-semibold text-sm transition-transform duration-200 group-hover:scale-110 flex-shrink-0"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg font-semibold text-sm flex-shrink-0"
                                 style={{
                                   background: getColorFromString(
                                     `${getField(contact, "FirstName") || ''} ${getField(contact, "LastName") || ''}`.trim(),
@@ -1458,7 +1623,7 @@ function Contacts({
                   onClick={() => goToPage(1)}
                   disabled={currentPage === 1 || paginationLoading}
                   title="First page"
-                  className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" /></svg>
                 </button>
@@ -1467,13 +1632,13 @@ function Contacts({
                   onClick={prevPage}
                   disabled={currentPage === 1 || paginationLoading}
                   title="Previous page"
-                  className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
                 </button>
 
                 {/* Mobile: just "Page X of Y" */}
-                <span className="sm:hidden px-3 py-1.5 rounded-lg bg-blue-200 text-black text-sm font-medium min-w-[80px] text-center">
+                <span className="sm:hidden px-3 py-1.5 rounded-lg bg-gray-100 text-gray-900 text-sm font-medium min-w-[80px] text-center">
                   {currentPage} / {totalPages}
                 </span>
 
@@ -1490,14 +1655,14 @@ function Contacts({
                     if (startPage > 1) {
                       pages.push(
                         <button key={1} onClick={() => goToPage(1)} disabled={paginationLoading}
-                          className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 transition-all duration-200">1</button>
+                          className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 transition-all duration-200">1</button>
                       );
                       if (startPage > 2) pages.push(<span key="ellipsis-start" className="text-gray-400 px-2 font-medium">...</span>);
                     }
                     for (let i = startPage; i <= endPage; i++) {
                       pages.push(
                         <button key={i} onClick={() => goToPage(i)} disabled={paginationLoading}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${i === currentPage ? 'bg-blue-200 text-black shadow-sm' : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-slate-800 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
                             }`}>{i}</button>
                       );
                     }
@@ -1505,7 +1670,7 @@ function Contacts({
                       if (endPage < totalPages - 1) pages.push(<span key="ellipsis-end" className="text-gray-400 px-2 font-medium">...</span>);
                       pages.push(
                         <button key={totalPages} onClick={() => goToPage(totalPages)} disabled={paginationLoading}
-                          className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 transition-all duration-200">{totalPages}</button>
+                          className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 transition-all duration-200">{totalPages}</button>
                       );
                     }
                     return pages;
@@ -1516,7 +1681,7 @@ function Contacts({
                   onClick={nextPage}
                   disabled={currentPage >= totalPages || paginationLoading}
                   title="Next page"
-                  className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
                 </button>
@@ -1525,7 +1690,7 @@ function Contacts({
                   onClick={() => goToPage(totalPages)}
                   disabled={currentPage >= totalPages || paginationLoading}
                   title="Last page"
-                  className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" /></svg>
                 </button>
@@ -1534,7 +1699,7 @@ function Contacts({
               {/* Right: Empty Space / Optional Loading Indicator */}
               <div className="min-w-[150px] flex justify-end">
                 {paginationLoading && (
-                  <span className="text-xs sm:text-sm text-blue-600 font-medium">Loading...</span>
+                  <span className="text-xs sm:text-sm text-gray-500 font-medium">Loading...</span>
                 )}
               </div>
             </div>
@@ -1548,7 +1713,7 @@ function Contacts({
             role="dialog"
             aria-modal="true"
           >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl transform animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-3xl transform animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white">
                 <h4 className="text-xl font-semibold text-gray-900">Edit Contact</h4>
                 <button
@@ -1568,19 +1733,19 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-xs">First Name</label>
-                      <input type="text" value={editForm.FirstName || ""} onChange={(e) => setEditForm({ ...editForm, FirstName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.FirstName || ""} onChange={(e) => setEditForm({ ...editForm, FirstName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-xs">Last Name</label>
-                      <input type="text" value={editForm.LastName || ""} onChange={(e) => setEditForm({ ...editForm, LastName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.LastName || ""} onChange={(e) => setEditForm({ ...editForm, LastName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Job Title</label>
-                      <input type="text" value={editForm.JobTitle || ""} onChange={(e) => setEditForm({ ...editForm, JobTitle: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.JobTitle || ""} onChange={(e) => setEditForm({ ...editForm, JobTitle: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     {/* <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Enquiry No</label>
-                    <input type="text" value={editForm.EnquiryNo || ""} onChange={(e) => setEditForm({ ...editForm, EnquiryNo: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.EnquiryNo || ""} onChange={(e) => setEditForm({ ...editForm, EnquiryNo: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div> */}
                   </div>
                 </div>
@@ -1591,27 +1756,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Work Email</label>
-                      <input type="email" value={editForm.WorkEmail || ""} onChange={(e) => setEditForm({ ...editForm, WorkEmail: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="email" value={editForm.WorkEmail || ""} onChange={(e) => setEditForm({ ...editForm, WorkEmail: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Work Phone</label>
-                      <input type="tel" value={editForm.WorkPhone || ""} onChange={(e) => setEditForm({ ...editForm, WorkPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="tel" value={editForm.WorkPhone || ""} onChange={(e) => setEditForm({ ...editForm, WorkPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Mobile</label>
-                      <input type="tel" value={editForm.Mobile || ""} onChange={(e) => setEditForm({ ...editForm, Mobile: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="tel" value={editForm.Mobile || ""} onChange={(e) => setEditForm({ ...editForm, Mobile: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">LinkedIn</label>
-                      <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Facebook</label>
-                      <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Twitter</label>
-                      <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                   </div>
                 </div>
@@ -1622,27 +1787,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Address</label>
-                      <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
+                      <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Country</label>
-                      <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">State</label>
-                      <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">City</label>
-                      <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Zipcode</label>
-                      <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Time Zone</label>
-                      <input type="text" value={editForm.TimeZone || ""} onChange={(e) => setEditForm({ ...editForm, TimeZone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.TimeZone || ""} onChange={(e) => setEditForm({ ...editForm, TimeZone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                   </div>
                 </div>
@@ -1654,22 +1819,22 @@ function Contacts({
                     {/* âŒ REMOVED: Account ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Account ID</label>
-                    <input type="number" value={editForm.AccountId || ""} onChange={(e) => setEditForm({...editForm, AccountId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="number" value={editForm.AccountId || ""} onChange={(e) => setEditForm({...editForm, AccountId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Account</label>
-                      <input type="text" value={editForm.Account || ""} onChange={(e) => setEditForm({ ...editForm, Account: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Account || ""} onChange={(e) => setEditForm({ ...editForm, Account: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     {/* âŒ REMOVED: Sales Owner ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner ID</label>
-                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Sales Owner</label>
-                      <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                   </div>
                 </div>
@@ -1680,39 +1845,39 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Status</label>
-                      <input type="text" value={editForm.Status || ""} onChange={(e) => setEditForm({ ...editForm, Status: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Status || ""} onChange={(e) => setEditForm({ ...editForm, Status: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Life Cycle Stage</label>
-                      <input type="text" value={editForm.LifeCycleStage || ""} onChange={(e) => setEditForm({ ...editForm, LifeCycleStage: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.LifeCycleStage || ""} onChange={(e) => setEditForm({ ...editForm, LifeCycleStage: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Territory</label>
-                      <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Source</label>
-                      <input type="text" value={editForm.Source || ""} onChange={(e) => setEditForm({ ...editForm, Source: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Source || ""} onChange={(e) => setEditForm({ ...editForm, Source: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Campaign</label>
-                      <input type="text" value={editForm.Campaign || ""} onChange={(e) => setEditForm({ ...editForm, Campaign: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Campaign || ""} onChange={(e) => setEditForm({ ...editForm, Campaign: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Customer Fit</label>
-                      <input type="text" value={editForm.CustomerFit || ""} onChange={(e) => setEditForm({ ...editForm, CustomerFit: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.CustomerFit || ""} onChange={(e) => setEditForm({ ...editForm, CustomerFit: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Score</label>
-                      <input type="number" value={editForm.Score || ""} onChange={(e) => setEditForm({ ...editForm, Score: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" value={editForm.Score || ""} onChange={(e) => setEditForm({ ...editForm, Score: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Subscription Status</label>
-                      <input type="text" value={editForm.SubscriptionStatus || ""} onChange={(e) => setEditForm({ ...editForm, SubscriptionStatus: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.SubscriptionStatus || ""} onChange={(e) => setEditForm({ ...editForm, SubscriptionStatus: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Tags</label>
-                      <input type="text" value={editForm.Tags || ""} onChange={(e) => setEditForm({ ...editForm, Tags: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.Tags || ""} onChange={(e) => setEditForm({ ...editForm, Tags: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                   </div>
                 </div>
@@ -1723,27 +1888,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Last Activity Type</label>
-                      <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     {/* âŒ REMOVED: Last Activity Date - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Date</label>
-                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                     {/* âŒ REMOVED: Last Contacted Time - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Time</label>
-                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Last Contacted Mode</label>
-                      <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                     </div>
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Recent Note</label>
-                      <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
+                      <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
                     </div>
                   </div>
                 </div>
@@ -1758,7 +1923,7 @@ function Contacts({
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
+                    className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium text-sm transition-colors"
                   >
                     Save Changes
                   </button>
@@ -1772,16 +1937,11 @@ function Contacts({
       {(detailsLoading || detailsError || selectedContactDetails) && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseContactDetails} />
-          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-2xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
+          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
             {/* Header */}
             <div className="flex items-center gap-5 p-4  bg-white/80 backdrop-blur-sm">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-3xl shadow-xl transform hover:scale-105 transition-transform duration-200"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)",
-                  color: "white",
-                }}
+                className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-3xl shadow-sm bg-slate-700 text-white"
               >
                 {selectedContactDetails
                   ? `${selectedContactDetails.FirstName || selectedContactDetails.firstName || ''} ${selectedContactDetails.LastName || selectedContactDetails.lastName || ''}`.trim().charAt(0).toUpperCase() || 'C'
@@ -1845,7 +2005,7 @@ function Contacts({
                 <div className="flex flex-col gap-2 ml-6 sm:ml-12">
                   <div className="text-sm font-semibold text-gray-700">
                     Enquiry No:
-                    <span className="ml-1 text-blue-600">
+                    <span className="ml-1 text-slate-700">
                       {selectedContactDetails?.EnquiryNo ||
                         selectedContactDetails?.enquiryNo ||
                         "-"}
@@ -1854,7 +2014,7 @@ function Contacts({
 
                   <div className="text-sm font-semibold text-gray-700">
                     Estimated Quote:
-                    <span className="ml-1 text-blue-600">
+                    <span className="ml-1 text-slate-700">
                       {selectedContactDetails?.EstimatedQuote ||
                         selectedContactDetails?.estimatedQuote ||
                         "-"}
@@ -1900,8 +2060,8 @@ function Contacts({
                   <button
                     className={`flex items-center justify-center sm:justify-start gap-2 px-2 sm:px-5 py-2 rounded-md text-sm transition-all duration-200 w-full sm:w-auto
                     ${showBusinessCard
-                        ? "bg-blue-700 text-white"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-800 text-white hover:bg-slate-900"
                       }`}
                     onClick={async () => {
                       if (!showBusinessCard) {
@@ -2102,7 +2262,7 @@ function Contacts({
 
                   {detailsLoading && (
                     <div className="flex items-center justify-center py-12">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div>
                     </div>
                   )}
 
@@ -2130,9 +2290,9 @@ function Contacts({
                       {/* Contact Information Section */}
                       <div className="bg-white rounded-2xl p-6   ">
                         <div className="flex items-center gap-2 mb-5">
-                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
                             <svg
-                              className="w-5 h-5 text-white"
+                              className="w-5 h-5 text-gray-500"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
@@ -2146,7 +2306,7 @@ function Contacts({
                             </svg>
                           </div>
                           <h3 className="font-normal text-gray-900 text-lg">
-                            Contact Information
+                            Identity
                           </h3>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -2156,12 +2316,22 @@ function Contacts({
                             ["LastName", "Last Name"],
                             ["JobTitle", "Job Title"],
                             //["EnquiryNo", "Enquiry No"],
+                            ["__section", "Contact Info"],
                             ["WorkEmail", "Work Email"],
                             ["WorkPhone", "Work Phone"],
                             ["Mobile", "Mobile"],
                             ["LinkedIn", "LinkedIn"],
+                            ["__section", "Address"],
                             ["Address", "Address"],
-                          ].map(([key, label]) => (
+                          ].map(([key, label]) => {
+                            if (key === "__section") return showContactEmpty ? (
+                              <div key={`sec-${label}`} className="md:col-span-2 flex items-center gap-3 mt-4 mb-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+                                <span className="flex-1 h-px bg-gray-100" />
+                              </div>
+                            ) : null;
+                            if (!contactHasData(key) && !showContactEmpty) return null;
+                            return (
                             <div className="flex flex-col gap-2" key={key}>
                               <label className="font-normal text-gray-700 text-sm">{label}</label>
                               {key === "AccountId" ? (
@@ -2179,7 +2349,7 @@ function Contacts({
                                     onBlur={() => {
                                       setTimeout(() => setSlideAccountMenuOpen(false), 200);
                                     }}
-                                    className="w-full rounded-xl px-4 py-3.5 pr-10 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                    className="w-full rounded-xl px-4 py-3.5 pr-10 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all"
                                   />
                                   {(slideAccountSearch ||
                                     getField(selectedContactDetails, "AccountId") != null ||
@@ -2244,7 +2414,7 @@ function Contacts({
                                                     setSlideAccountSearch(name);
                                                     setSlideAccountMenuOpen(false);
                                                   }}
-                                                  className="px-4 py-3 cursor-pointer hover:bg-blue-50 hover:text-blue-700 text-sm border-b last:border-none"
+                                                  className="px-4 py-3 cursor-pointer hover:bg-gray-50 hover:text-gray-900 text-sm border-b last:border-none"
                                                 >
                                                   {name}
                                                 </div>
@@ -2265,19 +2435,21 @@ function Contacts({
                               ) : (
                                 <input
                                   type="text"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               )}
                             </div>
-                          ))}
+                          )})}
 
+                          {(contactHasData("Country") || showContactEmpty) && (
+                          <>
                           {/* Country Dropdown */}
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">Country</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "Country") || ""}
                               onChange={e => {
                                 setSelectedContactDetails({ ...selectedContactDetails, Country: e.target.value, State: "", City: "" });
@@ -2297,7 +2469,7 @@ function Contacts({
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">State</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "State") || ""}
                               onChange={e => {
                                 setSelectedContactDetails({ ...selectedContactDetails, State: e.target.value, City: "" });
@@ -2317,7 +2489,7 @@ function Contacts({
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">City</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "City") || ""}
                               onChange={e => setSelectedContactDetails({ ...selectedContactDetails, City: e.target.value })}
                               disabled={!slideStateCode}
@@ -2328,15 +2500,19 @@ function Contacts({
                               ))}
                             </select>
                           </div>
+                          </>
+                          )}
 
                           {/* Additional comprehensive fields - user-editable only */}
                           {[
                             ["Zipcode", "Zipcode"],
+                            ["__section", "Details"],
                             ["TimeZone", "Time Zone"],
                             ["Locale", "Locale"],
                             ["Phone", "Phone"],
                             ["Facebook", "Facebook"],
                             ["Twitter", "Twitter"],
+                            ["__section", "Classification & Marketing"],
                             ["SalesOwner", "Sales Owner"],
                             ["Status", "Status"],
                             ["LifeCycleStage", "Life Cycle Stage"],
@@ -2362,6 +2538,7 @@ function Contacts({
                             ["MostRecentCampaign", "Most Recent Campaign"],
                             ["MostRecentMedium", "Most Recent Medium"],
                             ["MostRecentSource", "Most Recent Source"],
+                            ["__section", "Activity & Meta"],
                             ["LastSeenOnChat", "Last Seen On Chat"],
                             ["FirstSeenOnChat", "First Seen On Chat"],
                             ["TotalChatSessions", "Total Chat Sessions"],
@@ -2384,12 +2561,20 @@ function Contacts({
                             ["CreatedAt", "Created At"],
                             ["CreatedBy", "Created By"],
                             ["UpdatedBy", "Updated By"],
-                          ].map(([key, label]) => (
+                          ].map(([key, label]) => {
+                            if (key === "__section") return showContactEmpty ? (
+                              <div key={`sec-${label}`} className="md:col-span-2 flex items-center gap-3 mt-4 mb-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+                                <span className="flex-1 h-px bg-gray-100" />
+                              </div>
+                            ) : null;
+                            if (!contactHasData(key) && !showContactEmpty) return null;
+                            return (
                             <div className="flex flex-col gap-2" key={key}>
                               <label className="font-normal text-gray-700 text-sm">{label}</label>
                               {key === "Tags" || key === "RecentNote" || key === "OtherUnsubscribeReasons" || key === "WebForms" ? (
                                 <textarea
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 resize-none"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 resize-none"
                                   rows="2"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
@@ -2397,28 +2582,28 @@ function Contacts({
                               ) : key === "Score" || key === "TotalChatSessions" || key === "ActiveSalesSequences" || key === "CompletedSalesSequences" ? (
                                 <input
                                   type="number"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? Number(e.target.value) : null })}
                                 />
                               ) : key === "WorkPhone" || key === "Mobile" || key === "Phone" ? (
                                 <input
                                   type="tel"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               ) : key === "WorkEmail" ? (
                                 <input
                                   type="email"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               ) : key === "Facebook" || key === "Twitter" || key === "LinkedIn" ? (
                                 <input
                                   type="url"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   placeholder="https://..."
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
@@ -2426,38 +2611,51 @@ function Contacts({
                               ) : key === "LastActivityDate" ? (
                                 <input
                                   type="date"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={formatDateOnly(getField(selectedContactDetails, key))}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? new Date(e.target.value).toISOString() : "" })}
                                 />
                               ) : key === "LastContactedTime" || key === "LastAssignedAt" || key === "LastSeenOnChat" || key === "FirstSeenOnChat" || key === "LastSeenOnWeb" || key === "CreatedAt" || key === "UpdatedAt" ? (
                                 <input
                                   type="date"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={formatDateOnly(getField(selectedContactDetails, key))}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? new Date(e.target.value).toISOString() : "" })}
                                 />
                               ) : (
                                 <input
                                   type="text"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               )}
                             </div>
-                          ))}
+                          )})}
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowContactEmpty((v) => !v)}
+                          className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-gray-600 text-sm font-medium hover:border-slate-400 hover:bg-gray-50 transition-colors"
+                        >
+                          {showContactEmpty ? "Hide empty fields" : "Show all fields"}
+                          <svg className={`w-4 h-4 transition-transform ${showContactEmpty ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
 
                         {/* Generate Enquiry Number on update */}
                         <div className="mt-6 pt-5 border-t border-gray-200">
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Options</span>
+                            <span className="flex-1 h-px bg-gray-100" />
+                          </div>
                           <label className={`flex items-center gap-2 ${hasEnquiryNo ? "opacity-50 cursor-not-allowed" : "cursor-pointer select-none"}`}>
                             <input
                               type="checkbox"
                               checked={slideGenerateEnquiryNo}
                               disabled={hasEnquiryNo}
                               onChange={(e) => setSlideGenerateEnquiryNo(e.target.checked)}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
                             />
                             <span className="font-normal text-gray-700 text-sm">
                               Generate Enquiry Number
@@ -2486,7 +2684,7 @@ function Contacts({
                                     : ""
                                 );
                               }}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
                             />
                             <span className="font-normal text-gray-700 text-sm">
                               Add Estimated Quote
@@ -2502,7 +2700,7 @@ function Contacts({
                               value={slideEstimatedQuote}
                               onChange={(e) => setSlideEstimatedQuote(e.target.value)}
                               placeholder="EST-0019"
-                              className="w-full mt-2 px-3 py-2 rounded-lg border-2 border-gray-200 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                              className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500"
                             />
                           ) : (
                             <p className="text-xs text-gray-500 mt-1.5 ml-6">
@@ -2516,11 +2714,11 @@ function Contacts({
                   )}
 
                   {/* Footer Actions */}
-                  <div className="flex justify-between items-center gap-3 pt-6 border-t-2 border-gray-200 mt-8 bg-white/50 backdrop-blur-sm rounded-xl p-6 -mx-2">
+                  <div className="flex justify-between items-center gap-3 pt-6 border-t border-gray-200 mt-8 rounded-xl p-6 -mx-2">
                     {isAdminOnly && (
                       <button
                         type="button"
-                        className="px-5 py-3 rounded-xl border-2 border-red-200 bg-white hover:bg-red-50 hover:border-red-300 text-red-600 font-normal transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
+                        className="px-5 py-3 rounded-lg border border-red-200 bg-white hover:bg-red-50 hover:border-red-300 text-red-600 font-medium transition-colors duration-200 flex items-center gap-2"
                         onClick={() => {
                           if (!selectedContactDetails) return;
                           const rawId = getField(selectedContactDetails, "ContactId") ?? getField(selectedContactDetails, "contactId") ?? selectedContactDetails.id;
@@ -2561,7 +2759,7 @@ function Contacts({
                     {canEditContact(selectedContactDetails) ? (
                       <button
                         type="submit"
-                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-normal shadow-sm hover:shadow-xl transition-all duration-200 flex items-center gap-2 transform hover:scale-105 ml-auto"
+                        className="px-6 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

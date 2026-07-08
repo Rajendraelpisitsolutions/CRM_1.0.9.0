@@ -32,7 +32,7 @@ function ColumnSelector({ columns, selectedColumns, onColumnToggle, onSelectAll 
           >
             <input
               type="checkbox"
-              className="w-4 h-4 mr-3 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="w-4 h-4 mr-3 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-slate-500 cursor-pointer"
               checked={selectedColumns.includes(col.key)}
               onChange={() => onColumnToggle(col.key)}
             />

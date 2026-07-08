@@ -141,8 +141,9 @@ namespace Elpis_CRM.Services
                 .ToListAsync();
 
             return tags
-                .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                .SelectMany(t => t.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
                 .Select(t => t.Trim())
+                .Where(t => t.Length > 0)
                 .Distinct()
                 .ToList();
         }
@@ -156,7 +157,7 @@ namespace Elpis_CRM.Services
         /// <returns>Accounts having at least one of the supplied tags.</returns>
         public async Task<List<AccountModel>> GetAccountsByTagsAsync(string tags)
         {
-            var selectedTags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            var selectedTags = tags.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                                    .Select(t => t.Trim())
                                    .ToList();
 
@@ -165,7 +166,7 @@ namespace Elpis_CRM.Services
                 .ToListAsync();
 
             return accounts
-                .Where(a => a.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(a => a.Tags.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                                   .Select(t => t.Trim())
                                   .Any(tag => selectedTags.Contains(tag)))
                 .ToList();

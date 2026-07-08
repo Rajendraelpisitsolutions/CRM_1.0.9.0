@@ -101,13 +101,13 @@ function ImportData() {
               <FiArrowLeft size={18} />
             </button>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <div className="p-1.5 bg-blue-100 rounded-lg">
-                  <FiUpload size={18} className="text-blue-600" />
+              <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <div className="p-1.5 bg-gray-100 rounded-lg">
+                  <FiUpload size={18} className="text-gray-600" />
                 </div>
                 Import Data
               </h1>
-              <p className="text-gray-600 text-xs mt-0.5">
+              <p className="text-gray-500 text-sm mt-0.5">
                 Bulk import accounts, contacts, and deals from Excel or CSV files
               </p>
             </div>
@@ -124,9 +124,9 @@ function ImportData() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="mb-5 p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl">
-          <p className="text-sm font-semibold text-emerald-900 mb-1">Deals already in the system?</p>
-          <p className="text-xs text-emerald-800">
+        <div className="mb-5 p-4 bg-white border border-gray-200 border-l-4 border-l-emerald-500 rounded-xl shadow-sm">
+          <p className="text-sm font-semibold text-gray-900 mb-1">Deals already in the system?</p>
+          <p className="text-xs text-gray-500">
             Use <strong>Deal Contact Links</strong> (first card) — not Deals. Excel: DealId + ContactId only.
             Existing deals are updated; none are created.
           </p>
@@ -149,31 +149,31 @@ function ImportData() {
         {/* Help Section */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Getting Started Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-base font-semibold text-gray-900 mb-2">Getting Started</h3>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Getting Started</h3>
             <ul className="space-y-1 text-xs text-gray-600">
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 font-bold mt-0.5">1.</span>
+                <span className="text-gray-400 font-semibold mt-0.5">1.</span>
                 <span>Download the import template for your data type</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 font-bold mt-0.5">2.</span>
+                <span className="text-gray-400 font-semibold mt-0.5">2.</span>
                 <span>Fill in your data following the template structure</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 font-bold mt-0.5">3.</span>
+                <span className="text-gray-400 font-semibold mt-0.5">3.</span>
                 <span>Upload your file using drag-and-drop or file picker</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-blue-600 font-bold mt-0.5">4.</span>
+                <span className="text-gray-400 font-semibold mt-0.5">4.</span>
                 <span>Review the import results and verify the data</span>
               </li>
             </ul>
           </div>
 
           {/* Best Practices Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-base font-semibold text-gray-900 mb-2">Best Practices</h3>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Best Practices</h3>
             <ul className="space-y-1 text-xs text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="text-green-600">✓</span>
@@ -195,8 +195,8 @@ function ImportData() {
           </div>
 
           {/* Supported Formats Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-base font-semibold text-gray-900 mb-2">File Formats</h3>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">File Formats</h3>
             <div className="space-y-2 text-xs">
               <div>
                 <p className="font-medium text-gray-900">Excel Formats</p>
@@ -216,8 +216,8 @@ function ImportData() {
         </div>
 
         {/* FAQ Section */}
-        <div className="mt-8 bg-white rounded-lg border border-gray-200 p-5">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Frequently Asked Questions</h2>
+        <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-4">Frequently Asked Questions</h2>
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium text-gray-900 mb-1">What happens if there are errors in my file?</h4>

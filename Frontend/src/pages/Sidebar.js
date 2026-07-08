@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMsal } from "@azure/msal-react";
 //import WindowLogo from "../assets/Window.png";
 import { FaRecycle } from "react-icons/fa";
+import tokenUtils from "../auth/tokenUtils";
 
 /* ── UI SVG icons ───────────────────────────────────────────── */
 const FiMenu = ({ size = 24 }) => (
@@ -40,22 +41,6 @@ const FiTripleChevron = ({ size = 18, className = "" }) => (
   </svg>
 );
 
-const SettingsIcon = ({ size = 16, className = "" }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82L4.31 4.1A2 2 0 017.14 1.27l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09c.09.59.56 1.09 1.15 1.33.59.24 1.29.1 1.82-.33l.06-.06A2 2 0 0119.4 4.1l-.06.06a1.65 1.65 0 00-.33 1.82V7c.41.22.79.5 1.13.83.34.33.62.72.85 1.14.23.53.08 1.23-.33 1.82-.41.6-.41 1.34 0 1.95z" />
-  </svg>
-);
 
 /* ── Custom branded SVG icons ───────────────────────────────── */
 const HomeIcon = ({ size = 16, className = "" }) => (
@@ -187,12 +172,64 @@ const RecycleBinIcon = ({ size = 16, className = "" }) => (
   <FaRecycle size={size} className={className} />
 );
 
+const ProfileIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+  </svg>
+);
+
+const ImportIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+const ManageUsersIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+  </svg>
+);
+
+const AuditIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+  </svg>
+);
+
+const BellIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 01-3.46 0" />
+  </svg>
+);
+
+const ActivityIcon = ({ size = 16, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+);
+
 function Sidebar({ activeContent, openOrActivateTab, setShowPanel }) {
   const { instance, accounts } = useMsal();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarRef = useRef(null);
+
+  // Admin-only sidebar items (Import Data, Manage Users, Audit Logs) — read role from the JWT.
+  const isAdmin = (() => {
+    try {
+      const t = tokenUtils.getToken();
+      const d = t ? tokenUtils.decodeToken(t) : null;
+      return (d?.role || d?.Role || "").toString().toLowerCase() === "admin";
+    } catch (_) {
+      return false;
+    }
+  })();
 
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
@@ -218,46 +255,143 @@ function Sidebar({ activeContent, openOrActivateTab, setShowPanel }) {
     setSidebarOpen(false); // Close sidebar on mobile after navigation
   };
 
-  const navItems = [
-    { id: "home", label: "Home", icon: HomeIcon, path: "/dashboard" },
-    { id: "accounts", label: "Accounts", icon: AccountsIcon, path: "/dashboard/Accounts" },
-    { id: "contacts", label: "Contacts", icon: ContactsIcon, path: "/dashboard/contacts" },
-    { id: "products", label: "Products", icon: ProductsIcon, path: "/dashboard/Products" },
-    { id: "deals", label: "Deals", icon: DealsIcon, path: "/dashboard/Deals" },
+  // Sidebar is segregated by priority into labelled sections. Admin-only items
+  // (admin: true) are hidden for non-admins; a section with no visible items is
+  // dropped entirely (heading included).
+  const navSections = [
     {
-      id: "outlookEmail",
-      label: "Email",
-      icon: OutlookIcon,
-      path: "/dashboard/OutlookEmail",
-      onClick: async () => {
-        if (accounts.length === 0) {
-          try {
-            await instance.loginRedirect({
-              scopes: [
-                "https://graph.microsoft.com/User.Read",
-                "https://graph.microsoft.com/Mail.Read",
-                "https://graph.microsoft.com/Mail.ReadWrite",
-                "https://graph.microsoft.com/Mail.Send",
-              ],
-            });
-            handleNavClick("outlookEmail", "/dashboard/OutlookEmail");
-          } catch (error) {
-            console.error("Login failed:", error);
-          }
-        } else {
-          handleNavClick("outlookEmail", "/dashboard/OutlookEmail");
-        }
-      },
+      heading: "Main",
+      items: [
+        { id: "home", label: "Home", icon: HomeIcon, path: "/dashboard" },
+        { id: "accounts", label: "Accounts", icon: AccountsIcon, path: "/dashboard/Accounts" },
+        { id: "contacts", label: "Contacts", icon: ContactsIcon, path: "/dashboard/contacts" },
+        { id: "products", label: "Products", icon: ProductsIcon, path: "/dashboard/Products" },
+        { id: "deals", label: "Deals", icon: DealsIcon, path: "/dashboard/Deals" },
+      ],
     },
-    { id: "teams", label: "Teams", icon: TeamsIcon, path: "/dashboard/Teams" },
+    {
+      heading: "Communication",
+      items: [
+        {
+          id: "outlookEmail",
+          label: "Email",
+          icon: OutlookIcon,
+          path: "/dashboard/OutlookEmail",
+          onClick: async () => {
+            if (accounts.length === 0) {
+              try {
+                await instance.loginRedirect({
+                  scopes: [
+                    "https://graph.microsoft.com/User.Read",
+                    "https://graph.microsoft.com/Mail.Read",
+                    "https://graph.microsoft.com/Mail.ReadWrite",
+                    "https://graph.microsoft.com/Mail.Send",
+                  ],
+                });
+                handleNavClick("outlookEmail", "/dashboard/OutlookEmail");
+              } catch (error) {
+                console.error("Login failed:", error);
+              }
+            } else {
+              handleNavClick("outlookEmail", "/dashboard/OutlookEmail");
+            }
+          },
+        },
+        {
+          id: "emailTracking",
+          label: "Email Tracking",
+          icon: ({ size = 16, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+              <path d="M3 3v18h18" />
+              <rect x="7" y="11" width="3" height="7" />
+              <rect x="12" y="7" width="3" height="11" />
+              <rect x="17" y="4" width="3" height="14" />
+            </svg>
+          ),
+          path: "/dashboard/EmailTracking",
+        },
+        { id: "notifications", label: "Notifications", icon: BellIcon, path: "/dashboard/notifications" },
+        { id: "activity", label: "Recent Activity", icon: ActivityIcon, path: "/dashboard/activity" },
+        { id: "teams", label: "Teams", icon: TeamsIcon, path: "/dashboard/Teams" },
+      ],
+    },
+    {
+      heading: "Administration",
+      items: [
+        // Moved out of the header account menu → now live in the sidebar (Log out stays in the header).
+        {
+          id: "import",
+          label: "Import Data",
+          icon: ImportIcon,
+          path: "/Dashboard/Import",
+          admin: true,
+          onClick: () => {
+            navigate("/Dashboard/Import");
+            setShowPanel(false);
+            setSidebarOpen(false);
+          },
+        },
+        { id: "users", label: "Manage Users", icon: ManageUsersIcon, path: "/dashboard/users", admin: true },
+        { id: "auditLogs", label: "Audit Logs", icon: AuditIcon, path: "/dashboard/audit-logs", admin: true },
+      ],
+    },
   ];
 
-  // Recycle Bin lives at the bottom of the sidebar, just above Settings
-  const recycleBinItem = {
-    id: "recycle-bin",
-    label: "Recycle Bin",
-    icon: RecycleBinIcon,
-    path: "/dashboard/recycle-bin",
+  // Bottom utility items (below a divider, no heading). Profile replaces the old
+  // "Settings" button — both opened the same page, so only one is kept.
+  const bottomItems = [
+    {
+      id: "profile",
+      label: "Profile",
+      icon: ProfileIcon,
+      path: "/Dashboard/profile",
+      onClick: () => {
+        navigate("/Dashboard/profile");
+        setShowPanel(false);
+        setSidebarOpen(false);
+      },
+    },
+    { id: "recycle-bin", label: "Recycle Bin", icon: RecycleBinIcon, path: "/dashboard/recycle-bin" },
+  ];
+
+  // Shared nav-link renderer so sections and the bottom utilities stay identical.
+  const renderNavLink = (item) => {
+    const Icon = item.icon;
+    const isActive = activeContent === item.id;
+    return (
+      <a
+        key={item.id}
+        href={item.path}
+        onClick={(e) => {
+          e.preventDefault();
+          if (item.onClick) item.onClick();
+          else handleNavClick(item.id, item.path);
+        }}
+        className={`
+          group relative w-full flex items-center gap-2.5 rounded-lg text-[13px]
+          transition-colors duration-150 cursor-pointer
+          ${sidebarCollapsed ? "justify-center py-2" : "px-2.5 py-2"}
+          ${
+            isActive
+              ? "bg-slate-100 text-slate-900 font-medium"
+              : "text-slate-600 font-normal hover:bg-slate-100/70 hover:text-slate-900"
+          }
+        `}
+        title={item.label}
+      >
+        {/* Active indicator — a soft neutral bar, not a filled blue box */}
+        {isActive && !sidebarCollapsed && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-slate-700" />
+        )}
+        <Icon
+          size={17}
+          className={`flex-shrink-0 transition-colors ${
+            isActive ? "text-slate-700" : "text-slate-400 group-hover:text-slate-600"
+          }`}
+        />
+        {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+      </a>
+    );
   };
 
   return (
@@ -295,108 +429,57 @@ function Sidebar({ activeContent, openOrActivateTab, setShowPanel }) {
           ${sidebarCollapsed ? "lg:w-16" : "lg:w-44"}
         `}
       >
-        {/* Sidebar Header */}
-        <div className="h-[70px] px-3 border-b border-slate-200 flex items-center justify-center flex-shrink-0">
+        {/* Sidebar Header — collapse toggle (neutral ghost button, no accent colour).
+            py-4 + a 36px button = 68px, matching the content tab-bar header so the
+            two bottom borders line up exactly. */}
+        <div className="px-2.5 py-4 border-b border-slate-200 flex items-center flex-shrink-0">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className={`
-              hidden lg:flex items-center justify-center
-              transition-all duration-300
-              rounded-lg
-              ${
-                sidebarCollapsed
-                  ? "w-10 h-10 bg-gray-100 text-blue-500 hover:bg-gray-150"
-                  : "w-full h-10 px-3 bg-gray-100 text-blue-500 hover:bg-gray-150"
-              }
+              hidden lg:flex items-center rounded-lg
+              text-slate-500 hover:bg-slate-100 hover:text-slate-800
+              transition-colors duration-200
+              ${sidebarCollapsed ? "w-9 h-9 mx-auto justify-center" : "w-full h-9 px-2.5 justify-start"}
             `}
             aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <span className={`transition-transform duration-300 ${sidebarCollapsed ? "" : "rotate-180"}`}>
-              <FiTripleChevron size={18} />
+              <FiTripleChevron size={16} />
             </span>
-
-            {!sidebarCollapsed && <span className="ml-2 text-sm font-semibold">Collapse</span>}
+            {!sidebarCollapsed && <span className="ml-2 text-[13px] font-medium">Collapse</span>}
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeContent === item.id;
+        {/* Navigation Items — grouped by priority into labelled sections */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {navSections.map((section, si) => {
+            const items = section.items.filter((item) => !item.admin || isAdmin);
+            if (items.length === 0) return null;
             return (
-              <a
-                key={item.id}
-                href={item.path}
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (item.onClick) {
-                    item.onClick();
-                  } else {
-                    handleNavClick(item.id, item.path);
-                  }
-                }}
-                className={`
-                  w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 cursor-pointer
-                  ${
-                    isActive
-                      ? "bg-blue-100 text-black/65 border border-gray-300 font-medium"
-                      : "text-slate-600 hover:bg-slate-100 transition-colors"
-                  }
-                `}
-                title={item.label}
-              >
-                <Icon size={16} className="flex-shrink-0" />
-                {!sidebarCollapsed && (
-                  <span className="text-xs font-medium truncate">{item.label}</span>
+              <div key={section.heading}>
+                {/* Section heading (or a divider when collapsed to icons) */}
+                {sidebarCollapsed ? (
+                  si > 0 && <div className="mx-2 my-2.5 border-t border-slate-200/80" />
+                ) : (
+                  <p className={`px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 select-none ${si === 0 ? "pt-1" : "pt-4"}`}>
+                    {section.heading}
+                  </p>
                 )}
-              </a>
+                <div className="space-y-0.5">
+                  {items.map((item) => renderNavLink(item))}
+                </div>
+              </div>
             );
           })}
         </div>
 
         {/* Divider */}
-        <div className="mx-3 my-3 border-t border-slate-200" />
+        <div className="mx-3 my-2 border-t border-slate-200" />
 
-        {/* Bottom section: Recycle Bin, then Settings */}
+        {/* Bottom section: Profile, then Recycle Bin */}
         <div className="px-3 pb-4 flex-shrink-0 space-y-1">
-          {/* Recycle Bin */}
-          <a
-            href={recycleBinItem.path}
-            onClick={(e) => {
-              e.preventDefault();
-              handleNavClick(recycleBinItem.id, recycleBinItem.path);
-            }}
-            className={`
-              w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-200 cursor-pointer
-              ${
-                activeContent === recycleBinItem.id
-                  ? "bg-blue-100 text-black/65 border border-gray-300 font-medium"
-                  : "text-slate-600 hover:bg-slate-100 transition-colors"
-              }
-            `}
-            title={recycleBinItem.label}
-          >
-            <RecycleBinIcon size={16} className="flex-shrink-0" />
-            {!sidebarCollapsed && (
-              <span className="text-xs font-medium truncate">{recycleBinItem.label}</span>
-            )}
-          </a>
-
-          {/* Settings (opens profile as requested) */}
-          <button
-            onClick={() => {
-              navigate("/dashboard/profile");
-              setShowPanel(false);
-              setSidebarOpen(false);
-            }}
-            className="flex items-center gap-2 w-full text-slate-600 hover:bg-slate-100 px-2 py-2 rounded"
-            title="Settings"
-          >
-            <SettingsIcon className="text-slate-900" />
-            {!sidebarCollapsed && <span className="text-xs font-medium">Settings</span>}
-          </button>
+          {bottomItems.map((item) => renderNavLink(item))}
         </div>
       </nav>
     </>

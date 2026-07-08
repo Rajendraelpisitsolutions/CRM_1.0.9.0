@@ -144,6 +144,21 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
+        /// Returns every contact's email addresses (WorkEmail + the multi-value Emails field) as a
+        /// de-duplicated comma-joined string, optionally narrowed by a search token. Fast projection
+        /// (no image blobs, single query) so "email all selected contacts" doesn't have to page.
+        /// </summary>
+        /// <param name="search">Optional search text; ignored unless it has at least 2 non-blank characters.</param>
+        /// <returns>A comma-joined list of distinct email addresses; empty string when none exist.</returns>
+        [HttpGet("emails/all")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
+        public async Task<ActionResult<string>> GetAllEmailsAsync([FromQuery] string? search = null)
+        {
+            var emails = await _contactService.GetAllEmailsAsync(search);
+            return Ok(emails);
+        }
+
+        /// <summary>
         /// Returns the full contacts that carry at least one of the requested tags. Despite the route name,
         /// this yields complete contact records, identical to the tags/contacts endpoint.
         /// </summary>

@@ -409,13 +409,13 @@ function Product({
       <div className="relative flex overscroll-none font-[poppins,sans-serif] flex-col items-start h-full overflow-hidden flex-1 w-full">
       {dataLoading && (
         <div className="absolute inset-0 z-40 bg-white/75 backdrop-blur-sm flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800" />
         </div>
       )}
       {selected.size > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-indigo-50 rounded-lg sm:rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-indigo-100 mb-4 w-full backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 mb-4 w-full">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+            <div className="w-8 h-8 bg-slate-800 text-white rounded-full flex items-center justify-center font-semibold text-sm">
               {selected.size}
             </div>
             <span className="text-sm sm:text-base text-gray-700">selected</span>
@@ -423,7 +423,7 @@ function Product({
           <div className="hidden sm:flex flex-1" />
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
-              className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 hover:shadow-sm transition-all duration-200"
+              className="flex-1 sm:flex-none bg-white border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-700 font-medium hover:bg-gray-50 transition-colors duration-200"
               onClick={exportCsv}
             >
               Export
@@ -431,7 +431,7 @@ function Product({
             {isAdmin && (
               <button
                 aria-label="Delete selected"
-                className="flex-1 sm:flex-none bg-white border border-red-200 text-red-600 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium hover:bg-red-50 transition-all duration-200"
+                className="flex-1 sm:flex-none bg-white border border-red-200 text-red-600 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium hover:bg-red-50 transition-colors duration-200"
                 onClick={handleDeleteClick}
               >
                 <FiTrash2 className="inline mr-1" /> Delete
@@ -448,7 +448,7 @@ function Product({
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white w-full sm:w-96 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full sm:w-96 rounded-xl shadow-xl border border-gray-200 p-6 transform animate-in zoom-in-95 duration-200">
             <div className="mb-6 text-center">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -461,10 +461,10 @@ function Product({
               </p>
             </div>
             <div className="flex gap-3 justify-center">
-              <button type="button" onClick={() => setShowDeleteModal(false)} className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200">
+              <button type="button" onClick={() => setShowDeleteModal(false)} className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm transition-colors duration-200">
                 Cancel
               </button>
-              <button type="button" onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-all duration-200">
+              <button type="button" onClick={confirmDelete} className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-colors duration-200">
                 Delete
               </button>
             </div>
@@ -485,20 +485,20 @@ function Product({
                     checked={allSelected}
                     ref={(el) => { if (el) el.indeterminate = someSelected; }}
                     onChange={toggleAll}
-                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
+                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer"
                   />
                 </th>
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    className={`px-4 py-3 text-left text-xs sm:text-sm font-semibold text-gray-700 select-none cursor-pointer hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap ${col.key === "name" ? "sticky left-10 sm:left-12 z-30 min-w-40 bg-gray-50" : "min-w-20 sm:min-w-32"
+                    className={`px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 select-none cursor-pointer hover:bg-gray-100 transition-colors duration-150 whitespace-nowrap ${col.key === "name" ? "sticky left-10 sm:left-12 z-30 min-w-40 bg-gray-50" : "min-w-20 sm:min-w-32"
                       }`}
                     onClick={() => handleSort(col.key)}
                   >
                     <div className="flex items-center gap-2">
                       <span className="truncate">{col.label}</span>
                       {sortConfig.key === col.key && (
-                        <span className="text-indigo-600 flex-shrink-0">{sortConfig.direction === "asc" ? "↑" : "↓"}</span>
+                        <span className="text-gray-500 flex-shrink-0">{sortConfig.direction === "asc" ? "↑" : "↓"}</span>
                       )}
                     </div>
                   </th>
@@ -509,14 +509,14 @@ function Product({
               {paginatedData.map((product, index) => {
                 const globalIndex = (currentPage - 1) * itemsPerPage + index;
                 return (
-                  <tr key={product?.productId || product?.name || index} className={`transition-all duration-150 hover:bg-gray-50 ${selected.has(globalIndex) ? "bg-indigo-50" : "bg-white"}`}>
+                  <tr key={product?.productId || product?.name || index} className={`transition-colors duration-150 hover:bg-gray-50 ${selected.has(globalIndex) ? "bg-gray-50" : "bg-white"}`}>
                     <td className="sticky left-0 bg-inherit text-center min-w-10 sm:min-w-12 w-10 sm:w-12 px-2 sm:px-3 py-3">
                       <input
                         type="checkbox"
                         aria-label={`Select row ${globalIndex + 1}`}
                         checked={selected.has(globalIndex)}
                         onChange={() => toggleRow(globalIndex)}
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-indigo-600 cursor-pointer"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer"
                       />
                     </td>
                     {columns.map((col) => (
@@ -537,10 +537,10 @@ function Product({
                               e.preventDefault();
                               handleShowProductDetails(product.productId || product.ProductId);
                             }}
-                            className="flex items-center gap-2 font-medium text-indigo-600 cursor-pointer hover:text-indigo-700 transition-colors duration-150 group w-full min-w-0"
+                            className="flex items-center gap-2 font-medium text-gray-900 cursor-pointer hover:text-slate-700 transition-colors duration-150 group w-full min-w-0"
                           >
                             <span
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg shadow-sm font-semibold text-sm transition-transform duration-200 group-hover:scale-110 flex-shrink-0"
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg font-semibold text-sm flex-shrink-0"
                               style={{
                                 background: getColorFromString(product.name, 0.35, 85),
                                 color: getDarkerColorFromString(product.name, 1, 45),
@@ -584,7 +584,7 @@ function Product({
             <span className="font-medium">{Math.min(startIndex + 1, totalItems)}</span>-<span className="font-medium">{Math.min(endIndex, totalItems)}</span> of <span className="font-medium">{totalItems}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-indigo-50 disabled:opacity-40">
+            <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-40">
               <span>←</span> <span className="hidden sm:inline">Prev</span>
             </button>
             <div className="flex items-center gap-1">
@@ -592,7 +592,7 @@ function Product({
                 const pageNum = Math.max(1, currentPage - 2) + i;
                 if (pageNum > totalPages) return null;
                 return (
-                  <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${pageNum === currentPage ? 'bg-indigo-600 text-white shadow-sm' : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
+                  <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${pageNum === currentPage ? 'bg-slate-800 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}>
                     {pageNum}
                   </button>
@@ -600,11 +600,11 @@ function Product({
               })}
               {totalPages > 5 && currentPage < totalPages - 2 && <span className="text-gray-400 px-2 font-medium">...</span>}
             </div>
-            <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-indigo-50 disabled:opacity-40">
+            <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-40">
               <span className="hidden sm:inline">Next</span> <span>→</span>
             </button>
             <span className="text-xs sm:text-sm text-gray-600 font-medium">
-              Page <span className="font-bold text-indigo-600">{currentPage}</span>/<span className="font-bold text-gray-700">{totalPages}</span>
+              Page <span className="font-semibold text-gray-900">{currentPage}</span>/<span className="font-semibold text-gray-700">{totalPages}</span>
             </span>
           </div>
         </div>
@@ -615,9 +615,9 @@ function Product({
       {(detailsLoading || detailsError || selectedProductDetails) && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseProductDetails} />
-          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-2xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
-            <div className="flex items-center gap-5 p-8 border-b border-gray-200/80 bg-white backdrop-blur-sm">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-2xl shadow-xl transform hover:scale-105 transition-transform duration-200" style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)", color: "white" }}>
+          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
+            <div className="flex items-center gap-5 p-8 border-b border-gray-200 bg-white">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-2xl bg-slate-800 text-white">
                 {selectedProductDetails?.name ? String(selectedProductDetails.name).charAt(0).toUpperCase() : "P"}
               </div>
               <div className="flex flex-col gap-1 flex-1">
@@ -629,7 +629,7 @@ function Product({
                   Product Details
                 </div>
               </div>
-              <button className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center transition-all duration-200" onClick={handleCloseProductDetails}>
+              <button className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center transition-colors duration-200" onClick={handleCloseProductDetails}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -661,7 +661,7 @@ function Product({
               }}>
                 {detailsLoading && (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div>
                   </div>
                 )}
                 {detailsError && (
@@ -674,14 +674,14 @@ function Product({
                 )}
                 {selectedProductDetails && (
                   <>
-                    <div className="bg-white rounded-2xl p-6">
+                    <div className="bg-white rounded-xl p-6">
                       <div className="flex items-center gap-2 mb-5">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
                         </div>
-                        <h3 className="font-normal text-gray-900 text-lg">Product Information</h3>
+                        <h3 className="font-semibold text-gray-900 text-base">Product Details</h3>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="flex flex-col gap-2">
@@ -691,7 +691,7 @@ function Product({
                             </svg>
                             Name
                           </label>
-                          <input type="text" className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-100 border-2 border-gray-200 outline-none cursor-not-allowed" value={selectedProductDetails.name || ""} disabled />
+                          <input type="text" className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-100 border border-gray-300 outline-none cursor-not-allowed" value={selectedProductDetails.name || ""} disabled />
                         </div>
 
                         {/* Active Dropdown - Shows Yes/No */}
@@ -704,7 +704,7 @@ function Product({
                           </label>
                           <div className="relative">
                             <select
-                              className="w-full rounded-xl pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 appearance-none cursor-pointer"
+                              className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
                               value={selectedProductDetails.active || "Yes"}
                               onChange={(e) =>
                                 setSelectedProductDetails({
@@ -731,7 +731,7 @@ function Product({
                           </label>
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-normal">₹</span>
-                            <input type="number" step="1" min="0" className="w-full rounded-xl pl-10 pr-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 font-normal"
+                            <input type="number" step="1" min="0" className="w-full rounded-lg pl-10 pr-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 font-normal"
                               value={selectedProductDetails.baseCurrencyAmount || ""}
                               onChange={(e) => setSelectedProductDetails({ ...selectedProductDetails, baseCurrencyAmount: e.target.value })}
                             />
@@ -746,7 +746,7 @@ function Product({
                             Category
                           </label>
                           <div className="relative">
-                            <select className="w-full rounded-xl pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 appearance-none cursor-pointer"
+                            <select className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
                               value={selectedProductDetails.category || ""}
                               onChange={(e) => setSelectedProductDetails({ ...selectedProductDetails, category: e.target.value })}
                             >
@@ -761,6 +761,18 @@ function Product({
                             </svg>
                           </div>
                         </div>
+                      </div>
+
+                      {/* ── Record Info ── */}
+                      <div className="flex items-center gap-2 mt-8 mb-5">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                        </div>
+                        <h3 className="font-semibold text-gray-900 text-base">Record Info</h3>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
                         <div className="flex flex-col gap-2">
                           <label className="font-normal text-gray-700 text-sm flex items-center gap-2">
@@ -769,7 +781,7 @@ function Product({
                             </svg>
                             Created At
                           </label>
-                          <input type="date" className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                          <input type="date" className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
                             value={formatDateOnly(selectedProductDetails.createdAt || "")}
                             onChange={(e) => setSelectedProductDetails({
                               ...selectedProductDetails,
@@ -785,7 +797,7 @@ function Product({
                             </svg>
                             Created By
                           </label>
-                          <input type="text" disabled className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 opacity-60 cursor-not-allowed" value={selectedProductDetails.createdBy || ""} />
+                          <input type="text" disabled className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 opacity-60 cursor-not-allowed" value={selectedProductDetails.createdBy || ""} />
                         </div>
                         <div className="flex flex-col gap-2">
                           <label className="font-normal text-gray-700 text-sm flex items-center gap-2">
@@ -798,7 +810,7 @@ function Product({
                           <input
                             type="date"
                             disabled
-                            className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 opacity-60 cursor-not-allowed"
+                            className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 opacity-60 cursor-not-allowed"
                             value={formatDateOnly(selectedProductDetails.updatedAt || "")}
                           />
                         </div>
@@ -814,7 +826,7 @@ function Product({
                           <input
                             type="text"
                             disabled
-                            className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 opacity-60 cursor-not-allowed"
+                            className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 opacity-60 cursor-not-allowed"
                             value={selectedProductDetails.updatedBy || ""}
                           />
                         </div>
@@ -823,9 +835,9 @@ function Product({
                   </>
                 )}
 
-                <div className="flex justify-between items-center gap-3 pt-6mt-8 bg-white backdrop-blur-sm rounded-xl p-6 -mx-2">
+                <div className="flex justify-between items-center gap-3 pt-6 mt-8 bg-white rounded-xl p-6 -mx-2">
                   {isAdmin && (
-                    <button type="button" className="px-5 py-3 rounded-xl border-2 border-red-200 bg-white hover:bg-red-50 hover:border-red-300 text-red-600 font-normal transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
+                    <button type="button" className="px-5 py-3 rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-600 font-medium transition-colors duration-200 flex items-center gap-2"
                       onClick={() => {
                         if (selectedProductDetails) {
                           const idx = data.findIndex((a) => a.name === selectedProductDetails.name);
@@ -843,7 +855,7 @@ function Product({
                       Delete Product
                     </button>
                   )}
-                  <button type="submit" className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-normal shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 transform hover:scale-105">
+                  <button type="submit" className="px-6 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium transition-colors duration-200 flex items-center gap-2">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -859,7 +871,7 @@ function Product({
       {/* Edit form modal */}
       {isEditing && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-lg font-semibold">Edit Product</h4>
               <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-gray-600">✕</button>
@@ -873,7 +885,7 @@ function Product({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Active</label>
                 <select
-                  className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
                   value={editForm.active}
                   onChange={(e) => setEditForm({ ...editForm, active: e.target.value })}
                 >
@@ -884,12 +896,12 @@ function Product({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Base Currency Amount</label>
-                <input type="text" value={editForm.baseCurrencyAmount} onChange={(e) => setEditForm({ ...editForm, baseCurrencyAmount: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                <input type="text" value={editForm.baseCurrencyAmount} onChange={(e) => setEditForm({ ...editForm, baseCurrencyAmount: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                <select value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none">
                   <option value="" disabled>Select Category</option>
                   <option value="Software">Software</option>
                   <option value="Hardware">Hardware</option>
@@ -899,17 +911,17 @@ function Product({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
-                <input type="date" value={formatDateOnly(editForm.createdAt)} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : "" })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                <input type="date" value={formatDateOnly(editForm.createdAt)} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : "" })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
-                <input type="text" value={editForm.createdBy} onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                <input type="text" value={editForm.createdBy} onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
               </div>
 
               <div className="flex gap-3 justify-end pt-4">
-                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save</button>
+                <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium">Save</button>
               </div>
             </form>
           </div>

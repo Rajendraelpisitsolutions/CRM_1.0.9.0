@@ -13,8 +13,8 @@ const ACTION_STYLES = {
 
 function TabButton({ active, onClick, label, accent }) {
   const activeClasses = accent === "sky"
-    ? "bg-sky-600 text-white border-sky-600 shadow-sm"
-    : "bg-indigo-600 text-white border-indigo-600 shadow-sm";
+    ? "bg-slate-800 text-white border-slate-800 shadow-sm"
+    : "bg-slate-800 text-white border-slate-800 shadow-sm";
   const idleClasses = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
 
   return (
@@ -79,7 +79,7 @@ function ChangesCell({ changes, action }) {
   return (
     <div className="text-xs">
       <button type="button" onClick={() => setOpen((o) => !o)}
-        className="text-indigo-600 hover:text-indigo-800 font-medium">
+        className="text-slate-700 hover:text-slate-900 font-medium">
         {open ? "Hide" : `${verb} · ${entries.length} field${entries.length > 1 ? "s" : ""} (${summary})`}
       </button>
       {open && (
@@ -173,7 +173,7 @@ export default function AuditLogs() {
           </div>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Audit Logs</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Audit Logs</h1>
             <p className="text-sm text-gray-500">Login history is shown separately from CRUD operations so it is easier to review.</p>
           </div>
           <span className="text-sm text-gray-500">{activeCount} {activeTab === "login" ? "login" : "CRUD"} record{activeCount !== 1 ? "s" : ""}</span>
@@ -190,20 +190,20 @@ export default function AuditLogs() {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search user, entity, record, change…"
-            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
           />
           <select value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
             <option value="">All entities</option>
             {entities.map((en) => <option key={en} value={en}>{en}</option>)}
           </select>
           <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
             <option value="">All actions</option>
             {["Insert", "Create", "Update", "Delete", "Login"].map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
           <button onClick={() => fetchLogs()}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg">Refresh</button>
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg">Refresh</button>
         </div>
 
         {error && (
@@ -211,7 +211,7 @@ export default function AuditLogs() {
         )}
 
         {/* Table */}
-        <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-200 rounded-xl">
+        <div className="flex-1 min-h-0 overflow-auto bg-white border border-gray-200 rounded-xl shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide sticky top-0 z-10">
@@ -229,12 +229,22 @@ export default function AuditLogs() {
                 {loading ? (
                   <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-500">Loading…</td></tr>
                 ) : activeRows.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">No {activeTab === "login" ? "login history" : "Operation"} entries.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-14">
+                    <div className="flex flex-col items-center justify-center text-center">
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">No {activeTab === "login" ? "login history" : "activity"} entries</p>
+                      <p className="text-xs text-gray-500 mt-1">Records will appear here as {activeTab === "login" ? "sign-ins occur" : "changes are made"}.</p>
+                    </div>
+                  </td></tr>
                 ) : activeRows.map((r) => (
-                  <tr key={r.id ?? r.Id} className={`hover:bg-gray-50 align-top border-l-4 ${activeTab === "login" ? "border-sky-400" : "border-indigo-400"}`}>
+                  <tr key={r.id ?? r.Id} className={`hover:bg-gray-50 align-top border-l-4 ${activeTab === "login" ? "border-sky-400" : "border-slate-300"}`}>
                     <td className="px-3 py-2.5 whitespace-nowrap text-gray-700 w-[220px]">
                       <div className="flex items-center gap-2">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${activeTab === "login" ? "bg-sky-100 text-sky-600" : "bg-indigo-100 text-indigo-600"}`}>
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${activeTab === "login" ? "bg-sky-100 text-sky-600" : "bg-slate-100 text-slate-600"}`}>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H4" />
                           </svg>
@@ -270,9 +280,9 @@ export default function AuditLogs() {
           <span className="text-gray-500">Page {page} of {totalPages}</span>
           <div className="flex gap-2">
             <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white disabled:opacity-50">Prev</button>
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white">Prev</button>
             <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white disabled:opacity-50">Next</button>
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white">Next</button>
           </div>
         </div>
       </div>

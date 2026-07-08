@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 
 namespace Elpis_CRM.Services
@@ -26,11 +27,11 @@ namespace Elpis_CRM.Services
             _contactContext = context;
         }
 
-        private const string EnquiryNoPrefix = "EITSPL-EQ-";
+        private const string EnquiryNoPrefix = "EITSPL-MKT-EQ-";
         private const string EstimatedQuotePrefix = "Estimate Quote EST-";
 
         /// <summary>
-        /// Generates the next sequential EnquiryNo (e.g. "EITSPL-EQ-003").
+        /// Generates the next sequential EnquiryNo (e.g. "EITSPL-MKT-EQ-003").
         /// Looks at the highest existing numeric suffix across all contacts and increments it.
         /// Retries on a rare race-condition collision (two requests generating the same number at once).
         /// </summary>
@@ -347,8 +348,9 @@ namespace Elpis_CRM.Services
                 .ToListAsync();
 
             return tags
-                .SelectMany(t => t.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                .SelectMany(t => t.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
                 .Select(t => t.Trim())
+                .Where(t => t.Length > 0)
                 .Distinct()
                 .ToList();
         }
@@ -360,49 +362,60 @@ namespace Elpis_CRM.Services
         /// </summary>
         /// <param name="tags">Comma-separated tags to match; a contact qualifies if any of its tags is in this set.</param>
         /// <returns>A comma-joined string of distinct email addresses; an empty string when nothing matches.</returns>
+        // Splits a stored Tags string on "," or ";" into trimmed, non-empty tags.
+        private static readonly char[] TagSeparators = { ',', ';' };
+        private static IEnumerable<string> SplitTags(string? tags) =>
+            (tags ?? "").Split(TagSeparators, StringSplitOptions.RemoveEmptyEntries).Select(t => t.Trim());
+
+        // Builds a SQL-translatable predicate — c.Tags LIKE '%t1%' OR c.Tags LIKE '%t2%' … — so the
+        // database narrows to the (usually small) tagged subset. Without this the old code pulled every
+        // tagged contact — including its business-card image blobs — into memory just to match tags.
+        private static Expression<Func<ContactModel, bool>> TagsContainAny(List<string> tags)
+        {
+            var param = Expression.Parameter(typeof(ContactModel), "c");
+            var tagsProp = Expression.Property(param, nameof(ContactModel.Tags));
+            var contains = typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) })!;
+            Expression body = Expression.Constant(false);
+            foreach (var t in tags)
+            {
+                var notNull = Expression.NotEqual(tagsProp, Expression.Constant(null, typeof(string)));
+                var like = Expression.Call(tagsProp, contains, Expression.Constant(t));
+                body = Expression.OrElse(body, Expression.AndAlso(notNull, like));
+            }
+            return Expression.Lambda<Func<ContactModel, bool>>(body, param);
+        }
+
         // Get emails by tags — returns both WorkEmail and the Emails field
         public async Task<string> GetEmailsByTagsAsync(string tags)
         {
-            var selectedTags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                   .Select(t => t.Trim())
-                                   .ToList();
+            var selectedTags = SplitTags(tags).Where(t => t.Length > 0).ToList();
+            if (selectedTags.Count == 0) return string.Empty;
 
-            var contacts = await _contactContext.Contacts
-                .Where(c => !string.IsNullOrEmpty(c.Tags) &&
-                            (!string.IsNullOrEmpty(c.WorkEmail) || !string.IsNullOrEmpty(c.Emails)))
+            // Pre-filter in the DB and project to ONLY the tag + email columns (never the image blobs).
+            var rows = await _contactContext.Contacts.AsNoTracking()
+                .Where(TagsContainAny(selectedTags))
+                .Where(c => c.WorkEmail != null || c.Emails != null)
+                .Select(c => new { c.Tags, c.WorkEmail, c.Emails })
                 .ToListAsync();
 
-            var matched = contacts
-                .Where(c => c.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(t => t.Trim())
-                    .Any(tag => selectedTags.Contains(tag)));
-
             var emails = new List<string>();
-            foreach (var c in matched)
+            foreach (var c in rows)
             {
-                if (!string.IsNullOrWhiteSpace(c.WorkEmail))
-                    emails.Add(c.WorkEmail.Trim());
+                // Exact-match refine (a substring pre-filter can over-match, e.g. "VIP" vs "VIPer").
+                if (!SplitTags(c.Tags).Any(tag => selectedTags.Contains(tag))) continue;
 
-                // Emails may hold one or several addresses separated by , or ;
+                if (!string.IsNullOrWhiteSpace(c.WorkEmail)) emails.Add(c.WorkEmail.Trim());
                 if (!string.IsNullOrWhiteSpace(c.Emails))
-                {
-                    emails.AddRange(c.Emails
-                        .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(e => e.Trim()));
-                }
+                    emails.AddRange(c.Emails.Split(TagSeparators, StringSplitOptions.RemoveEmptyEntries).Select(e => e.Trim()));
             }
 
-            var distinct = emails
-                .Where(e => !string.IsNullOrWhiteSpace(e))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            return string.Join(",", distinct);
+            return string.Join(",", emails.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>
-        /// Returns the full contacts that carry at least one of the requested tags, matching each contact's
-        /// comma-separated, trimmed Tags against the requested set.
+        /// Returns the contacts that carry at least one of the requested tags. Narrows in the DB by
+        /// substring, then refines for an exact tag match in memory; image blobs are stripped from the
+        /// result so the payload stays small.
         /// </summary>
         /// <param name="tags">Comma-separated tags to match; a contact qualifies if any of its tags is in this set.</param>
         /// <returns>The matching contacts; an empty list when the argument is blank or nothing matches.</returns>
@@ -412,19 +425,61 @@ namespace Elpis_CRM.Services
             if (string.IsNullOrWhiteSpace(tags))
                 return new List<ContactModel>();
 
-            var selectedTags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                                   .Select(t => t.Trim())
-                                   .ToList();
+            var selectedTags = SplitTags(tags).Where(t => t.Length > 0).ToList();
+            if (selectedTags.Count == 0) return new List<ContactModel>();
 
-            var contacts = await _contactContext.Contacts
-                .Where(c => !string.IsNullOrEmpty(c.Tags))
+            // DB-side pre-filter: only load contacts whose Tags contain the tag, not every tagged row.
+            var contacts = await _contactContext.Contacts.AsNoTracking()
+                .Where(TagsContainAny(selectedTags))
                 .ToListAsync();
 
-            return contacts
-                .Where(c => c.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(t => t.Trim())
-                .Any(tag => selectedTags.Contains(tag)))
+            var matched = contacts
+                .Where(c => SplitTags(c.Tags).Any(tag => selectedTags.Contains(tag)))
                 .ToList();
+
+            // Don't ship the image blobs to the table — it never uses them (the slide-in fetches
+            // images by id), and they bloat the response.
+            foreach (var c in matched) { c.FrontImage = null; c.BackImage = null; }
+            return matched;
+        }
+
+        /// <summary>
+        /// Returns every contact's email addresses (WorkEmail + the multi-value Emails field) as a
+        /// de-duplicated comma-joined string, optionally narrowed by a token search. Projected so it
+        /// never loads the image blobs — used for "email all selected contacts" without paging.
+        /// </summary>
+        public async Task<string> GetAllEmailsAsync(string? search)
+        {
+            var query = _contactContext.Contacts.AsNoTracking()
+                .Where(c => c.WorkEmail != null || c.Emails != null);
+
+            if (!string.IsNullOrWhiteSpace(search) && search.Trim().Length >= 2)
+            {
+                var tokens = search.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var tok in tokens)
+                {
+                    var t = tok;
+                    query = query.Where(c =>
+                        (c.FirstName != null && c.FirstName.ToLower().Contains(t)) ||
+                        (c.LastName != null && c.LastName.ToLower().Contains(t)) ||
+                        (c.WorkEmail != null && c.WorkEmail.ToLower().Contains(t)) ||
+                        (c.Emails != null && c.Emails.ToLower().Contains(t)) ||
+                        (c.Account != null && c.Account.ToLower().Contains(t)) ||
+                        (c.Tags != null && c.Tags.ToLower().Contains(t)));
+                }
+            }
+
+            var rows = await query.Select(c => new { c.WorkEmail, c.Emails }).ToListAsync();
+
+            var emails = new List<string>();
+            foreach (var c in rows)
+            {
+                if (!string.IsNullOrWhiteSpace(c.WorkEmail)) emails.Add(c.WorkEmail.Trim());
+                if (!string.IsNullOrWhiteSpace(c.Emails))
+                    emails.AddRange(c.Emails.Split(TagSeparators, StringSplitOptions.RemoveEmptyEntries).Select(e => e.Trim()));
+            }
+
+            return string.Join(",", emails.Where(e => !string.IsNullOrWhiteSpace(e)).Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>

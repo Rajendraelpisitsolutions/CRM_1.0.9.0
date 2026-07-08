@@ -168,7 +168,7 @@ function ImportCard({
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-slate-800 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -184,8 +184,8 @@ function ImportCard({
                   comingSoon || !selectedFile
                     ? "bg-gray-300 cursor-not-allowed"
                     : isImporting
-                    ? "bg-blue-600 cursor-wait"
-                    : "bg-blue-600 hover:bg-blue-700 active:scale-95"
+                    ? "bg-slate-800 cursor-wait"
+                    : "bg-slate-800 hover:bg-slate-900 active:scale-95"
                 }`}
               >
                 {isImporting ? (

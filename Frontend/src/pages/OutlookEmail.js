@@ -257,7 +257,7 @@ function RailItem({ icon: Icon, label, active, onClick, badge, isDark }) {
       onClick={onClick}
       title={label}
       className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all ${active
-        ? "bg-indigo-600 text-white"
+        ? "bg-slate-800 text-white"
         : isDark
           ? "text-gray-300 hover:bg-white/10 hover:text-white"
           : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
@@ -279,7 +279,7 @@ function FolderRow({ icon: Icon, label, active, count, pinned, onPin, onClick, i
     <button
       onClick={onClick}
       className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition ${active
-        ? isDark ? "bg-indigo-600 text-white" : "bg-blue-100 text-blue-700"
+        ? isDark ? "bg-slate-800 text-white" : "bg-blue-100 text-blue-700"
         : isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"
         }`}
     >
@@ -1394,6 +1394,18 @@ function OutlookEmail({ onToast }) {
   // so the Templates page shows instead of the New Message panel.
   useEffect(() => { if (!isEmailFolder) setShowCompose(false); }, [isEmailFolder]);
 
+  // Arrived here from the Contacts "Send Email" button: open the compose window
+  // immediately so the user lands on the composer, not the inbox.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("openComposeOnLoad") === "1") {
+        localStorage.removeItem("openComposeOnLoad");
+        startCompose();
+      }
+    } catch (e) { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <div className={`flex flex-col h-full ${th.bg} ${th.text} overflow-hidden relative${isDark ? " outlook-dark" : ""}`}>
@@ -1416,13 +1428,13 @@ function OutlookEmail({ onToast }) {
       {/* ── Message Box Popup (created / updated / deleted) ───────────────── */}
       {popup && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setPopup(null)}>
-          <div className={`${th.card} border w-full max-w-xs rounded-2xl shadow-2xl p-6 text-center`} onClick={e => e.stopPropagation()}>
+          <div className={`${th.card} border w-full max-w-xs rounded-xl shadow-xl p-6 text-center`} onClick={e => e.stopPropagation()}>
             <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${popup.type === "error" ? (isDark ? "bg-red-500/15 text-red-400" : "bg-red-100 text-red-600") : (isDark ? "bg-green-500/15 text-green-400" : "bg-green-100 text-green-600")}`}>
               {popup.type === "error" ? <AlertCircle size={28} /> : <Check size={30} strokeWidth={3} />}
             </div>
             <p className={`text-base font-semibold ${th.text}`}>{popup.message}</p>
             <button onClick={() => setPopup(null)}
-              className="mt-5 px-6 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">
+              className="mt-5 px-6 py-2 text-sm rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition">
               OK
             </button>
           </div>
@@ -1432,7 +1444,7 @@ function OutlookEmail({ onToast }) {
       {/* ── Delete Template Confirm Message Box ───────────────────────────── */}
       {templateToDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setTemplateToDelete(null)}>
-          <div className={`${th.card} border w-full max-w-sm rounded-2xl shadow-2xl p-6`} onClick={e => e.stopPropagation()}>
+          <div className={`${th.card} border w-full max-w-sm rounded-xl shadow-xl p-6`} onClick={e => e.stopPropagation()}>
             <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? "bg-red-500/15 text-red-400" : "bg-red-100 text-red-600"}`}>
               <Trash2 size={26} />
             </div>
@@ -1457,7 +1469,7 @@ function OutlookEmail({ onToast }) {
       {/* ── Delete Confirm Modal ─────────────────────────────────────────── */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className={`${th.card} border w-full max-w-sm rounded-2xl shadow-2xl p-6`}>
+          <div className={`${th.card} border w-full max-w-sm rounded-xl shadow-xl p-6`}>
             <h4 className="text-base font-semibold mb-2">Delete messages</h4>
             <p className={`text-sm ${th.textMuted} mb-5`}>
               Are you sure you want to permanently delete {deleteCandidateIds.length} message(s)?
@@ -1479,7 +1491,7 @@ function OutlookEmail({ onToast }) {
       {/* ── Settings Modal ───────────────────────────────────────────────── */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className={`${th.card} border w-full max-w-2xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden`}>
+          <div className={`${th.card} border w-full max-w-2xl max-h-[95vh] rounded-xl shadow-xl flex flex-col overflow-hidden`}>
             <div className={`flex items-center justify-between px-4 py-3 border-b ${th.border} shrink-0`}>
               <h2 className="text-base font-semibold">Settings</h2>
               <button onClick={() => setShowSettings(false)} className={`p-2 rounded-lg ${th.hover}`}><X size={18} /></button>
@@ -1496,7 +1508,7 @@ function OutlookEmail({ onToast }) {
                   { key: "autoreply", label: "Auto Reply", icon: RefreshCw },
                 ].map(({ key, label, icon: Icon }) => (
                   <button key={key} onClick={() => setSettingsTab(key)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs md:text-sm whitespace-nowrap transition shrink-0 ${settingsTab === key ? "bg-blue-600 text-white" : `${th.hover} ${th.text}`}`}>
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs md:text-sm whitespace-nowrap transition shrink-0 ${settingsTab === key ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
                     <Icon size={14} />{label}
                   </button>
                 ))}
@@ -1525,10 +1537,10 @@ function OutlookEmail({ onToast }) {
                       value={signature}
                       onChange={e => setSignature(e.target.value)}
                       rows={6}
-                      className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`}
                       placeholder="Enter your email signature..."
                     />
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save Signature</button>
+                    <button className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">Save Signature</button>
                   </div>
                 )}
                 {settingsTab === "theme" && (
@@ -1558,7 +1570,7 @@ function OutlookEmail({ onToast }) {
                           <p className="text-sm font-medium">{label}</p>
                           <p className={`text-xs ${th.textMuted}`}>{desc}</p>
                         </div>
-                        <div className="w-10 h-6 bg-blue-600 rounded-full flex items-center justify-end px-0.5 cursor-pointer shrink-0">
+                        <div className="w-10 h-6 bg-slate-800 rounded-full flex items-center justify-end px-0.5 cursor-pointer shrink-0">
                           <div className="w-5 h-5 bg-white rounded-full shadow" />
                         </div>
                       </div>
@@ -1577,18 +1589,18 @@ function OutlookEmail({ onToast }) {
                         value={autoReply.message}
                         onChange={e => setAutoReply(p => ({ ...p, message: e.target.value }))}
                         rows={5}
-                        className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`}
                         placeholder="I'm currently out of office..."
                       />
                     )}
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save</button>
+                    <button className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">Save</button>
                   </div>
                 )}
                 {settingsTab === "rules" && (
                   <div className="space-y-4">
                     <h3 className="font-semibold text-base">Mail Rules</h3>
                     <p className={`text-sm ${th.textMuted}`}>Create rules to automatically organize your incoming mail.</p>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">
                       <Plus size={14} /> New Rule
                     </button>
                     <div className={`p-8 rounded-xl border ${th.border} text-center`}>
@@ -1608,7 +1620,7 @@ function OutlookEmail({ onToast }) {
         <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}>
           {/* Notification panel attached to bell icon */}
           <div
-            className={`absolute top-16 right-4 w-[min(100vw-1rem,24rem)] ${th.card} border ${th.border} rounded-2xl shadow-2xl overflow-hidden flex flex-col`}
+            className={`absolute top-16 right-4 w-[min(100vw-1rem,24rem)] ${th.card} border ${th.border} rounded-xl shadow-xl overflow-hidden flex flex-col`}
             style={{ maxHeight: "calc(100vh - 4.5rem)" }}
             onClick={e => e.stopPropagation()}>
             <div className={`flex items-center justify-between px-4 py-3 border-b ${th.border} shrink-0`}>
@@ -1649,7 +1661,7 @@ function OutlookEmail({ onToast }) {
                       <p className={`text-xs ${th.textMuted} truncate`}>{n.body}</p>
                       <p className={`text-xs ${th.textMuted} mt-0.5`}>{n.time}</p>
                     </div>
-                    {!n.read && <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0" />}
+                    {!n.read && <div className="w-2 h-2 bg-slate-800 rounded-full mt-1.5 flex-shrink-0" />}
                   </div>
                 ))
               )}
@@ -1717,7 +1729,7 @@ function OutlookEmail({ onToast }) {
             </div>
             <div className="p-3 shrink-0">
               <button onClick={() => { startCompose(); setShowMobileSidebar(false); }}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
+                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
                 <Plus size={16} />New email
               </button>
             </div>
@@ -1731,14 +1743,14 @@ function OutlookEmail({ onToast }) {
                 { key: "Deleted", label: "Trash", icon: Trash2 },
               ].map(({ key, label, icon: Icon, count }) => (
                 <button key={key} onClick={() => { setActiveFolder(key); setOpenedMailId(null); setMobileView("list"); setShowMobileSidebar(false); }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === key ? "bg-indigo-600 text-white" : `${th.hover} ${th.text}`}`}>
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === key ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
                   <Icon size={16} />{label}
-                  {count > 0 && <span className="ml-auto text-xs font-semibold bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">{count}</span>}
+                  {count > 0 && <span className="ml-auto text-xs font-semibold bg-slate-800 text-white px-1.5 py-0.5 rounded-full">{count}</span>}
                 </button>
               ))}
               <div className={`my-2 border-t ${th.border}`} />
               <button onClick={() => { setActiveFolder("Templates"); setOpenedMailId(null); setShowMobileSidebar(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === "Templates" ? "bg-indigo-600 text-white" : `${th.hover} ${th.text}`}`}>
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === "Templates" ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
                 <FileText size={16} />Templates
               </button>
               <div className={`my-2 border-t ${th.border}`} />
@@ -1794,7 +1806,7 @@ function OutlookEmail({ onToast }) {
             <aside className={`hidden md:flex md:w-56 ${th.surface} border-r ${th.border} flex-col shrink-0`}>
               <div className="p-3">
                 <button onClick={() => startCompose()}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
+                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
                   <Plus size={16} />New email
                 </button>
               </div>
@@ -1871,7 +1883,7 @@ function OutlookEmail({ onToast }) {
               <div className="flex gap-1.5 min-w-max">
                 {[...FOLDERS, { key: "Templates", label: "Templates", icon: FileText }].map(({ key, label }) => (
                   <button key={key} onClick={() => { setActiveFolder(key); setOpenedMailId(null); setMobileView("list"); }}
-                    className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap font-medium transition ${activeFolder === key ? "bg-blue-600 text-white" : isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}>
+                    className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap font-medium transition ${activeFolder === key ? "bg-slate-800 text-white" : isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}>
                     {label}{folderCounts[key] ? ` (${folderCounts[key]})` : ""}
                   </button>
                 ))}
@@ -1970,9 +1982,12 @@ function OutlookEmail({ onToast }) {
                       {(() => {
                         const mails = getFilteredMails();
                         if (!mails.length) return (
-                          <div className="flex flex-col items-center justify-center h-full py-12">
-                            <Inbox size={40} className={`mb-3 ${th.textMuted} opacity-40`} />
-                            <p className={`text-sm ${th.textMuted}`}>{emailSearch ? `No results for "${emailSearch}"` : "No messages"}</p>
+                          <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                              <Inbox size={24} className={`${th.textMuted} opacity-70`} />
+                            </div>
+                            <p className={`text-sm font-medium ${th.text}`}>{emailSearch ? "No results found" : "No messages"}</p>
+                            <p className={`text-xs mt-1 ${th.textMuted}`}>{emailSearch ? `Nothing matches "${emailSearch}"` : "Your messages will appear here"}</p>
                           </div>
                         );
                         return mails.map(mail => {
@@ -2016,7 +2031,7 @@ function OutlookEmail({ onToast }) {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1.5 mb-0.5">
-                                    {!isRead && <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0" />}
+                                    {!isRead && <div className="w-2 h-2 bg-slate-800 rounded-full shrink-0" />}
                                     <span className={`text-sm truncate ${!isRead ? "font-semibold" : ""} ${th.text}`}>
                                       {hl(mail.subject || "(No subject)")}
                                     </span>
@@ -2211,11 +2226,11 @@ function OutlookEmail({ onToast }) {
                                   <div className="relative flex-shrink-0">
                                     <div className="flex rounded-lg overflow-hidden shadow-sm">
                                       <button onClick={handleInlineSend} disabled={inlineSending}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition disabled:opacity-50">
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium transition disabled:opacity-50">
                                         <Send size={14} />{inlineSending ? "Sending…" : "Send"}
                                       </button>
                                       <button onClick={() => setInlineSendDropdown(p => !p)}
-                                        className="flex items-center px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white border-l border-blue-500 transition">
+                                        className="flex items-center px-2 py-2 bg-slate-800 hover:bg-slate-900 text-white border-l border-slate-600 transition">
                                         <ChevronDown size={14} />
                                       </button>
                                     </div>
@@ -2482,20 +2497,23 @@ function OutlookEmail({ onToast }) {
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
                       <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", assignedEmail: loggedInEmail, logo: "" }); }}
-                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs transition">
+                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                       {!myTemplates.length ? (
-                        <div className="flex flex-col items-center justify-center h-full py-12">
-                          <Edit2 size={36} className={`mb-3 ${th.textMuted} opacity-40`} />
-                          <p className={`text-sm ${th.textMuted}`}>No templates yet</p>
+                        <div className="flex flex-col items-center justify-center h-full py-12 px-6 text-center">
+                          <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                            <Edit2 size={22} className={`${th.textMuted} opacity-70`} />
+                          </div>
+                          <p className={`text-sm font-medium ${th.text}`}>No templates yet</p>
+                          <p className={`text-xs mt-1 ${th.textMuted}`}>Create a template to reuse it later</p>
                         </div>
                       ) : myTemplates.map((tpl, idx) => (
                         <div key={tpl.name + idx}
                           onClick={() => { setOpenedTemplateIdx(idx); setShowAddTemplate(false); }}
-                          className={`border-b ${th.border} px-4 py-3 cursor-pointer transition ${th.hover} ${openedTemplateIdx === idx && !showAddTemplate ? isDark ? "bg-indigo-900/20 border-l-2 border-l-indigo-400" : "bg-indigo-50 border-l-2 border-l-indigo-600" : ""}`}>
+                          className={`border-b ${th.border} px-4 py-3 cursor-pointer transition ${th.hover} ${openedTemplateIdx === idx && !showAddTemplate ? isDark ? "bg-slate-700/30 border-l-2 border-l-slate-400" : "bg-slate-50 border-l-2 border-l-slate-700" : ""}`}>
                           <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || tpl.body || "Untitled template"}</p>
                         </div>
                       ))}
@@ -2530,7 +2548,7 @@ function OutlookEmail({ onToast }) {
                                 onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))}
                                 required rows={6}
                                 placeholder="Enter footer content..."
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`} />
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -2559,7 +2577,7 @@ function OutlookEmail({ onToast }) {
                             </div>
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
-                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl transition disabled:opacity-50">
+                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition disabled:opacity-50">
                                 {isSubmitting ? "Creating..." : "Create Template"}
                               </button>
                               <button type="button" onClick={() => setShowAddTemplate(false)}
@@ -2596,7 +2614,7 @@ function OutlookEmail({ onToast }) {
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
                                 <textarea value={editTemplate.body}
                                   onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} required rows={6}
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`} />
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -2624,7 +2642,7 @@ function OutlookEmail({ onToast }) {
                               </div>
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
-                                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl transition disabled:opacity-50">
+                                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition disabled:opacity-50">
                                   {isSubmitting ? "Saving..." : "Save Changes"}
                                 </button>
                                 <button type="button" onClick={() => setEditTemplateIdx(null)}
@@ -2663,7 +2681,7 @@ function OutlookEmail({ onToast }) {
                                 ); })()}
                               </div>
                               <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject, body: tpl.body }); }}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl transition">
+                                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition">
                                 <Mail size={14} />Use Template
                               </button>
                             </div>
@@ -2719,7 +2737,7 @@ function OutlookEmail({ onToast }) {
                         <button key={i}
                           onClick={() => { setSelectedCalDay(cell.date); setCalDate(new Date(cell.date.getFullYear(), cell.date.getMonth(), 1)); setMiniCalDate(new Date(cell.date.getFullYear(), cell.date.getMonth(), 1)); }}
                           className={`flex items-center justify-center w-7 h-7 mx-auto rounded-full text-[11px] transition font-medium
-                            ${isToday ? "bg-blue-600 text-white" :
+                            ${isToday ? "bg-slate-800 text-white" :
                               isSel ? isDark ? "bg-gray-600 text-white" : "bg-gray-200 text-gray-800" :
                                 !cell.curr ? th.textMuted + " opacity-40" :
                                   `${th.hover} ${th.text}`}`}>
@@ -2768,7 +2786,7 @@ function OutlookEmail({ onToast }) {
                 <div className={`border-b ${th.border} px-2 md:px-3 py-2 flex items-center gap-1.5 md:gap-2 flex-wrap shrink-0`}>
                   <button
                     onClick={() => { setEventFormDate(selectedCalDay); setShowEventForm(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-medium transition shrink-0">
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg font-medium transition shrink-0">
                     <Plus size={14} />New event <ChevronDown size={11} />
                   </button>
                   <div className={`hidden md:block w-px h-5 ${isDark ? "bg-gray-600" : "bg-gray-300"}`} />
@@ -2840,7 +2858,7 @@ function OutlookEmail({ onToast }) {
                                   className={`border-r last:border-r-0 ${th.border} p-0.5 md:p-1 cursor-pointer transition group ${!cell.curr ? "opacity-40" : ""} ${isSel && !isToday ? isDark ? "bg-gray-800" : "bg-blue-50/50" : isDark ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
                                   <div className="mb-0.5">
                                     <span className={`inline-flex items-center justify-center w-6 h-6 md:w-7 md:h-7 text-xs md:text-sm rounded-full font-medium
-                                      ${isToday ? "bg-blue-600 text-white font-bold" :
+                                      ${isToday ? "bg-slate-800 text-white font-bold" :
                                         isSel ? isDark ? "bg-gray-600 text-white" : "bg-blue-100 text-blue-700" :
                                           th.text}`}>
                                       {cell.date.getDate()}
@@ -2918,7 +2936,7 @@ function OutlookEmail({ onToast }) {
                               return (
                                 <div key={i} className={`py-1.5 text-center border-r last:border-r-0 ${th.border}`}>
                                   <p className={`text-[10px] font-medium ${th.textMuted}`}>{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
-                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold mx-auto mt-0.5 ${isTod ? "bg-blue-600 text-white" : th.text}`}>
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold mx-auto mt-0.5 ${isTod ? "bg-slate-800 text-white" : th.text}`}>
                                     {d.getDate()}
                                   </span>
                                 </div>
@@ -2970,7 +2988,7 @@ function OutlookEmail({ onToast }) {
               {selectedEvent && (
                 <div className="fixed inset-0 z-50 p-4 flex items-center justify-center" onClick={() => setSelectedEvent(null)}>
                   <div
-                    className={`w-full max-w-sm ${th.card} border ${th.border} rounded-2xl shadow-2xl p-5`}
+                    className={`w-full max-w-sm ${th.card} border ${th.border} rounded-xl shadow-xl p-5`}
                     onClick={e => e.stopPropagation()}>
                     <div className="flex items-start gap-3 mb-4">
                       <div className={`w-3 h-3 rounded-sm mt-1.5 shrink-0 ${evColor(selectedEvent.color)}`} />
@@ -3019,7 +3037,7 @@ function OutlookEmail({ onToast }) {
                 return (
                   <div className="fixed inset-0 bg-black/75 z-50 flex items-end md:items-center justify-center p-0 md:p-4" onClick={() => setShowEventForm(false)}>
                     {/* Full screen on mobile, modal on desktop */}
-                    <div className="bg-[#1f1f2e] border-t md:border border-white/10 rounded-t-2xl md:rounded-xl shadow-2xl w-full md:max-w-5xl flex flex-col overflow-hidden"
+                    <div className="bg-[#1f1f2e] border-t md:border border-white/10 rounded-t-2xl md:rounded-xl shadow-xl w-full md:max-w-5xl flex flex-col overflow-hidden"
                       style={{ height: "92vh" }}
                       onClick={e => e.stopPropagation()}>
 
@@ -3028,7 +3046,7 @@ function OutlookEmail({ onToast }) {
                         <div className="flex items-center gap-0.5 overflow-x-auto">
                           <button onClick={handleSaveEvent}
                             disabled={!newEventTitle.trim()}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md mr-1 transition-colors shrink-0 ${newEventTitle.trim() ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-blue-600/30 text-white/35 cursor-not-allowed"}`}>
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md mr-1 transition-colors shrink-0 ${newEventTitle.trim() ? "bg-slate-800 hover:bg-slate-900 text-white" : "bg-slate-800/30 text-white/35 cursor-not-allowed"}`}>
                             <Bookmark size={13} />Save
                           </button>
                           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 border border-white/20 text-white text-xs font-semibold rounded-md shrink-0">
@@ -3044,7 +3062,7 @@ function OutlookEmail({ onToast }) {
                             </button>
                             {showEvBusyDd && (
                               <><div className="fixed inset-0 z-40" onClick={() => setShowEvBusyDd(false)} />
-                                <div className="absolute top-full left-0 mt-1 w-48 bg-[#1e1f38] border border-white/15 rounded-lg shadow-2xl z-50 py-1">
+                                <div className="absolute top-full left-0 mt-1 w-48 bg-[#1e1f38] border border-white/15 rounded-lg shadow-xl z-50 py-1">
                                   {busyOptions.map(opt => (
                                     <button key={opt} onClick={() => { setEvBusyStatus(opt); setShowEvBusyDd(false); }}
                                       className="w-full flex items-center gap-3 px-3 py-2.5 text-xs text-white/80 hover:bg-white/10 transition-colors">
@@ -3063,7 +3081,7 @@ function OutlookEmail({ onToast }) {
                             </button>
                             {showEvReminderDd && (
                               <><div className="fixed inset-0 z-40" onClick={() => setShowEvReminderDd(false)} />
-                                <div className="absolute top-full left-0 mt-1 w-52 bg-[#1e1f38] border border-white/15 rounded-lg shadow-2xl z-50 py-1 max-h-64 overflow-y-auto">
+                                <div className="absolute top-full left-0 mt-1 w-52 bg-[#1e1f38] border border-white/15 rounded-lg shadow-xl z-50 py-1 max-h-64 overflow-y-auto">
                                   {reminderOptions.map(opt => (
                                     <button key={opt} onClick={() => { setEvReminder(opt); setShowEvReminderDd(false); }}
                                       className="w-full flex items-center gap-3 px-3 py-2.5 text-xs text-white/80 hover:bg-white/10 transition-colors">
@@ -3081,7 +3099,7 @@ function OutlookEmail({ onToast }) {
                             </button>
                             {showEvCategoryDd && (
                               <><div className="fixed inset-0 z-40" onClick={() => setShowEvCategoryDd(false)} />
-                                <div className="absolute top-full left-0 mt-1 w-52 bg-[#1e1f38] border border-white/15 rounded-lg shadow-2xl z-50 py-1">
+                                <div className="absolute top-full left-0 mt-1 w-52 bg-[#1e1f38] border border-white/15 rounded-lg shadow-xl z-50 py-1">
                                   {categoryOptions.map(({ label, color }) => (
                                     <button key={label} onClick={() => { setEvCategory(c => c === label ? null : label); setShowEvCategoryDd(false); }}
                                       className="w-full flex items-center gap-3 px-3 py-2.5 text-xs text-white/80 hover:bg-white/10 transition-colors">
@@ -3100,7 +3118,7 @@ function OutlookEmail({ onToast }) {
                             </button>
                             {showEvPrivacyDd && (
                               <><div className="fixed inset-0 z-40" onClick={() => setShowEvPrivacyDd(false)} />
-                                <div className="absolute top-full left-0 mt-1 w-40 bg-[#1e1f38] border border-white/15 rounded-lg shadow-2xl z-50 py-1">
+                                <div className="absolute top-full left-0 mt-1 w-40 bg-[#1e1f38] border border-white/15 rounded-lg shadow-xl z-50 py-1">
                                   {["Private", "Not private"].map(opt => (
                                     <button key={opt} onClick={() => { setEvPrivacy(opt); setShowEvPrivacyDd(false); }}
                                       className="w-full flex items-center gap-3 px-3 py-2.5 text-xs text-white/80 hover:bg-white/10 transition-colors">
@@ -3123,7 +3141,7 @@ function OutlookEmail({ onToast }) {
                         <div className="flex-1 overflow-y-auto px-4 md:px-7 py-4 md:py-5">
                           {/* Calendar selector */}
                           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/8">
-                            <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0" />
+                            <span className="w-3 h-3 rounded-full bg-slate-800 shrink-0" />
                             <span className="text-sm text-white/70 truncate">
                               Calendar ({accounts[0]?.username || "your account"})
                             </span>
@@ -3150,7 +3168,7 @@ function OutlookEmail({ onToast }) {
                                       const ac = avatarColors[(p.name || p.email).charCodeAt(0) % avatarColors.length];
                                       const ini = (p.name || p.email).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                                       return (
-                                        <span key={p.email} className="flex items-center gap-1.5 bg-blue-600/15 border border-blue-500/30 text-white text-xs px-2 py-1 rounded-full max-w-[160px]">
+                                        <span key={p.email} className="flex items-center gap-1.5 bg-slate-800/15 border border-blue-500/30 text-white text-xs px-2 py-1 rounded-full max-w-[160px]">
                                           <span className={`w-4 h-4 rounded-full ${ac} flex items-center justify-center text-[8px] font-bold shrink-0`}>{ini}</span>
                                           <span className="truncate">{p.name || p.email}</span>
                                           <button onMouseDown={e => { e.preventDefault(); setEvSelectedAttendees(a => a.filter(x => x.email !== p.email)); }} className="text-white/35 hover:text-white/80 shrink-0 ml-0.5">
@@ -3185,7 +3203,7 @@ function OutlookEmail({ onToast }) {
                                 setShowEvAttendeePicker(true);
                               };
                               return (
-                                <div className="absolute left-0 right-0 top-full mt-1 bg-[#1a1b2e] border border-white/12 rounded-xl shadow-2xl z-50 overflow-hidden" style={{ maxHeight: 240, overflowY: "auto" }}>
+                                <div className="absolute left-0 right-0 top-full mt-1 bg-[#1a1b2e] border border-white/12 rounded-xl shadow-xl z-50 overflow-hidden" style={{ maxHeight: 240, overflowY: "auto" }}>
                                   <div className="flex items-center justify-between px-4 py-2 border-b border-white/8 bg-[#15162a]">
                                     <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">
                                       {q ? "Search results" : "Suggested from Outlook"}
@@ -3243,7 +3261,7 @@ function OutlookEmail({ onToast }) {
                             </div>
                             <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-auto">
                               <div onClick={() => setNewEventAllDay(p => !p)}
-                                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventAllDay ? "bg-blue-600" : "bg-white/20"}`}>
+                                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventAllDay ? "bg-slate-800" : "bg-white/20"}`}>
                                 <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newEventAllDay ? "translate-x-4" : "translate-x-0.5"}`} />
                               </div>
                               <span className="text-xs text-white/50">All day</span>
@@ -3263,7 +3281,7 @@ function OutlookEmail({ onToast }) {
                           <div className="flex items-center gap-3 py-3 border-b border-white/8 px-1">
                             <Video size={18} className="text-white/35 shrink-0" />
                             <div onClick={() => setNewEventOnline(p => !p)}
-                              className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventOnline ? "bg-blue-600" : "bg-white/20"}`}>
+                              className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventOnline ? "bg-slate-800" : "bg-white/20"}`}>
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newEventOnline ? "translate-x-4" : "translate-x-0.5"}`} />
                             </div>
                             <span className="text-sm text-white/70 font-medium">Teams meeting</span>
@@ -3360,7 +3378,7 @@ function OutlookEmail({ onToast }) {
       {/* ── Schedule Send Modal ──────────────────────────────────────────── */}
       {scheduleModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center z-[1300] p-0 md:p-4">
-          <div className={`${th.card} border ${th.border} rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-sm overflow-hidden`}>
+          <div className={`${th.card} border ${th.border} rounded-t-2xl md:rounded-xl shadow-xl w-full md:max-w-sm overflow-hidden`}>
             <div className={`px-5 py-4 border-b ${th.border} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${th.text} flex items-center gap-2`}>
                 <Clock size={16} className="text-blue-500" />Schedule send
@@ -3376,7 +3394,7 @@ function OutlookEmail({ onToast }) {
                 value={scheduleDateTime}
                 onChange={e => setScheduleDateTime(e.target.value)}
                 min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                className={`w-full px-3 py-2.5 border ${th.border} rounded-lg text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-white"} outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100`}
+                className={`w-full px-3 py-2.5 border ${th.border} rounded-lg text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-white"} outline-none focus:border-transparent focus:ring-2 focus:ring-slate-500`}
               />
               {inlineError && <p className="mt-2 text-xs text-red-500">{inlineError}</p>}
             </div>
@@ -3386,7 +3404,7 @@ function OutlookEmail({ onToast }) {
                 Cancel
               </button>
               <button onClick={handleScheduleSend} disabled={!scheduleDateTime || schedulingInProgress}
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
                 <Clock size={14} />{schedulingInProgress ? "Scheduling…" : "Schedule"}
               </button>
             </div>
@@ -3991,10 +4009,10 @@ useEffect(() => {
     if (footerLogo) {
       return `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
         + `<td valign="middle" style="padding-right:14px;"><img src="${footerLogo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
-        + `<td valign="middle" style="font-size:13px;color:#374151;line-height:1.5;">${textHtml}</td>`
+        + `<td valign="middle" style="font-size:15px;color:#374151;line-height:1.6;">${textHtml}</td>`
         + `</tr></table>`;
     }
-    return `<div style="margin-top:18px;font-size:13px;color:#374151;line-height:1.5;">${textHtml}</div>`;
+    return `<div style="margin-top:18px;font-size:15px;color:#374151;line-height:1.6;">${textHtml}</div>`;
   };
 
   // Handle Form Submission
@@ -4031,6 +4049,21 @@ useEffect(() => {
       return;
     }
 
+    // Must be signed in to Outlook (Microsoft Graph) to send. Without a token every
+    // Graph sendMail returns 401, which is exactly why all recipients showed "failed".
+    // Block here with a clear message instead of creating a campaign full of failures.
+    if (!accessToken) {
+      setErrors({
+        apiError:
+          accounts && accounts.length > 0
+            ? "Your Outlook session has expired. Open the Email menu to sign in again, then resend."
+            : "You're not signed in to Outlook. Open the Email menu (left sidebar) to sign in with Microsoft, then resend.",
+      });
+      setSuccessMessage("");
+      setIsSending(false);
+      return;
+    }
+
     // Prepare attachments for Microsoft Graph API
     let attachmentsPayload = [];
     try {
@@ -4058,97 +4091,45 @@ useEffect(() => {
       return;
     }
 
-    // Send Email via Microsoft Graph API
+    // Build the final HTML.
+    const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+    const finalHtml = quoteHtml
+      ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+      : `${userHtml}${footerBlockHtml()}`;
+
+    // Normal send — ONE message to all recipients, no tracking.
+    // (For open/click tracking, use the Send dropdown → "Send tracked campaign".)
     try {
-      console.log("Sending email via Graph API");
-      const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
-      const finalHtml = quoteHtml
-        ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
-        : `${userHtml}${footerBlockHtml()}`;
       const emailPayload = {
         message: {
-          subject: subject,
-          body: {
-            contentType: "HTML",
-            content: finalHtml,
-          },
-          toRecipients: toEmails.map((addr) => ({
-            emailAddress: {
-              address: addr,
-            },
-          })),
-          ccRecipients:
-            ccEmails.length > 0
-              ? ccEmails.map((addr) => ({
-                  emailAddress: {
-                    address: addr,
-                  },
-                }))
-              : [],
+          subject,
+          body: { contentType: "HTML", content: finalHtml },
+          toRecipients: toEmails.map((addr) => ({ emailAddress: { address: addr } })),
+          ccRecipients: ccEmails.length > 0 ? ccEmails.map((addr) => ({ emailAddress: { address: addr } })) : [],
         },
       };
+      if (attachmentsPayload.length > 0) emailPayload.message.attachments = attachmentsPayload;
 
-      // Add attachments if any
-      if (attachmentsPayload.length > 0) {
-        emailPayload.message.attachments = attachmentsPayload;
-      }
+      const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(emailPayload),
+      });
 
-      const response = await fetch(
-        "https://graph.microsoft.com/v1.0/me/sendMail",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(emailPayload),
-        }
-      );
-
-      // Check if the request was successful
       if (response.ok || response.status === 202) {
-        console.log(" Email sent successfully (status:", response.status, ")");
         setSuccessMessage("Email sent successfully!");
         setErrors({});
-
-        // Reset form fields after successful email send
-        setToInput("");
-        setCcInput("");
-        setSubject("");
-        setBody("");
-        setQuoteHtml("");
-        setSelectedTemplate("");
-        setSelectedTags([]);
-        setAttachments([]);
-        setImages([]);
-
-        // Clear selected contacts from localStorage after sending
-        try {
-          localStorage.removeItem("selectedContactEmails");
-        } catch (e) {}
-
-        // Call onMailSent prop if provided
-        if (typeof onMailSent === "function") {
-          onMailSent({
-            subject,
-            body,
-            to: toEmails,
-            cc: ccEmails,
-          });
-        }
-
+        setToInput(""); setCcInput(""); setSubject(""); setBody("");
+        setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
+        setAttachments([]); setImages([]);
+        try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
+        if (typeof onMailSent === "function") onMailSent({ subject, body, to: toEmails, cc: ccEmails });
         setIsSending(false);
-
-        // Close modal after a short delay
-        setTimeout(() => {
-          onClose();
-        }, 1000);
+        setTimeout(() => onClose(), 1000);
       } else {
         const errorData = await response.json();
         console.error("Graph API error response:", errorData);
-        setErrors({
-          apiError: errorData.error?.message || "Failed to send email",
-        });
+        setErrors({ apiError: errorData.error?.message || "Failed to send email" });
         setIsSending(false);
       }
     } catch (error) {
@@ -4235,6 +4216,91 @@ useEffect(() => {
     setTimeout(() => onClose(), 1200);
   };
 
+  // TRACKED CAMPAIGN — sends each recipient their OWN email with a unique open pixel + tracked
+  // links, so opens/clicks/unsubscribes are attributed per person on the Email Tracking page.
+  // Sending is browser-driven (uses your Outlook token), and each outcome is reported back so the
+  // tracking page shows real delivery. The plain Send button (above) does NOT track.
+  const handleTrackedCampaign = async () => {
+    const { toEmails, ccEmails, html } = buildPayload();
+    if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
+    if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
+    if (!accessToken) {
+      setErrors({
+        apiError: accounts && accounts.length > 0
+          ? "Your Outlook session has expired. Open the Email menu to sign in again, then resend."
+          : "You're not signed in to Outlook. Open the Email menu (left sidebar) to sign in with Microsoft, then resend.",
+      });
+      return;
+    }
+    setIsSending(true); setErrors({});
+
+    // 1) Register the campaign + get each recipient's tracked HTML (open pixel + links woven in).
+    let tracked = null;
+    try {
+      const prep = await apiClient.post("/EmailCampaign/prepare", {
+        subject,
+        body: html,
+        recipients: toEmails.map((e) => ({ email: e })),
+      });
+      const items = Array.isArray(prep.data?.items) ? prep.data.items : null;
+      if (items && items.length) tracked = { campaignId: prep.data.campaignId, items };
+    } catch (e) {
+      console.error("Tracking prepare failed:", e);
+    }
+    if (!tracked) {
+      setErrors({ apiError: "Couldn't start the tracked campaign. Is the backend running?" });
+      setIsSending(false);
+      return;
+    }
+
+    // 2) Send each recipient their own tracked email, collecting outcomes.
+    const results = [];
+    for (let i = 0; i < tracked.items.length; i++) {
+      const item = tracked.items[i];
+      const message = {
+        subject,
+        body: { contentType: "HTML", content: item.html },
+        toRecipients: [{ emailAddress: { address: item.email } }],
+        ccRecipients: i === 0 ? ccEmails.map((a) => ({ emailAddress: { address: a } })) : [],
+      };
+      try {
+        const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+        const ok = res.ok || res.status === 202;
+        let errMsg = null;
+        if (!ok) {
+          try {
+            const txt = await res.text();
+            const parsed = txt && txt.trim().startsWith("{") ? JSON.parse(txt) : null;
+            errMsg = parsed?.error?.message || (txt ? txt.slice(0, 300) : "") || `HTTP ${res.status}`;
+          } catch { errMsg = `HTTP ${res.status}`; }
+        }
+        results.push({ recipientId: item.recipientId, status: ok ? "Sent" : "Failed", error: errMsg });
+      } catch (err) {
+        results.push({ recipientId: item.recipientId, status: "Failed", error: err.message });
+      }
+    }
+
+    // 3) Report outcomes so the Email Tracking page reflects delivery.
+    try { await apiClient.post(`/EmailCampaign/${tracked.campaignId}/status`, { results }); } catch (e) {}
+
+    const sent = results.filter((r) => r.status === "Sent").length;
+    setIsSending(false);
+    if (sent > 0) {
+      setSuccessMessage(`Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}. Follow opens & clicks on the Email Tracking page.`);
+      setErrors({});
+      setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
+      setSelectedTags([]); setAttachments([]); setImages([]);
+      try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
+      setTimeout(() => onClose(), 1500);
+    } else {
+      setErrors({ apiError: `All sends failed — ${results[0]?.error || "check your Outlook sign-in / permissions."}` });
+    }
+  };
+
   // When tags are applied, reflect the matching contacts' emails into the To field.
   useEffect(() => {
     if (!selectedTags.length) return;
@@ -4267,7 +4333,7 @@ useEffect(() => {
   const d = {
     bg: "bg-white", surface: "bg-gray-50", text: "text-gray-900",
     muted: "text-gray-600", border: "border-gray-200", borderSm: "border-gray-100",
-    input: "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-blue-200",
+    input: "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-slate-500",
     hover: "hover:bg-gray-100", hoverBlue: "hover:bg-blue-50",
     chip: "bg-white border-gray-300 text-gray-700",
     tag: "bg-blue-100 text-blue-800 border-blue-300",
@@ -4276,7 +4342,7 @@ useEffect(() => {
 
   return (
     <div className={inline ? "w-full h-full flex flex-col min-h-0" : "fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1100] p-3 sm:p-4"}>
-      <div className={inline ? "bg-white w-full h-full flex flex-col overflow-hidden min-h-0" : "bg-white rounded-xl shadow-2xl w-full max-w-2xl sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"}>
+      <div className={inline ? "bg-white w-full h-full flex flex-col overflow-hidden min-h-0" : "bg-white rounded-xl shadow-xl w-full max-w-2xl sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"}>
         {/* Header */}
         <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${d.surface}`}>
           <h2 className={`text-lg sm:text-xl font-bold ${d.text}`}>
@@ -4361,12 +4427,12 @@ useEffect(() => {
               : "fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1200] p-3 sm:p-4"}>
               <div className={inline
                 ? `${d.bg} w-full h-full overflow-hidden flex flex-col`
-                : `${d.bg} rounded-xl shadow-2xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col`}>
+                : `${d.bg} rounded-xl shadow-xl w-full max-w-xl sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col`}>
                 {/* Modal Header */}
                 <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${isDark ? "bg-blue-900/20" : "bg-blue-50"}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-600 rounded-lg flex-shrink-0">
+                      <div className="p-2 bg-slate-800 rounded-lg flex-shrink-0">
                         <FileText size={20} className="text-white" />
                       </div>
                       <div className="min-w-0">
@@ -4394,7 +4460,7 @@ useEffect(() => {
                     <input
                       type="text"
                       placeholder="Search tags..."
-                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-slate-500 focus:ring-2 transition-all text-sm ${d.input}`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -4462,9 +4528,23 @@ useEffect(() => {
                       <div className="flex items-center gap-2 mb-3">
                         <Tag size={16} className="text-emerald-500 flex-shrink-0" />
                         <h3 className={`${d.text} text-sm font-semibold`}>Tags</h3>
-                        <span className={`text-xs ${d.muted} ${isDark ? "bg-gray-700" : "bg-gray-100"} px-2 py-0.5 rounded-full ml-auto`}>
-                          {filteredTags.length}
-                        </span>
+                        <div className="ml-auto flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allSelected = filteredTags.length > 0 && filteredTags.every((t) => modalSelectedTags.includes(t));
+                              setModalSelectedTags(allSelected
+                                ? modalSelectedTags.filter((t) => !filteredTags.includes(t))
+                                : [...new Set([...modalSelectedTags, ...filteredTags])]);
+                            }}
+                            className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+                          >
+                            {filteredTags.length > 0 && filteredTags.every((t) => modalSelectedTags.includes(t)) ? "Clear all" : "Select all"}
+                          </button>
+                          <span className={`text-xs ${d.muted} ${isDark ? "bg-gray-700" : "bg-gray-100"} px-2 py-0.5 rounded-full`}>
+                            {filteredTags.length}
+                          </span>
+                        </div>
                       </div>
 
                       {filteredTags.length === 0 ? (
@@ -4530,7 +4610,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={handleApply}
-                        className="px-3 py-2 bg-blue-600 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                        className="px-3 py-2 bg-slate-800 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-slate-900 transition-colors shadow-sm"
                       >
                         Apply
                       </button>
@@ -4583,6 +4663,20 @@ useEffect(() => {
                       className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-xs font-medium border border-blue-300 hover:bg-blue-100 transition-colors flex-shrink-0"
                     >
                       +{toEmails.length - 2} more
+                    </button>
+                  )}
+                  {toEmails.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setToInput("");
+                        setToDraft("");
+                      }}
+                      className="text-[11px] text-gray-400 hover:text-red-600 font-semibold flex-shrink-0 px-1"
+                      title="Clear all recipients"
+                    >
+                      Clear all
                     </button>
                   )}
                   <input
@@ -4677,7 +4771,7 @@ useEffect(() => {
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col gap-3">
             {/* Message body + footer in a single box (footer = logo on the left + text) */}
             <div
-              className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 ${
+              className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
                 quoteHtml ? "min-h-[120px]" : "flex-1 min-h-[220px]"
               } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
               onDragOver={handleDragOver}
@@ -4700,7 +4794,7 @@ useEffect(() => {
                     onChange={(e) => setFooterText(e.target.value)}
                     rows={Math.max(1, (footerText || "").split("\n").length)}
                     placeholder="Footer / signature"
-                    className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-0 self-center leading-5 ${d.text} placeholder-gray-400`}
+                    className={`flex-1 w-full resize-none text-[15px] bg-transparent outline-none border-0 p-0 self-center leading-6 ${d.text} placeholder-gray-400`}
                   />
                 </div>
               )}
@@ -4845,7 +4939,7 @@ useEffect(() => {
                   <button
                     type="submit"
                     disabled={isSending}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-3 sm:px-4 py-2 hover:bg-blue-700 transition disabled:bg-blue-300 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
+                    className="flex items-center gap-2 bg-slate-800 text-white px-3 sm:px-4 py-2 hover:bg-slate-900 transition disabled:bg-slate-400 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
                   >
                     <Send size={15} />
                     {isSending ? "Sending..." : "Send"}
@@ -4853,7 +4947,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={() => setSendDropdown(p => !p)}
-                    className="flex items-center px-2 bg-blue-600 hover:bg-blue-700 text-white border-l border-blue-500 transition h-10 sm:h-auto"
+                    className="flex items-center px-2 bg-slate-800 hover:bg-slate-900 text-white border-l border-slate-600 transition h-10 sm:h-auto"
                   >
                     <ChevronDown size={14} />
                   </button>
@@ -4873,6 +4967,10 @@ useEffect(() => {
                     <button type="button" onClick={() => { setSendDropdown(false); handleMailMerge(); }}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
                       <Users size={14} className="text-blue-500 flex-shrink-0" />Start mail merge
+                    </button>
+                    <button type="button" onClick={() => { setSendDropdown(false); handleTrackedCampaign(); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
+                      <Send size={14} className="text-emerald-500 flex-shrink-0" />Send tracked campaign
                     </button>
                   </div>
                 )}
@@ -4938,7 +5036,7 @@ useEffect(() => {
         {/* All Recipients Modal */}
         {showAllToEmails && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200] flex items-center justify-center p-3 sm:p-4">
-            <div className={`${d.bg} rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col`}>
+            <div className={`${d.bg} rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col`}>
               {/* Modal Header */}
               <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} flex items-center justify-between gap-3`}>
                 <h2 className={`text-base sm:text-lg font-bold ${d.text}`}>All Recipients ({toEmails.length})</h2>
@@ -4961,7 +5059,7 @@ useEffect(() => {
                     value={toDraft}
                     onChange={handleToInputChange}
                     onFocus={() => setShowEmailSuggestions(filteredEmailSuggestions.length > 0)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-slate-500 focus:ring-2 transition-all text-sm ${d.input}`}
                   />
 
                   {/* Suggestions in modal */}
@@ -5026,7 +5124,7 @@ useEffect(() => {
         {/* ── Schedule Send Modal ── */}
         {scheduleModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[1400] p-4">
-            <div className={`${d.bg} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${d.border}`}>
+            <div className={`${d.bg} rounded-xl shadow-xl w-full max-w-sm overflow-hidden border ${d.border}`}>
               <div className={`px-5 py-4 border-b ${d.border} flex items-center justify-between`}>
                 <h3 className={`text-base font-semibold ${d.text} flex items-center gap-2`}>
                   <Clock size={16} className="text-blue-500" />Schedule send
@@ -5043,7 +5141,7 @@ useEffect(() => {
                   value={scheduleDateTime}
                   onChange={e => setScheduleDateTime(e.target.value)}
                   min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 ${d.input}`}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-slate-500 focus:ring-2 ${d.input}`}
                 />
                 {errors.apiError && <p className="mt-2 text-xs text-red-500">{errors.apiError}</p>}
               </div>
@@ -5054,7 +5152,7 @@ useEffect(() => {
                 </button>
                 <button type="button" onClick={handleScheduleSend}
                   disabled={!scheduleDateTime || schedulingInProgress}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
                   <Clock size={14} />{schedulingInProgress ? "Scheduling…" : "Schedule"}
                 </button>
               </div>

@@ -257,13 +257,13 @@ export default function ExcelImports() {
             <div className="relative px-6 sm:px-8 py-6 bg-gradient-to-r from-blue-50 to-blue-50 border-b border-gray-200">
               <button
                 onClick={closeModal}
-                className="absolute top-4 right-4 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="absolute top-4 right-4 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 rounded-lg transition-colors focus:ring-2 focus:ring-slate-500 focus:outline-none"
                 disabled={loading}
               >
                 <X size={20} />
               </button>
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-600 rounded-xl">
+                <div className="p-3 bg-slate-800 rounded-xl">
                   <FileSpreadsheet className="text-white" size={24} />
                 </div>
                 <div>
@@ -427,7 +427,7 @@ export default function ExcelImports() {
                       {/* Progress Bar */}
                       <div className="w-full max-w-xs mb-3 bg-gray-200 rounded-full h-2.5">
                         <div 
-                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                          className="bg-slate-800 h-2.5 rounded-full transition-all duration-300"
                           style={{ width: `${uploadProgress}%` }}
                         ></div>
                       </div>
@@ -463,13 +463,13 @@ export default function ExcelImports() {
                     disabled={!file || loading}
                     className={`
                       flex-1 py-3 rounded-xl font-semibold
-                      bg-gradient-to-r from-blue-600 to-blue-700
+                      bg-gradient-to-r from-slate-800 to-slate-900
                       text-white flex items-center justify-center gap-2
                       shadow-md transition
                       ${
                         !file || loading
                           ? "opacity-60 cursor-not-allowed"
-                          : "hover:from-blue-700 hover:to-blue-800"
+                          : "hover:from-slate-900 hover:to-slate-900"
                       }
                     `}
                   >

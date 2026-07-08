@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
-  FiUpload,
   FiUserPlus,
   FiUsers,
   FiBriefcase,
@@ -646,7 +645,7 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
           {selectedSearchItem && (() => {
             const item = selectedSearchItem;
             const cm = {
-              contact: { badge: "bg-blue-100 text-blue-700",    hdr: "from-blue-600 to-blue-700",    icon: "👤" },
+              contact: { badge: "bg-blue-100 text-blue-700",    hdr: "from-slate-800 to-slate-900",    icon: "👤" },
               account: { badge: "bg-green-100 text-green-700",  hdr: "from-green-600 to-green-700",  icon: "🏢" },
               deal:    { badge: "bg-purple-100 text-purple-700",hdr: "from-purple-600 to-purple-700",icon: "💰" },
               product: { badge: "bg-orange-100 text-orange-700",hdr: "from-orange-500 to-orange-600",icon: "📦" },
@@ -827,7 +826,7 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                                   )}
                                 </div>
                                 {/* Unread dot */}
-                                {!isRead && <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />}
+                                {!isRead && <div className="w-2 h-2 rounded-full bg-slate-800 flex-shrink-0 mt-1.5" />}
                               </button>
                             );
                           })}
@@ -838,12 +837,21 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                 )}
               </div>
 
-              {/* Panel footer */}
-              {!notifLoading && notifications.length > 0 && (
-                <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80 text-center">
-                  <span className="text-xs text-gray-400">Showing {notifications.length} notification{notifications.length !== 1 ? "s" : ""}</span>
-                </div>
-              )}
+              {/* Panel footer — always show a link to the full Notifications page */}
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-400">
+                  {notifications.length > 0 ? `Showing ${notifications.length} notification${notifications.length !== 1 ? "s" : ""}` : "Notifications"}
+                </span>
+                <button
+                  onClick={() => { setShowNotifPanel(false); navigate("/dashboard/notifications"); }}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  View all
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -964,12 +972,21 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                 )}
               </div>
 
-              {/* Panel footer */}
-              {!recentsLoading && recents.length > 0 && (
-                <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80 text-center">
-                  <span className="text-xs text-gray-400">{recents.length} item{recents.length !== 1 ? "s" : ""} in the last 24 hours</span>
-                </div>
-              )}
+              {/* Panel footer — always show a link to the full Recent Activity page */}
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80 flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-400">
+                  {recents.length > 0 ? `${recents.length} item${recents.length !== 1 ? "s" : ""} · last 24h` : "Last 24 hours"}
+                </span>
+                <button
+                  onClick={() => { setShowRecentsPanel(false); navigate("/dashboard/activity"); }}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                >
+                  View all
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1060,37 +1077,6 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                   </div>
                 </div>
                 <div className="py-1">
-                  <button className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-                    onClick={() => { navigate("/Dashboard/profile"); setShowDropdown(false); }}>
-                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <span>View Profile</span>
-                  </button>
-                  {(userRole?.toLowerCase() === "admin" || auth?.getRole?.()?.toLowerCase() === "admin") && (
-                    <button className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-                      onClick={() => { navigate("/Dashboard/Import"); setShowDropdown(false); }}>
-                      <FiUpload size={16} className="text-gray-500" />
-                      <span>Import Data</span>
-                    </button>
-                  )}
-                  {(userRole?.toLowerCase() === "admin" || auth?.getRole?.()?.toLowerCase() === "admin") && (
-                    <>
-                      <button className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-                        onClick={() => { setActiveContent("users"); navigate("/dashboard/users"); setShowDropdown(false); }}>
-                        <FiUsers size={16} className="text-gray-500" />
-                        <span>Manage Users</span>
-                      </button>
-                      <button className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-                        onClick={() => { setActiveContent("auditLogs"); navigate("/dashboard/audit-logs"); setShowDropdown(false); }}>
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        <span>Audit Logs</span>
-                      </button>
-                      <div className="my-1 border-t border-gray-100" />
-                    </>
-                  )}
                   <button className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors font-medium"
                     onClick={handleSignOut}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

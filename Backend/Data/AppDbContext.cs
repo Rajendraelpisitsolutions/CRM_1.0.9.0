@@ -36,6 +36,9 @@ namespace Elpis_CRM.Data
         public DbSet<AppointmentsModel> Appointments { get; set; }
         public DbSet<AuditLogModel> AuditLogs { get; set; }
         public DbSet<RecycleBinItemModel> RecycleBinItems { get; set; }
+        public DbSet<EmailCampaignModel> EmailCampaigns { get; set; }
+        public DbSet<EmailRecipientModel> EmailRecipients { get; set; }
+        public DbSet<EmailEventModel> EmailEvents { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -85,6 +88,13 @@ namespace Elpis_CRM.Data
 
             modelBuilder.Entity<AuditLogModel>().HasIndex(x => new { x.EntityName, x.EntityId });
             modelBuilder.Entity<AuditLogModel>().HasIndex(x => x.ChangedAt);
+
+            // Email tracking. Recipients are looked up by their token (pixel/click/unsubscribe)
+            // and by campaign; events by recipient/campaign.
+            modelBuilder.Entity<EmailRecipientModel>().HasIndex(x => x.TrackingToken).IsUnique();
+            modelBuilder.Entity<EmailRecipientModel>().HasIndex(x => x.CampaignId);
+            modelBuilder.Entity<EmailEventModel>().HasIndex(x => x.RecipientId);
+            modelBuilder.Entity<EmailEventModel>().HasIndex(x => x.CampaignId);
         }
 
         // ── Audit logging ───────────────────────────────────────────────────────
@@ -120,6 +130,9 @@ namespace Elpis_CRM.Data
 
             var entries = ChangeTracker.Entries()
                 .Where(e => e.Entity is not AuditLogModel
+                            // High-volume tracking writes (one per open/click) would flood the audit log.
+                            && e.Entity is not EmailEventModel
+                            && e.Entity is not EmailRecipientModel
                             && (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
                 .ToList();
 

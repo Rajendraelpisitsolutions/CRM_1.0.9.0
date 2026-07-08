@@ -373,6 +373,8 @@ function Accounts({
 
   // State for selected rows, table data, and editing
   const [selectedAccountDetails, setSelectedAccountDetails] = useState(null);
+  // Detail slide-in shows populated fields first; empties hide behind a toggle.
+  const [showAccountEmpty, setShowAccountEmpty] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState(null);
 
@@ -804,13 +806,13 @@ function Accounts({
       <div className="relative flex flex-col rounded-xl border border-gray-200 shadow-sm bg-white flex-1 w-full min-h-0 overflow-hidden">
       {paginationLoading && (
         <div className="absolute inset-0 z-40 bg-white/75 backdrop-blur-sm flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800" />
         </div>
       )}
       {selected.size > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-blue-50 rounded-lg sm:rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-blue-100 mb-4 w-full backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 mb-4 w-full">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-medium text-sm">
+            <div className="w-8 h-8 bg-slate-800 text-white rounded-full flex items-center justify-center font-medium text-sm">
               {selected.size}
             </div>
             <span className="text-sm sm:text-base text-gray-700">selected</span>
@@ -848,7 +850,7 @@ function Accounts({
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
-          <div className="bg-white w-full sm:w-96 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full sm:w-96 rounded-xl shadow-xl p-6 transform animate-in zoom-in-95 duration-200">
             <div className="mb-6 text-center">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -860,7 +862,7 @@ function Accounts({
             </div>
             <div className="flex gap-3 justify-center">
               <button type="button" onClick={() => setShowDeleteModal(false)}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:outline-none">
                 Cancel
               </button>
               <button type="button" onClick={confirmDelete}
@@ -897,7 +899,7 @@ function Accounts({
                   <input type="checkbox" aria-label="Select all" checked={allSelected}
                     ref={(el) => { if (el) el.indeterminate = someSelected; }}
                     onChange={toggleAll}
-                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
                   />
                 </th>
                 {/* Column Headers with Sorting */}
@@ -910,7 +912,7 @@ function Accounts({
                     <div className="flex items-center gap-2">
                       <span className="truncate">{col.label}</span>
                       {sortConfig.key === col.key && (
-                        <span className="text-blue-600 flex-shrink-0">
+                        <span className="text-gray-500 flex-shrink-0">
                           {sortConfig.direction === "asc" ? "↑" : "↓"}
                         </span>
                       )}
@@ -926,7 +928,7 @@ function Accounts({
                 return (
                   <tr
                     key={getField(account, "AccountId") ?? getField(account, "Name") ?? getField(account, "name") ?? index}
-                    className={`transition-all duration-150 hover:bg-gray-50 ${selected.has(absoluteIndex) ? "bg-blue-50" : "bg-white"
+                    className={`transition-colors duration-150 hover:bg-gray-50 ${selected.has(absoluteIndex) ? "bg-slate-50" : "bg-white"
                       }`}
                   >
                     {/* Row Selection Checkbox */}
@@ -938,7 +940,7 @@ function Accounts({
                         aria-label={`Select row ${index + 1}`}
                         checked={selected.has(absoluteIndex)}
                         onChange={() => toggleRow(absoluteIndex)}
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
                       />
                     </td>
                     {/* Data Cells */}
@@ -958,10 +960,10 @@ function Accounts({
                               e.preventDefault();
                               handleShowAccountDetails(getField(account, "AccountId") ?? getField(account, "accountId"));
                             }}
-                            className="flex items-center gap-2 font-medium text-blue-600 cursor-pointer hover:text-blue-700 transition-colors duration-150 group w-full min-w-0"
+                            className="flex items-center gap-2 font-medium text-gray-900 cursor-pointer hover:text-gray-700 transition-colors duration-150 group w-full min-w-0"
                           >
                             <span
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg shadow-sm font-semibold text-sm transition-transform duration-200 group-hover:scale-110 flex-shrink-0"
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg font-semibold text-sm flex-shrink-0"
                               style={{
                                 background: getColorFromString(
                                   getField(account, "Name") ?? getField(account, "name"),
@@ -1014,7 +1016,7 @@ function Accounts({
                                         <button
                                           key={idx}
                                           type="button"
-                                          className="inline-flex items-center justify-center w-6 h-6 rounded-full shadow-sm font-semibold text-xs transition-transform duration-200 hover:scale-110 flex-shrink-0"
+                                          className="inline-flex items-center justify-center w-6 h-6 rounded-full font-semibold text-xs flex-shrink-0"
                                           style={{
                                             background: getColorFromString(fullName, 0.35, 85),
                                             color: getDarkerColorFromString(fullName, 1, 45),
@@ -1037,7 +1039,7 @@ function Accounts({
                                   <button
                                     ref={isExpanded ? expandButtonRef : null}
                                     type="button"
-                                    className={`ml-auto rounded-full text-[10px] font-semibold transition-all duration-150 ${isExpanded ? 'w-6 h-6 bg-blue-600 text-white flex items-center justify-center' : 'w-5 h-5 bg-transparent text-blue-600 hover:text-blue-800'}`}
+                                    className={`ml-auto rounded-full text-[10px] font-semibold transition-colors duration-150 ${isExpanded ? 'w-6 h-6 bg-slate-800 text-white flex items-center justify-center' : 'w-5 h-5 bg-transparent text-gray-500 hover:text-gray-800'}`}
                                     aria-expanded={isExpanded}
                                     aria-label={isExpanded ? 'Hide related contacts' : 'Show related contacts'}
                                     onClick={(e) => {
@@ -1051,7 +1053,7 @@ function Accounts({
                                 {isExpanded && relatedContactsPortalCoords && createPortal(
                                   <div
                                     ref={panelRef}
-                                    className="z-50 rounded-2xl border border-gray-200 bg-white shadow-xl p-2 text-left whitespace-normal"
+                                    className="z-50 rounded-xl border border-gray-200 bg-white shadow-xl p-2 text-left whitespace-normal"
                                     style={{
                                       position: 'absolute',
                                       top: `${relatedContactsPortalCoords.top}px`,
@@ -1069,7 +1071,7 @@ function Accounts({
                                           <button
                                             key={contact.contactId || fullName}
                                             type="button"
-                                            className="w-full text-left text-xs sm:text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg px-3 py-1 transition-colors duration-150"
+                                            className="w-full text-left text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg px-3 py-1 transition-colors duration-150"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleShowContactDetails(contact.contactId);
@@ -1187,7 +1189,7 @@ function Accounts({
                 onClick={() => goToPage(1)}
                 disabled={currentPage === 1 || paginationLoading}
                 title="First page"
-                className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"/></svg>
               </button>
@@ -1196,13 +1198,13 @@ function Accounts({
                 onClick={prevPage}
                 disabled={currentPage === 1 || paginationLoading}
                 title="Previous page"
-                className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
               </button>
 
               {/* Mobile: just "Page X of Y" */}
-              <span className="sm:hidden px-3 py-1.5 rounded-lg bg-blue-200 text-black text-sm font-medium min-w-[80px] text-center">
+              <span className="sm:hidden px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium min-w-[80px] text-center">
                 {currentPage} / {totalPages}
               </span>
 
@@ -1219,14 +1221,14 @@ function Accounts({
                   if (startPage > 1) {
                     pages.push(
                       <button key={1} onClick={() => goToPage(1)} disabled={paginationLoading}
-                        className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 transition-all duration-200">1</button>
+                        className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 transition-colors duration-200">1</button>
                     );
                     if (startPage > 2) pages.push(<span key="ellipsis-start" className="text-gray-400 px-2 font-medium">...</span>);
                   }
                   for (let i = startPage; i <= endPage; i++) {
                     pages.push(
                       <button key={i} onClick={() => goToPage(i)} disabled={paginationLoading}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${i === currentPage ? 'bg-blue-200 text-black shadow-sm' : 'bg-transparent text-gray-700 hover:bg-blue-100'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-slate-800 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
                           }`}>{i}</button>
                     );
                   }
@@ -1234,7 +1236,7 @@ function Accounts({
                     if (endPage < totalPages - 1) pages.push(<span key="ellipsis-end" className="text-gray-400 px-2 font-medium">...</span>);
                     pages.push(
                       <button key={totalPages} onClick={() => goToPage(totalPages)} disabled={paginationLoading}
-                        className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 transition-all duration-200">{totalPages}</button>
+                        className="px-3 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 transition-colors duration-200">{totalPages}</button>
                     );
                   }
                   return pages;
@@ -1245,7 +1247,7 @@ function Accounts({
                 onClick={nextPage}
                 disabled={currentPage >= totalPages || paginationLoading}
                 title="Next page"
-                className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                className="flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
               </button>
@@ -1255,7 +1257,7 @@ function Accounts({
                 onClick={() => goToPage(totalPages)}
                 disabled={currentPage >= totalPages || paginationLoading}
                 title="Last page"
-                className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                className="hidden sm:flex items-center px-2 py-1.5 rounded-lg bg-transparent text-gray-700 text-sm font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5"/></svg>
               </button>
@@ -1264,7 +1266,7 @@ function Accounts({
             {/* Right: Empty Space / Optional Loading Indicator */}
             <div className="min-w-[150px] flex justify-end">
               {paginationLoading && (
-                <span className="text-xs sm:text-sm text-blue-600 font-medium">Loading...</span>
+                <span className="text-xs sm:text-sm text-gray-500 font-medium">Loading...</span>
               )}
             </div>
           </div>
@@ -1278,7 +1280,7 @@ function Accounts({
           role="dialog"
           aria-modal="true"
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl transform animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl transform animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white">
               <h4 className="text-xl font-semibold text-gray-900">Edit Account</h4>
               <button
@@ -1302,11 +1304,11 @@ function Accounts({
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Industry Type</label>
-                    <input type="text" value={editForm.IndustryType || ""} onChange={(e) => setEditForm({ ...editForm, IndustryType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.IndustryType || ""} onChange={(e) => setEditForm({ ...editForm, IndustryType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Business Type</label>
-                    <input type="text" value={editForm.BusinessType || ""} onChange={(e) => setEditForm({ ...editForm, BusinessType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.BusinessType || ""} onChange={(e) => setEditForm({ ...editForm, BusinessType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                 </div>
               </div>
@@ -1317,23 +1319,23 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Country</label>
-                    <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">State</label>
-                    <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">City</label>
-                    <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Zipcode</label>
-                    <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="sm:col-span-2 flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Address</label>
-                    <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
+                    <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
                   </div>
                 </div>
               </div>
@@ -1344,27 +1346,27 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Website</label>
-                    <input type="url" value={editForm.Website || ""} onChange={(e) => setEditForm({ ...editForm, Website: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="url" value={editForm.Website || ""} onChange={(e) => setEditForm({ ...editForm, Website: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Phone</label>
-                    <input type="tel" value={editForm.Phone || ""} onChange={(e) => setEditForm({ ...editForm, Phone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="tel" value={editForm.Phone || ""} onChange={(e) => setEditForm({ ...editForm, Phone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Display Phone</label>
-                    <input type="tel" value={editForm.DisplayPhone || ""} onChange={(e) => setEditForm({ ...editForm, DisplayPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="tel" value={editForm.DisplayPhone || ""} onChange={(e) => setEditForm({ ...editForm, DisplayPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Territory</label>
-                    <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Number of Employees</label>
-                    <input type="number" value={editForm.NumberOfEmployees || ""} onChange={(e) => setEditForm({ ...editForm, NumberOfEmployees: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="number" value={editForm.NumberOfEmployees || ""} onChange={(e) => setEditForm({ ...editForm, NumberOfEmployees: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Annual Revenue</label>
-                    <input type="number" value={editForm.AnnualRevenue || ""} onChange={(e) => setEditForm({ ...editForm, AnnualRevenue: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="number" value={editForm.AnnualRevenue || ""} onChange={(e) => setEditForm({ ...editForm, AnnualRevenue: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                 </div>
               </div>
@@ -1375,15 +1377,15 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Facebook</label>
-                    <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Twitter</label>
-                    <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">LinkedIn</label>
-                    <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                 </div>
               </div>
@@ -1395,36 +1397,36 @@ function Accounts({
                   {/* âŒ REMOVED: Sales Owner ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner ID</label>
-                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner</label>
-                    <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Mode</label>
-                    <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   {/* âŒ REMOVED: Last Contacted Time - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Time</label>
-                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Type</label>
-                    <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   {/* âŒ REMOVED: Last Activity Date - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Date</label>
-                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
+                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
                   </div>
                   */}
                   <div className="sm:col-span-2 flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Recent Note</label>
-                    <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
+                    <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
                   </div>
                 </div>
               </div>
@@ -1439,7 +1441,7 @@ function Accounts({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
+                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
                 >
                   Save Changes
                 </button>
@@ -1453,16 +1455,11 @@ function Accounts({
       {(detailsLoading || detailsError || selectedAccountDetails) && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseAccountDetails} />
-          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-2xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
+          <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
             {/* Header */}
             <div className="relative flex items-center gap-4 sm:gap-5 p-4 sm:p-8 border-b border-gray-200/80 bg-white/80 backdrop-blur-sm">
               <div
-                className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-bold text-2xl sm:text-3xl shadow-sm flex-shrink-0"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
-                  color: "white",
-                }}
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-semibold text-2xl sm:text-3xl flex-shrink-0 bg-slate-800 text-white"
               >
                 {getField(selectedAccountDetails, "Name")
                   ? String(getField(selectedAccountDetails, "Name")).charAt(0).toUpperCase()
@@ -1505,7 +1502,7 @@ function Accounts({
                           e.stopPropagation();
                           setExpandedRelatedContacts(isExpanded ? null : accountId);
                         }}
-                        className="inline-flex items-center gap-2 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium px-3 py-2 transition-all shadow-sm"
+                        className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-medium px-3 py-2 transition-colors"
                       >
                         <svg
                           className="w-4 h-4"
@@ -1525,7 +1522,7 @@ function Accounts({
                       {isExpanded && relatedContactsPortalCoords && createPortal(
                         <div
                           ref={panelRef}
-                          className="z-50 rounded-2xl border border-gray-200 bg-white shadow-xl p-2 text-left whitespace-normal"
+                          className="z-50 rounded-xl border border-gray-200 bg-white shadow-xl p-2 text-left whitespace-normal"
                           style={{
                             position: 'absolute',
                             top: `${relatedContactsPortalCoords.top}px`,
@@ -1548,7 +1545,7 @@ function Accounts({
                                   <button
                                     key={contact.contactId || fullName}
                                     type="button"
-                                    className="w-full text-left text-xs sm:text-sm text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg px-3 py-1 transition-colors duration-150"
+                                    className="w-full text-left text-xs sm:text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg px-3 py-1 transition-colors duration-150"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleShowContactDetails(contact.contactId);
@@ -1569,7 +1566,7 @@ function Accounts({
                 })()}
               </div>
               <button
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-2 transition-all duration-200 flex-shrink-0 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-2 transition-all duration-200 flex-shrink-0 focus:ring-2 focus:ring-slate-500 focus:outline-none"
                 aria-label="Close details"
                 onClick={handleCloseAccountDetails}
               >
@@ -1637,7 +1634,7 @@ function Accounts({
 
                 {detailsLoading && (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800"></div>
                   </div>
                 )}
 
@@ -1710,27 +1707,60 @@ function Accounts({
                         { key: "CreatedBy", label: "Created By" },
                       ];
 
+                      // Full-width section divider shown before the field whose key starts
+                      // a new group (turns the flat list into labelled sections).
+                      const accountSections = {
+                        Country: "Location",
+                        Website: "Business Details",
+                        Facebook: "Social",
+                        LastContactedMode: "Activity & Meta",
+                      };
+
+                      // Data-first: populated fields show by default; empties hide behind a toggle.
+                      const accountHasData = (key) => {
+                        const v = getField(selectedAccountDetails, key);
+                        return v !== null && v !== undefined && String(v).trim() !== "";
+                      };
+                      const accountSectionsWithData = (() => {
+                        const set = new Set();
+                        let current = "Company Identity";
+                        for (const col of formFields) {
+                          if (accountSections[col.key]) current = accountSections[col.key];
+                          if (accountHasData(col.key)) set.add(current);
+                        }
+                        return set;
+                      })();
+                      const accountEmptyCount = formFields.filter((c) => !accountHasData(c.key)).length;
+
                       return (
                         <>
                           {/* Account Information Section - Dynamic Columns */}
-                          <div className="bg-white rounded-2xl p-6">
+                          <div className="bg-white rounded-xl p-6">
                             <div className="flex items-center gap-2 mb-5">
-                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                 </svg>
                               </div>
-                              <h3 className="font-normal text-gray-900 text-base">Account Information</h3>
+                              <h3 className="font-semibold text-gray-900 text-base">Company Identity</h3>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                               {formFields.map((col) => (
-                                <div key={col.key} className="flex flex-col gap-2">
+                                <React.Fragment key={col.key}>
+                                  {accountSections[col.key] && (showAccountEmpty || accountSectionsWithData.has(accountSections[col.key])) && (
+                                    <div className="md:col-span-2 flex items-center gap-3 mt-4 mb-1">
+                                      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{accountSections[col.key]}</span>
+                                      <span className="flex-1 h-px bg-gray-100" />
+                                    </div>
+                                  )}
+                                {(showAccountEmpty || accountHasData(col.key)) && (
+                                <div className="flex flex-col gap-2">
                                   <label className="font-normal text-gray-700 text-xs">
                                     {col.label}
                                   </label>
                                   {col.key === "Country" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "Country") || ""}
                                       onChange={(e) => {
                                         setSelectedAccountDetails({
@@ -1753,7 +1783,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "State" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "State") || ""}
                                       onChange={(e) => {
                                         setSelectedAccountDetails({
@@ -1775,7 +1805,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "City" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "City") || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1794,7 +1824,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "Address" || col.key === "RecentNote" || col.key === "Tags" || col.key === "ImportID" ? (
                                     <textarea
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 resize-none"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150 resize-none"
                                       rows="2"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
@@ -1807,7 +1837,7 @@ function Accounts({
                                   ) : col.key === "NumberOfEmployees" || col.key === "AnnualRevenue" || col.key === "ActiveSalesSequences" || col.key === "CompletedSalesSequences" || col.key === "SalesOwnerId" || col.key === "ParentAccountId" ? (
                                     <input
                                       type="number"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1819,7 +1849,7 @@ function Accounts({
                                   ) : col.key === "DisplayPhone" || col.key === "Phone" ? (
                                     <input
                                       type="tel"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1831,7 +1861,7 @@ function Accounts({
                                   ) : col.key === "Facebook" || col.key === "Twitter" || col.key === "LinkedIn" || col.key === "Website" ? (
                                     <input
                                       type="url"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       placeholder="https://..."
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
@@ -1844,7 +1874,7 @@ function Accounts({
                                   ) : col.key === "LastActivityDate" || col.key === "LastAssignedAt" || col.key === "LastContactedTime" || col.key === "CreatedAt" || col.key === "UpdatedAt" ? (
                                     <input
                                       type="date"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={formatDateOnly(getField(selectedAccountDetails, col.key))}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1856,7 +1886,7 @@ function Accounts({
                                   ) : (
                                     <input
                                       type={col.type || "text"}
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1867,8 +1897,21 @@ function Accounts({
                                     />
                                   )}
                                 </div>
+                                )}
+                                </React.Fragment>
                               ))}
                             </div>
+
+                            {accountEmptyCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowAccountEmpty((v) => !v)}
+                                className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-gray-300 text-gray-600 text-sm font-medium hover:border-slate-400 hover:bg-gray-50 transition-colors"
+                              >
+                                {showAccountEmpty ? "Hide empty fields" : `Show all fields (${accountEmptyCount} empty)`}
+                                <svg className={`w-4 h-4 transition-transform ${showAccountEmpty ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </button>
+                            )}
                           </div>
                         </>
                       );
@@ -1881,7 +1924,7 @@ function Accounts({
                   {isAdminOnly && (
                     <button
                       type="button"
-                      className="px-6 py-3 rounded-xl border-2 border-red-200 bg-white hover:bg-red-50 hover:border-red-300 text-red-600 font-normal transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
+                      className="px-6 py-3 rounded-lg border border-red-300 bg-white hover:bg-red-50 text-red-600 font-medium transition-colors duration-200 flex items-center gap-2"
                       onClick={() => {
                         if (selectedAccountDetails) {
                           const idx = sortedData.findIndex((a) => (getField(a, "AccountId") ?? getField(a, "accountId")) === (getField(selectedAccountDetails, "AccountId") ?? getField(selectedAccountDetails, "accountId")));
@@ -1907,7 +1950,7 @@ function Accounts({
                   {canEditAccount(selectedAccountDetails) ? (
                     <button
                       type="submit"
-                      className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-normal shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 transform hover:scale-105 ml-auto"
+                      className="px-8 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

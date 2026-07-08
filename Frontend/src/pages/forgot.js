@@ -131,7 +131,7 @@ function Forgot() {
 
   return (
     <div
-      className="min-h-[125vh] flex items-center justify-center bg-gradient-to-br from-[#1f1c2c] to-[#928dab] p-4 md:p-8"
+      className="min-h-[125vh] flex items-center justify-center bg-gray-100 p-4 md:p-8"
       style={{ fontFamily: "Poppins, sans-serif" }}
     >
       {/* Logo - centered on mobile, top-left on desktop */}
@@ -141,27 +141,26 @@ function Forgot() {
 
       {/* Main Container */}
       <div className="w-full max-w-4xl mx-auto mt-16 md:mt-0">
-        <div className="flex flex-col md:flex-row w-full min-h-[600px] bg-white/10 rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden backdrop-blur-xl border border-white/20">
+        <div className="flex flex-col md:flex-row w-full min-h-[600px] bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
 
           {/* Left Side - Image (hidden on mobile) */}
           <div className="hidden md:flex md:w-1/2 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#f9f6f6]/80 to-[#928dab]/80 z-0" />
             <img
               src={hero}
               alt="Forgot visual"
               className="w-full h-full object-cover z-10"
             />
-            
+
           </div>
 
           {/* Right Side - Forgot Form */}
-          <div className="flex-1 md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-16 bg-[#ceccd6] backdrop-blur-sm">
+          <div className="flex-1 md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-16 bg-white">
             <div className="w-full max-w-[420px] space-y-8">
 
               {/* Header */}
               <div className="space-y-1 text-center md:text-left">
-                <h2 className="text-3xl font-semibold text-[#8a7594]">Forgot Password</h2>
-                <p className="text-gray-500">Reset your account password</p>
+                <h2 className="text-2xl font-semibold text-gray-900">Forgot Password</h2>
+                <p className="text-sm text-gray-500">Reset your account password</p>
               </div>
 
               {/* Step Indicator */}
@@ -171,10 +170,10 @@ function Forgot() {
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200 ${
                         step === s
-                          ? "bg-[#573c66] text-[#e6cdf2] shadow-md"
+                          ? "bg-[#573c66] text-[#e6cdf2]"
                           : step > s
                           ? "bg-[#8a7594] text-white"
-                          : "bg-white/60 text-[#8a7594]"
+                          : "bg-gray-100 text-gray-400"
                       }`}
                     >
                       {s}
@@ -182,7 +181,7 @@ function Forgot() {
                     {s < 3 && (
                       <div
                         className={`flex-1 h-1 rounded-full transition-all duration-300 ${
-                          step > s ? "bg-[#8a7594]" : "bg-white/40"
+                          step > s ? "bg-[#8a7594]" : "bg-gray-200"
                         }`}
                       />
                     )}
@@ -196,7 +195,7 @@ function Forgot() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="email"
-                      className="block text-xs font-medium text-[#6d516d]"
+                      className="block text-xs font-medium text-gray-700"
                     >
                       Email
                     </label>
@@ -206,11 +205,11 @@ function Forgot() {
                       placeholder="Enter your email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className={`w-full h-12 px-4 rounded-xl border ${
+                      className={`w-full h-11 px-3 rounded-lg border ${
                         errors.email
-                          ? "border-red-400 bg-red-50/50"
-                          : "border-[#0f1724]/10 bg-white/80"
-                      } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
+                          ? "border-red-400 bg-red-50"
+                          : "border-gray-300 bg-white"
+                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
                     />
                     <ErrorMsg text={errors.email} />
                   </div>
@@ -242,7 +241,7 @@ function Forgot() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="otp"
-                      className="block text-xs font-medium text-[#6d516d]"
+                      className="block text-xs font-medium text-gray-700"
                     >
                       OTP
                     </label>
@@ -252,11 +251,11 @@ function Forgot() {
                       placeholder="Enter OTP sent to your email"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
-                      className={`w-full h-12 px-4 rounded-xl border ${
+                      className={`w-full h-11 px-3 rounded-lg border ${
                         errors.otp
-                          ? "border-red-400 bg-red-50/50"
-                          : "border-[#0f1724]/10 bg-white/80"
-                      } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
+                          ? "border-red-400 bg-red-50"
+                          : "border-gray-300 bg-white"
+                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
                     />
                     <ErrorMsg text={errors.otp} />
                   </div>
@@ -290,7 +289,7 @@ function Forgot() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="newPassword"
-                      className="block text-xs font-medium text-[#6d516d]"
+                      className="block text-xs font-medium text-gray-700"
                     >
                       New Password
                     </label>
@@ -301,11 +300,11 @@ function Forgot() {
                         placeholder="Enter new password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className={`w-full h-12 px-4 pr-12 rounded-xl border ${
+                        className={`w-full h-11 px-3 pr-12 rounded-lg border ${
                           errors.newPassword
-                            ? "border-red-400 bg-red-50/50"
-                            : "border-[#0f1724]/10 bg-white/80"
-                        } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
+                            ? "border-red-400 bg-red-50"
+                            : "border-gray-300 bg-white"
+                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
                       />
                       <button
                         type="button"
@@ -323,7 +322,7 @@ function Forgot() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="confirmPassword"
-                      className="block text-xs font-medium text-[#6d516d]"
+                      className="block text-xs font-medium text-gray-700"
                     >
                       Confirm Password
                     </label>
@@ -334,11 +333,11 @@ function Forgot() {
                         placeholder="Confirm new password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className={`w-full h-12 px-4 pr-12 rounded-xl border ${
+                        className={`w-full h-11 px-3 pr-12 rounded-lg border ${
                           errors.confirmPassword
-                            ? "border-red-400 bg-red-50/50"
-                            : "border-[#0f1724]/10 bg-white/80"
-                        } text-[#0f1724] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#928dab] text-[0.95rem] shadow-sm transition-all duration-200`}
+                            ? "border-red-400 bg-red-50"
+                            : "border-gray-300 bg-white"
+                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
                       />
                       <button
                         type="button"

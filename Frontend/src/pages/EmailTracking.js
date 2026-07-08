@@ -1,0 +1,447 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { useMsal } from "@azure/msal-react";
+import apiClient from "../api/client";
+import {
+  Send, MailOpen, MousePointerClick, UserMinus, AlertTriangle, Megaphone,
+  RefreshCw, ArrowLeft, ChevronRight, ChevronDown, Inbox, Reply, Filter, Gauge,
+} from "lucide-react";
+
+// ── Freshworks "Crayons" palette (their real product colours) ─────────────────
+const INK = "#12344d";       // elephant-900  — headings / big numbers
+const BODY = "#475867";      // smoke-700     — body text
+const MUTED = "#8a98a5";     // smoke-300ish  — muted labels
+const BORDER = "#e6ebef";    // smoke-50/100  — card borders
+const SURFACE = "#f5f7f9";   // smoke-25      — page background
+const PRIMARY = "#2c5cc5";   // azure-800     — primary action / links
+
+// One brand hue per metric (drawn from the Crayons families): c = solid, l = soft/light, tint = pale.
+const M = {
+  campaigns:    { c: "#5b6b7b", l: "#b3bcc4", tint: "#eef1f4", icon: Megaphone },
+  sent:         { c: "#2c5cc5", l: "#a6c1ee", tint: "#e8f0fd", icon: Send },            // azure
+  opened:       { c: "#00a886", l: "#8ed6c5", tint: "#e0f5f1", icon: MailOpen },        // jungle teal
+  clicked:      { c: "#6c44b4", l: "#c0aae0", tint: "#f1ecfa", icon: MousePointerClick },// freshworks purple
+  replied:      { c: "#1288c9", l: "#93c7e6", tint: "#e4f2fb", icon: Reply },           // turquoise family
+  unsubscribed: { c: "#e86f25", l: "#f4bd97", tint: "#fdf0e3", icon: UserMinus },       // casablanca orange
+  failed:       { c: "#64748b", l: "#b7c0ca", tint: "#eef2f6", icon: AlertTriangle },   // neutral slate (no red)
+};
+
+const fmtNum = (n) => (n == null ? "0" : Number(n).toLocaleString());
+const fmtDate = (v) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+};
+const pctv = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+
+const StatusPill = ({ status }) => {
+  const s = String(status || "").toLowerCase();
+  const map = {
+    completed: M.opened, sent: M.opened, sending: M.sent, queued: M.unsubscribed,
+    pending: M.campaigns, failed: M.failed,
+  };
+  const m = map[s] || M.campaigns;
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={{ background: m.tint, color: m.c }}>{status || "—"}</span>;
+};
+
+// Freshsales-style engagement chip.
+const Chip = ({ label, metric }) => {
+  const m = M[metric];
+  return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: m.tint, color: m.c }}>{label}</span>;
+};
+
+const RecipientChips = ({ r }) => {
+  const chips = [];
+  if (r.status === "Failed") chips.push(<Chip key="f" label="Failed" metric="failed" />);
+  else if (r.openCount === 0 && !r.replied) chips.push(<Chip key="s" label="Sent" metric="campaigns" />);
+  if (r.openCount > 0) chips.push(<Chip key="o" label={`Opened${r.openCount > 1 ? ` ${r.openCount}×` : ""}`} metric="opened" />);
+  if (r.clickCount > 0) chips.push(<Chip key="c" label={`Clicked${r.clickCount > 1 ? ` ${r.clickCount}×` : ""}`} metric="clicked" />);
+  if (r.replied) chips.push(<Chip key="r" label="Replied" metric="replied" />);
+  if (r.unsubscribed) chips.push(<Chip key="u" label="Unsubscribed" metric="unsubscribed" />);
+  return <div className="flex flex-wrap gap-1">{chips}</div>;
+};
+
+// KPI card — the whole card is a light tint of its metric colour, navy number (Freshsales look).
+const StatTile = ({ metric, label, value, sub }) => {
+  const m = M[metric] || M.campaigns;
+  const Icon = m.icon;
+  return (
+    <div className="rounded-lg border p-4" style={{ background: m.tint, borderColor: m.l }}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: m.c }}>{label}</span>
+        <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#fff", color: m.c }}>
+          <Icon className="w-[15px] h-[15px]" strokeWidth={2.2} />
+        </span>
+      </div>
+      <p className="text-[26px] font-bold mt-1.5 tabular-nums leading-none" style={{ color: INK }}>{value}</p>
+      {sub != null && <p className="text-xs mt-1.5" style={{ color: m.c }}>{sub}</p>}
+    </div>
+  );
+};
+
+
+// ── Per-recipient event timeline ──────────────────────────────────────────────
+const EVENT_META = {
+  Sent: { metric: "sent", label: "Delivered" },
+  Open: { metric: "opened", label: "Opened" },
+  Click: { metric: "clicked", label: "Clicked a link" },
+  Reply: { metric: "replied", label: "Replied" },
+  Unsubscribe: { metric: "unsubscribed", label: "Unsubscribed" },
+  Failed: { metric: "failed", label: "Send failed" },
+};
+
+function Timeline({ events }) {
+  if (!events) return <p className="text-xs py-2" style={{ color: MUTED }}>Loading activity…</p>;
+  if (events.length === 0) return <p className="text-xs py-2" style={{ color: MUTED }}>No activity recorded yet.</p>;
+  return (
+    <ol className="relative ml-1.5 space-y-3 py-1" style={{ borderLeft: `1px solid ${BORDER}` }}>
+      {events.map((e, i) => {
+        const m = EVENT_META[e.type] || { metric: "campaigns", label: e.type };
+        const col = M[m.metric].c;
+        return (
+          <li key={i} className="ml-4">
+            <span className="absolute -left-[5px] w-2.5 h-2.5 rounded-full" style={{ background: col }} />
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-sm font-medium" style={{ color: INK }}>{m.label}</span>
+              <span className="text-xs" style={{ color: MUTED }}>{fmtDate(e.occurredAt)}</span>
+              {e.type === "Open" && e.proxy && <span className="text-[11px] font-medium" style={{ color: M.unsubscribed.c }}>automated (image proxy)</span>}
+            </div>
+            {(e.client || e.device || e.ipAddress) && (
+              <div className="text-[11px] mt-0.5" style={{ color: BODY }}>{[e.client, e.device].filter(Boolean).join(" · ")}{e.ipAddress ? ` · ${e.ipAddress}` : ""}</div>
+            )}
+            {e.url && <div className="text-[11px] truncate max-w-lg mt-0.5" style={{ color: M.clicked.c }} title={e.url}>{e.url}</div>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+const FILTERS = [
+  { key: "", label: "All" }, { key: "opened", label: "Opened" }, { key: "clicked", label: "Clicked" },
+  { key: "replied", label: "Replied" }, { key: "unopened", label: "Not opened" },
+  { key: "unsubscribed", label: "Unsubscribed" }, { key: "failed", label: "Failed" },
+];
+
+function Card({ children, className = "" }) {
+  return <div className={`bg-white rounded-lg border ${className}`} style={{ borderColor: BORDER }}>{children}</div>;
+}
+
+function CampaignDetail({ campaignId, onBack }) {
+  const { instance, accounts } = useMsal();
+  const [detail, setDetail] = useState(null);
+  const [recipients, setRecipients] = useState([]);
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+  const [events, setEvents] = useState({});
+  const [checkingReplies, setCheckingReplies] = useState(false);
+  const [replyMsg, setReplyMsg] = useState("");
+
+  const loadDetail = useCallback(() => {
+    apiClient.get(`/EmailCampaign/${campaignId}`).then((r) => setDetail(r.data)).catch(() => setDetail(null));
+  }, [campaignId]);
+  const loadRecipients = useCallback(() => {
+    setLoading(true);
+    apiClient.get(`/EmailCampaign/${campaignId}/recipients`, { params: { filter, page: 1, pageSize: 500 } })
+      .then((r) => setRecipients(Array.isArray(r.data?.items) ? r.data.items : []))
+      .catch(() => setRecipients([])).finally(() => setLoading(false));
+  }, [campaignId, filter]);
+
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+  useEffect(() => { loadRecipients(); }, [loadRecipients]);
+
+  const toggleExpand = async (r) => {
+    if (expandedId === r.id) { setExpandedId(null); return; }
+    setExpandedId(r.id);
+    if (!events[r.id]) {
+      try {
+        const res = await apiClient.get(`/EmailCampaign/recipient/${r.id}/events`);
+        setEvents((prev) => ({ ...prev, [r.id]: Array.isArray(res.data?.events) ? res.data.events : [] }));
+      } catch { setEvents((prev) => ({ ...prev, [r.id]: [] })); }
+    }
+  };
+
+  const checkReplies = async () => {
+    if (!accounts || accounts.length === 0) { setReplyMsg("Sign in to Outlook to check replies."); return; }
+    setCheckingReplies(true); setReplyMsg("");
+    try {
+      const tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.Read"] });
+      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=from,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+      const data = await res.json();
+      const senders = new Set((data.value || []).map((mm) => (mm.from?.emailAddress?.address || "").toLowerCase()).filter(Boolean));
+      const matched = recipients.map((r) => (r.email || "")).filter((e) => senders.has(e.toLowerCase()));
+      if (matched.length) {
+        await apiClient.post(`/EmailCampaign/${campaignId}/replies`, { emails: matched });
+        setReplyMsg(`Found ${matched.length} repl${matched.length === 1 ? "y" : "ies"}.`);
+        loadDetail(); loadRecipients();
+      } else setReplyMsg("No replies from these recipients found in your inbox.");
+    } catch { setReplyMsg("Couldn't check replies (Outlook sign-in / permission needed)."); }
+    finally { setCheckingReplies(false); }
+  };
+
+  const tiles = detail ? [
+    { metric: "sent", label: "Sent", value: fmtNum(detail.sentCount), sub: `of ${fmtNum(detail.totalRecipients)}` },
+    { metric: "opened", label: "Opened", value: fmtNum(detail.openedCount), sub: `${detail.openRate}% open rate` },
+    { metric: "clicked", label: "Clicked", value: fmtNum(detail.clickedCount), sub: `${detail.clickRate}% click rate` },
+    { metric: "replied", label: "Replied", value: fmtNum(detail.repliedCount), sub: `${detail.replyRate}% reply rate` },
+    { metric: "unsubscribed", label: "Unsubscribed", value: fmtNum(detail.unsubscribedCount), sub: `${detail.unsubscribeRate}%` },
+    { metric: "failed", label: "Failed", value: fmtNum(detail.failedCount), sub: detail.failedCount > 0 ? "needs attention" : "none" },
+  ] : [];
+
+  return (
+    <div className="space-y-5">
+      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: PRIMARY }}>
+        <ArrowLeft className="w-4 h-4" /> Back to campaigns
+      </button>
+
+      {detail && (
+        <Card className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold truncate" style={{ color: INK }}>{detail.subject || "(no subject)"}</h2>
+              <p className="text-sm mt-0.5" style={{ color: BODY }}>From {detail.fromEmail || "—"} · {fmtDate(detail.createdAt)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={checkReplies} disabled={checkingReplies}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: M.replied.tint, color: M.replied.c }}>
+                <Reply className="w-3.5 h-3.5" /> {checkingReplies ? "Checking…" : "Check replies"}
+              </button>
+              <StatusPill status={detail.status} />
+            </div>
+          </div>
+          {replyMsg && <p className="text-xs mt-2" style={{ color: BODY }}>{replyMsg}</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-5">
+            {tiles.map((t) => <StatTile key={t.metric} {...t} />)}
+          </div>
+        </Card>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className="px-3.5 py-1.5 rounded-full text-xs font-medium transition"
+            style={filter === f.key ? { background: PRIMARY, color: "#fff" } : { background: "#fff", color: BODY, border: `1px solid ${BORDER}` }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-[11px] uppercase tracking-wider" style={{ background: SURFACE, color: MUTED }}>
+              <tr>
+                <th className="w-8" />
+                <th className="text-left font-semibold px-4 py-3">Recipient</th>
+                <th className="text-left font-semibold px-4 py-3">Engagement</th>
+                <th className="text-left font-semibold px-4 py-3">Last activity</th>
+                <th className="text-left font-semibold px-5 py-3">Sent</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: BORDER }}>
+              {loading ? (
+                <tr><td colSpan={5} className="px-5 py-12 text-center" style={{ color: MUTED }}>Loading…</td></tr>
+              ) : recipients.length === 0 ? (
+                <tr><td colSpan={5} className="px-5 py-12 text-center" style={{ color: MUTED }}>No recipients in this view.</td></tr>
+              ) : recipients.map((r) => {
+                const last = r.lastClickedAt || r.lastOpenedAt || r.repliedAt;
+                return (
+                  <React.Fragment key={r.id}>
+                    <tr onClick={() => toggleExpand(r)} className="cursor-pointer transition-colors hover:bg-[#f7f9fb]">
+                      <td className="px-2 py-3.5" style={{ color: MUTED }}>{expandedId === r.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="font-medium" style={{ color: INK }}>{r.email}</div>
+                        {r.status === "Failed" && r.error && <div className="text-[11px] mt-0.5 break-words max-w-md" style={{ color: M.failed.c }} title={r.error}>{r.error}</div>}
+                      </td>
+                      <td className="px-4 py-3.5"><RecipientChips r={r} /></td>
+                      <td className="px-4 py-3.5 text-xs" style={{ color: BODY }}>{last ? fmtDate(last) : "—"}</td>
+                      <td className="px-5 py-3.5 text-xs whitespace-nowrap" style={{ color: BODY }}>{r.sentAt ? fmtDate(r.sentAt) : "—"}</td>
+                    </tr>
+                    {expandedId === r.id && (
+                      <tr style={{ background: "#fbfcfd" }}>
+                        <td /><td colSpan={4} className="px-4 pb-4 pt-1"><Timeline events={events[r.id]} /></td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function EmailTracking() {
+  const [overview, setOverview] = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ov, list] = await Promise.all([apiClient.get("/EmailCampaign/overview"), apiClient.get("/EmailCampaign")]);
+      setOverview(ov.data || null);
+      setCampaigns(Array.isArray(list.data) ? list.data : []);
+    } catch { setOverview(null); setCampaigns([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const o = overview || {};
+  const tiles = [
+    { metric: "campaigns", label: "Campaigns", value: fmtNum(o.campaigns), sub: `${fmtNum(o.recipients)} recipients` },
+    { metric: "sent", label: "Sent", value: fmtNum(o.sent), sub: o.failed > 0 ? `${fmtNum(o.failed)} failed` : "delivered" },
+    { metric: "opened", label: "Opened", value: fmtNum(o.opened), sub: `${o.openRate || 0}% open rate` },
+    { metric: "clicked", label: "Clicked", value: fmtNum(o.clicked), sub: `${o.clickRate || 0}% click rate` },
+    { metric: "replied", label: "Replied", value: fmtNum(o.replied), sub: `${o.replyRate || 0}% reply rate` },
+    { metric: "unsubscribed", label: "Unsubscribed", value: fmtNum(o.unsubscribed), sub: `${o.unsubscribeRate || 0}%` },
+  ];
+
+  return (
+    <div className="h-full w-full overflow-auto font-[poppins,sans-serif]" style={{ background: SURFACE }}>
+      <div className="w-full max-w-[1500px] mx-auto p-4 sm:p-6 lg:p-8 space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: INK }}>Email Tracking</h1>
+            <p className="text-sm mt-0.5" style={{ color: BODY }}>Delivery, opens, clicks, replies and unsubscribes across your campaigns.</p>
+          </div>
+          <button onClick={load} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium bg-white hover:bg-[#f7f9fb] transition" style={{ color: PRIMARY, border: `1px solid ${BORDER}` }}>
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </button>
+        </div>
+
+        {selected != null ? (
+          <CampaignDetail campaignId={selected} onBack={() => { setSelected(null); load(); }} />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+              {tiles.map((t) => <StatTile key={t.metric} {...t} />)}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Engagement funnel — insight card with a header band + tapering funnel bars */}
+              <div className="lg:col-span-2 rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: BORDER, background: "#fff" }}>
+                <div className="px-5 py-3.5 flex items-center gap-2.5" style={{ background: "linear-gradient(180deg,#f6f9ff,#ffffff)", borderBottom: `1px solid ${BORDER}` }}>
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: M.sent.tint, color: M.sent.c }}><Filter className="w-[15px] h-[15px]" /></span>
+                  <h3 className="text-sm font-semibold" style={{ color: INK }}>Engagement funnel</h3>
+                  <span className="text-xs ml-auto" style={{ color: MUTED }}>of {fmtNum(o.sent)} delivered</span>
+                </div>
+                <div className="p-5 sm:p-6">
+                  {o.sent > 0 ? (
+                    <div className="space-y-3">
+                      {[
+                        { metric: "sent", label: "Delivered", count: o.sent },
+                        { metric: "opened", label: "Opened", count: o.opened },
+                        { metric: "clicked", label: "Clicked", count: o.clicked },
+                        { metric: "replied", label: "Replied", count: o.replied },
+                        { metric: "unsubscribed", label: "Unsubscribed", count: o.unsubscribed },
+                      ].map((s) => {
+                        const p = pctv(s.count, o.sent);
+                        return (
+                          <div key={s.metric}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-medium" style={{ color: BODY }}>{s.label}</span>
+                              <span className="text-xs tabular-nums" style={{ color: MUTED }}><b style={{ color: INK }}>{fmtNum(s.count)}</b> · {p}%</span>
+                            </div>
+                            <div className="h-3.5 rounded-full overflow-hidden" style={{ background: "#f1f4f7" }}>
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(2, p)}%`, background: M[s.metric].l }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <div className="py-10 text-center text-sm" style={{ color: MUTED }}>No delivered emails yet.</div>}
+                </div>
+              </div>
+
+              {/* Delivery health — insight card with a donut gauge */}
+              <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: BORDER, background: "#fff" }}>
+                <div className="px-5 py-3.5 flex items-center gap-2.5" style={{ background: "linear-gradient(180deg,#f1fbf7,#ffffff)", borderBottom: `1px solid ${BORDER}` }}>
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: M.opened.tint, color: M.opened.c }}><Gauge className="w-[15px] h-[15px]" /></span>
+                  <h3 className="text-sm font-semibold" style={{ color: INK }}>Delivery health</h3>
+                </div>
+                <div className="p-5 sm:p-6 flex flex-col items-center justify-center">
+                  {(() => {
+                    const dp = pctv(o.sent, (o.sent || 0) + (o.failed || 0));
+                    const rad = 74, circ = 2 * Math.PI * rad, dash = (dp / 100) * circ;
+                    return (
+                      <div className="relative" style={{ width: 172, height: 172 }}>
+                        <svg width="172" height="172" style={{ transform: "rotate(-90deg)" }}>
+                          <circle cx="86" cy="86" r={rad} fill="none" stroke="#eef1f4" strokeWidth="15" />
+                          <circle cx="86" cy="86" r={rad} fill="none" stroke={M.opened.c} strokeWidth="15" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-4xl font-bold tabular-nums" style={{ color: INK }}>{dp}%</span>
+                          <span className="text-[11px]" style={{ color: MUTED }}>delivered</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex items-center gap-6 mt-5 text-sm">
+                    <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: M.opened.c }} /><span style={{ color: BODY }}><b style={{ color: INK }}>{fmtNum(o.sent)}</b> sent</span></span>
+                    <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: M.failed.c }} /><span style={{ color: BODY }}><b style={{ color: INK }}>{fmtNum(o.failed)}</b> failed</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Card className="overflow-hidden">
+              <div className="px-5 py-3.5 flex items-center gap-2" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                <Inbox className="w-4 h-4" style={{ color: MUTED }} />
+                <p className="text-sm font-semibold" style={{ color: INK }}>Campaigns</p>
+                <span className="text-xs" style={{ color: MUTED }}>({fmtNum(campaigns.length)})</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-[11px] uppercase tracking-wider" style={{ background: SURFACE, color: MUTED }}>
+                    <tr>
+                      <th className="text-left font-semibold px-5 py-3">Campaign</th>
+                      <th className="text-left font-semibold px-4 py-3">Status</th>
+                      <th className="text-right font-semibold px-4 py-3">Sent</th>
+                      <th className="text-right font-semibold px-4 py-3">Opened</th>
+                      <th className="text-right font-semibold px-4 py-3">Clicked</th>
+                      <th className="text-right font-semibold px-4 py-3">Replied</th>
+                      <th className="text-right font-semibold px-5 py-3">Created</th>
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: BORDER }}>
+                    {loading ? (
+                      [...Array(4)].map((_, i) => <tr key={i}><td colSpan={8} className="px-5 py-4"><div className="h-4 rounded animate-pulse" style={{ background: "#eef1f4" }} /></td></tr>)
+                    ) : campaigns.length === 0 ? (
+                      <tr><td colSpan={8} className="px-5 py-16 text-center">
+                        <Megaphone className="w-8 h-8 mx-auto mb-2" style={{ color: "#cfd7df" }} />
+                        <p className="text-sm font-medium" style={{ color: BODY }}>No campaigns yet</p>
+                        <p className="text-xs mt-1" style={{ color: MUTED }}>Use the composer's "Send tracked campaign" to see it here.</p>
+                      </td></tr>
+                    ) : campaigns.map((c) => (
+                      <tr key={c.id} onClick={() => setSelected(c.id)} className="cursor-pointer transition-colors group hover:bg-[#f4f8ff]">
+                        <td className="px-5 py-3.5 max-w-xs">
+                          <div className="font-semibold truncate" style={{ color: INK }}>{c.subject || "(no subject)"}</div>
+                          <div className="text-xs truncate" style={{ color: MUTED }}>{c.fromEmail || c.createdBy || "—"}</div>
+                        </td>
+                        <td className="px-4 py-3.5"><StatusPill status={c.status} /></td>
+                        <td className="px-4 py-3.5 text-right tabular-nums" style={{ color: BODY }}>{fmtNum(c.sentCount)}<span style={{ color: MUTED }}>/{fmtNum(c.totalRecipients)}</span></td>
+                        <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.opened.c }}>{c.openRate}%</span> <span className="text-xs" style={{ color: MUTED }}>({fmtNum(c.openedCount)})</span></td>
+                        <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.clicked.c }}>{c.clickRate}%</span> <span className="text-xs" style={{ color: MUTED }}>({fmtNum(c.clickedCount)})</span></td>
+                        <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.replied.c }}>{fmtNum(c.repliedCount)}</span></td>
+                        <td className="px-5 py-3.5 text-right text-xs whitespace-nowrap" style={{ color: BODY }}>{fmtDate(c.createdAt)}</td>
+                        <td className="px-2 py-3.5" style={{ color: "#cfd7df" }}><ChevronRight className="w-4 h-4" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

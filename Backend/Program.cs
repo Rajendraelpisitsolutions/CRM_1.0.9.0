@@ -176,6 +176,11 @@ builder.Services.AddScoped<NotesService>();
 builder.Services.AddScoped<ContactUsService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<RecycleBinService>();
+builder.Services.AddScoped<EmailTrackingService>();
+
+// Background worker that drains queued email campaigns (rate-limited, app-only Graph).
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<EmailSenderHostedService>();
 
 // Azure Document Intelligence
 var azureSettings = builder.Configuration
@@ -236,6 +241,86 @@ END");
 catch (Exception ex)
 {
     app.Services.GetRequiredService<ILogger<Program>>().LogError(ex, "Failed to ensure AuditLogs table exists.");
+}
+
+// Ensure the email-tracking tables exist (hand-managed schema, like AuditLogs above).
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<Elpis_CRM.Data.AppDbContext>();
+    db.Database.ExecuteSqlRaw(@"
+IF OBJECT_ID(N'dbo.EmailCampaigns', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.EmailCampaigns (
+        Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        Subject NVARCHAR(500) NULL,
+        BodyHtml NVARCHAR(MAX) NULL,
+        FromEmail NVARCHAR(256) NULL,
+        CreatedBy NVARCHAR(150) NULL,
+        CreatedById BIGINT NULL,
+        CreatedAt DATETIME2 NOT NULL,
+        CompletedAt DATETIME2 NULL,
+        Status NVARCHAR(20) NOT NULL,
+        TotalRecipients INT NOT NULL DEFAULT 0,
+        SentCount INT NOT NULL DEFAULT 0,
+        FailedCount INT NOT NULL DEFAULT 0,
+        OpenedCount INT NOT NULL DEFAULT 0,
+        ClickedCount INT NOT NULL DEFAULT 0,
+        UnsubscribedCount INT NOT NULL DEFAULT 0,
+        RepliedCount INT NOT NULL DEFAULT 0
+    );
+END
+IF OBJECT_ID(N'dbo.EmailRecipients', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.EmailRecipients (
+        Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        CampaignId BIGINT NOT NULL,
+        Email NVARCHAR(256) NOT NULL,
+        ContactId BIGINT NULL,
+        TrackingToken NVARCHAR(64) NOT NULL,
+        Status NVARCHAR(20) NOT NULL,
+        SentAt DATETIME2 NULL,
+        Error NVARCHAR(MAX) NULL,
+        OpenCount INT NOT NULL DEFAULT 0,
+        FirstOpenedAt DATETIME2 NULL,
+        LastOpenedAt DATETIME2 NULL,
+        ClickCount INT NOT NULL DEFAULT 0,
+        FirstClickedAt DATETIME2 NULL,
+        LastClickedAt DATETIME2 NULL,
+        Unsubscribed BIT NOT NULL DEFAULT 0,
+        UnsubscribedAt DATETIME2 NULL,
+        Replied BIT NOT NULL DEFAULT 0,
+        RepliedAt DATETIME2 NULL
+    );
+    CREATE UNIQUE INDEX UX_EmailRecipients_Token ON dbo.EmailRecipients (TrackingToken);
+    CREATE INDEX IX_EmailRecipients_Campaign ON dbo.EmailRecipients (CampaignId);
+END
+-- Add reply columns to already-existing tables (schema is hand-managed).
+IF COL_LENGTH('dbo.EmailCampaigns','RepliedCount') IS NULL
+    ALTER TABLE dbo.EmailCampaigns ADD RepliedCount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.EmailRecipients','Replied') IS NULL
+    ALTER TABLE dbo.EmailRecipients ADD Replied BIT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.EmailRecipients','RepliedAt') IS NULL
+    ALTER TABLE dbo.EmailRecipients ADD RepliedAt DATETIME2 NULL;
+IF OBJECT_ID(N'dbo.EmailEvents', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.EmailEvents (
+        Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+        RecipientId BIGINT NOT NULL,
+        CampaignId BIGINT NOT NULL,
+        Type NVARCHAR(20) NOT NULL,
+        Url NVARCHAR(MAX) NULL,
+        OccurredAt DATETIME2 NOT NULL,
+        IpAddress NVARCHAR(64) NULL,
+        UserAgent NVARCHAR(512) NULL
+    );
+    CREATE INDEX IX_EmailEvents_Recipient ON dbo.EmailEvents (RecipientId);
+    CREATE INDEX IX_EmailEvents_Campaign ON dbo.EmailEvents (CampaignId);
+END");
+}
+catch (Exception ex)
+{
+    app.Services.GetRequiredService<ILogger<Program>>().LogError(ex, "Failed to ensure email-tracking tables exist.");
 }
 
 app.UseSwagger();

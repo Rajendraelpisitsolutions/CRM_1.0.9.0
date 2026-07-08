@@ -78,14 +78,17 @@ function SignupPanel({ onClose }) {
         className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm transition-all duration-300"
       ></div>
       {/* Slide-in panel */}
-<div className="fixed top-0 right-0 w-full sm:w-[90%] md:w-[75%] lg:w-[30%] h-full bg-white shadow-2xl z-50 animate-in slide-in-from-right duration-300 flex flex-col overflow-hidden">        {/* Panel Header */}
+<div className="fixed top-0 right-0 w-full sm:w-[90%] md:w-[75%] lg:w-[30%] h-full bg-white shadow-xl border-l border-gray-200 z-50 animate-in slide-in-from-right duration-300 flex flex-col overflow-hidden">        {/* Panel Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-            Add New User
-          </h2>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              Add New User
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">Create an account and assign a role.</p>
+          </div>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-slate-500 focus:outline-none"
             aria-label="Close panel"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,7 +115,7 @@ function SignupPanel({ onClose }) {
                   placeholder="John Doe"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
                 />
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600">{errors.name}</p>
@@ -129,7 +132,7 @@ function SignupPanel({ onClose }) {
                   placeholder="john@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
                 />
                 {errors.email && (
                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
@@ -146,7 +149,7 @@ function SignupPanel({ onClose }) {
                   placeholder="+1 (555) 123-4567"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
                 />
                 {errors.phone && (
                   <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
@@ -161,7 +164,7 @@ function SignupPanel({ onClose }) {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all appearance-none"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all appearance-none"
                 >
                   <option value="User">User</option>
                   <option value="Manager">Manager</option>
@@ -179,7 +182,7 @@ function SignupPanel({ onClose }) {
                   placeholder="Min. 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
                 />
                 {errors.password && (
                   <p className="mt-1 text-sm text-red-600">{errors.password}</p>
@@ -196,7 +199,7 @@ function SignupPanel({ onClose }) {
                   placeholder="Re-enter password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
                 />
                 {errors.confirmPassword && (
                   <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
@@ -229,13 +232,13 @@ function SignupPanel({ onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium rounded-lg transition-colors duration-200"
+                className="flex-1 px-4 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-slate-500 focus:outline-none"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:outline-none"
               >
                 Create User
               </button>

@@ -44,7 +44,7 @@ const PIPELINE_STAGES = [
   "PO Received", "Won", "Lost"
 ];
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#f43f5e'];
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#f97316', '#06b6d4', '#a855f7', '#ec4899'];
 
 // Helper Functions
 const formatCurrency = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v ?? 0);
@@ -63,7 +63,7 @@ const getGradeColor = (score) => {
   if (score >= 85) return { grade: 'A', color: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' };
   if (score >= 70) return { grade: 'B', color: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' };
   if (score >= 55) return { grade: 'C', color: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' };
-  return { grade: 'D', color: 'bg-red-100 text-red-700', bar: 'bg-red-500' };
+  return { grade: 'D', color: 'bg-orange-100 text-orange-700', bar: 'bg-orange-500' };
 };
 // Phase 5: Helper to format cache age
 const formatCacheAge = (seconds) => {
@@ -113,7 +113,7 @@ function LoadingDashboardSkeleton() {
 }
 
 
-const ICON_BG = ['bg-blue-50 text-blue-600', 'bg-violet-50 text-violet-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-rose-50 text-rose-600', 'bg-cyan-50 text-cyan-600', 'bg-purple-50 text-purple-600', 'bg-teal-50 text-teal-600'];
+const ICON_BG = ['bg-blue-50 text-blue-600', 'bg-violet-50 text-violet-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-pink-50 text-pink-600', 'bg-cyan-50 text-cyan-600', 'bg-purple-50 text-purple-600', 'bg-teal-50 text-teal-600'];
 
 function KPICard({ title, value, trend, trendValue, icon: Icon, index = 0, onDrill, badge, comparison, loading = false, info }) {
   const isPositive = trend === 'up';
@@ -132,7 +132,7 @@ function KPICard({ title, value, trend, trendValue, icon: Icon, index = 0, onDri
             <p className="text-xs font-normal text-gray-500 uppercase tracking-wide">{title}</p>
             {info && <div className="relative"><button onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo); }} className="p-0.5 text-gray-400 hover:text-gray-600"><Info className="w-3.5 h-3.5" /></button>{showInfo && <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50 w-48 whitespace-normal">{info}</div>}</div>}
           </div>
-          <h3 className="text-lg sm:text-xl font-normal text-gray-900 truncate">{value}</h3>
+          <h3 className="text-lg sm:text-xl font-medium text-gray-900 truncate">{value}</h3>
           {badge && <span className={`inline-block text-xs font-normal mt-2 px-2 py-0.5 rounded ${badge.color}`}>{badge.text}</span>}
         </div>
         <div className={`p-1.5 sm:p-2 rounded flex-shrink-0 ${iconStyle}`}>
@@ -140,8 +140,8 @@ function KPICard({ title, value, trend, trendValue, icon: Icon, index = 0, onDri
         </div>
       </div>
       <div className="flex items-center gap-1 flex-wrap">
-        {isPositive ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" /> : <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />}
-        <span className={`text-xs font-normal ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>{trendValue}</span>
+        {isPositive ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" /> : <ArrowDownRight className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
+        <span className={`text-xs font-normal ${isPositive ? 'text-emerald-600' : 'text-amber-600'}`}>{trendValue}</span>
         {comparison && <span className="text-xs text-gray-400 hidden sm:inline">{comparison}</span>}
       </div>
     </div>
@@ -158,7 +158,7 @@ function ChartCard({ title, subtitle, children, className = '', action, actions 
       <div className="px-5 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-1.5">
-            <h3 className="text-sm font-normal text-gray-900">{title}</h3>
+            <h3 className="text-sm font-medium text-gray-900">{title}</h3>
             {info && <div className="relative"><button onClick={(e) => { e.stopPropagation(); setShowInfo(!showInfo); }} className="p-0.5 text-gray-400 hover:text-gray-600"><Info className="w-3.5 h-3.5" /></button>{showInfo && <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50 w-56 whitespace-normal">{info}</div>}</div>}
           </div>
           {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
@@ -178,20 +178,20 @@ function ChartCard({ title, subtitle, children, className = '', action, actions 
 // 
 
 function AlertBanner({ severity = 'warning', title, message, onDismiss, actionText, onAction }) {
-  const bgMap = { critical: 'bg-red-50 border-red-200', warning: 'bg-amber-50 border-amber-200', info: 'bg-blue-50 border-blue-200', success: 'bg-emerald-50 border-emerald-200' };
+  const bgMap = { critical: 'bg-orange-50 border-orange-200', warning: 'bg-amber-50 border-amber-200', info: 'bg-blue-50 border-blue-200', success: 'bg-emerald-50 border-emerald-200' };
   const iconMap = { critical: AlertTriangle, warning: AlertCircle, info: Info, success: CheckCircle };
   const Icon = iconMap[severity];
 
   return (
     <div className={`${bgMap[severity]} border rounded-lg p-1.5 sm:p-2 mb-2 flex items-start gap-1.5`}>
-      <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${severity === 'critical' ? 'text-red-600' : severity === 'warning' ? 'text-amber-600' : severity === 'info' ? 'text-blue-600' : 'text-emerald-600'}`} />
+      <Icon className={`w-4 h-4 flex-shrink-0 mt-0.5 ${severity === 'critical' ? 'text-orange-600' : severity === 'warning' ? 'text-amber-600' : severity === 'info' ? 'text-blue-600' : 'text-emerald-600'}`} />
 
       <div className="flex-1 min-w-0">
-        <h4 className={`text-xs font-medium mb-0.5 ${severity === 'critical' ? 'text-red-900' : severity === 'warning' ? 'text-amber-900' : severity === 'info' ? 'text-blue-900' : 'text-emerald-900'}`}>{title}</h4>
+        <h4 className={`text-xs font-medium mb-0.5 ${severity === 'critical' ? 'text-orange-900' : severity === 'warning' ? 'text-amber-900' : severity === 'info' ? 'text-blue-900' : 'text-emerald-900'}`}>{title}</h4>
 
-        <p className={`text-xs leading-relaxed ${severity === 'critical' ? 'text-red-800' : severity === 'warning' ? 'text-amber-800' : severity === 'info' ? 'text-blue-800' : 'text-emerald-800'}`}>{message}</p>
+        <p className={`text-xs leading-relaxed ${severity === 'critical' ? 'text-orange-800' : severity === 'warning' ? 'text-amber-800' : severity === 'info' ? 'text-blue-800' : 'text-emerald-800'}`}>{message}</p>
 
-        {actionText && <button onClick={onAction} className={`mt-1.5 text-xs font-medium px-3 py-1 rounded-full transition-colors ${severity === 'critical' ? 'bg-red-100 text-red-700 hover:bg-red-200' : severity === 'warning' ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : severity === 'info' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>{actionText}</button>}
+        {actionText && <button onClick={onAction} className={`mt-1.5 text-xs font-medium px-3 py-1 rounded-full transition-colors ${severity === 'critical' ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : severity === 'warning' ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : severity === 'info' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>{actionText}</button>}
       </div>
 
       {onDismiss && <button onClick={onDismiss} className="flex-shrink-0 text-gray-400 hover:text-gray-600 hover:bg-white/50 p-0.5 rounded transition-colors" title="Close"><X className="w-4 h-4" /></button>}
@@ -282,7 +282,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
           <Filter className="w-4 h-4 text-gray-400" aria-hidden="true" />
           <h3 className="text-sm font-medium text-gray-700">Filters</h3>
           {Object.values(filters).filter(f => f !== 'all' && f !== '').length > 0 && (
-            <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full" aria-label={`${Object.values(filters).filter(f => f !== 'all' && f !== '').length} active filters`}>
+            <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-full" aria-label={`${Object.values(filters).filter(f => f !== 'all' && f !== '').length} active filters`}>
               {Object.values(filters).filter(f => f !== 'all' && f !== '').length} active
             </span>
           )}
@@ -307,7 +307,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[150px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Created By</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
                   value={filters.createdBy}
                   onChange={(e) => onFilterChange('createdBy', e.target.value)}
                 >
@@ -323,7 +323,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
             <div className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
               <label className="text-xs font-medium text-gray-600 mb-1.5 block">Date Range</label>
               <select
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
                 value={filters.dateRange}
                 onChange={(e) => onFilterChange('dateRange', e.target.value)}
               >
@@ -342,7 +342,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
                   <label className="text-xs font-medium text-gray-600 mb-1.5 block">From Date</label>
                   <input
                     type="date"
-                    className="w-full px-2.5 py-1.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 text-gray-700 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
                     value={filters.customFrom || ''}
                     max={filters.customTo || undefined}
                     onChange={(e) => onFilterChange('customFrom', e.target.value)}
@@ -352,7 +352,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
                   <label className="text-xs font-medium text-gray-600 mb-1.5 block">To Date</label>
                   <input
                     type="date"
-                    className="w-full px-2.5 py-1.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 text-gray-700 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
                     value={filters.customTo || ''}
                     min={filters.customFrom || undefined}
                     onChange={(e) => onFilterChange('customTo', e.target.value)}
@@ -366,7 +366,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Month</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedMonth}
                   onChange={(e) => onFilterChange('selectedMonth', parseInt(e.target.value))}
                 >
@@ -380,7 +380,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[180px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Quarter</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedQuarter}
                   onChange={(e) => onFilterChange('selectedQuarter', parseInt(e.target.value))}
                 >
@@ -397,7 +397,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[120px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Year</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-blue-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedYear}
                   onChange={(e) => onFilterChange('selectedYear', parseInt(e.target.value))}
                 >
@@ -417,7 +417,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div key={key} className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">{label}</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
                   value={filters[key]}
                   onChange={(e) => onFilterChange(key, e.target.value)}
                 >
@@ -429,7 +429,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button onClick={onReset} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100 transition-colors" aria-label="Reset all filters">Reset</button>
-            {onExport && <button onClick={onExport} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors flex items-center gap-1.5" aria-label="Export deals to a branded Excel report"><Download className="w-3.5 h-3.5" aria-hidden="true" />Export</button>}
+            {onExport && <button onClick={onExport} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center gap-1.5" aria-label="Export deals to a branded Excel report"><Download className="w-3.5 h-3.5" aria-hidden="true" />Export</button>}
           </div>
         </div>
       )}
@@ -448,7 +448,7 @@ function StageBadge({ stage }) {
     'Proposal/Price Quote': 'bg-amber-100 text-amber-700', 'Hold': 'bg-stone-100 text-stone-700', 'Negotiation/Review': 'bg-orange-100 text-orange-700',
     //'Follow Up': 'bg-yellow-100 text-yellow-700', 
     'RO Received': 'bg-f0f8ff text-blue-700',
-    'Won': 'bg-emerald-100 text-emerald-700', 'Lost': 'bg-rose-100 text-rose-700',
+    'Won': 'bg-emerald-100 text-emerald-700', 'Lost': 'bg-amber-100 text-amber-700',
   };
   return <span className={`px-3 py-1 text-xs font-bold rounded-full ${map[stage] ?? 'bg-gray-100 text-gray-700'}`}>{stage}</span>;
 }
@@ -488,21 +488,24 @@ function DrillDownModal({ isOpen, title, deals, accounts, contacts = [], onClose
   return (
     <>
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
-          <div className="sticky top-0 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between z-10">
+        <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-[95vw] max-w-[95vw] max-h-[95vh] flex flex-col overflow-hidden">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
             <div>
-              <h2 className="text-lg font-normal text-gray-900">{title}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
               <p className="text-sm text-gray-600 mt-0">{filteredDeals.length} records found</p>
               {isDealData && <p className="text-xs text-gray-500 mt-0">Click a deal row to open the existing Deals slide-in.</p>}
             </div>
-            <button onClick={onClose} className="p-1 hover:bg-white rounded-lg transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
+            <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-auto drilldown-scroll">
             {filteredDeals.length === 0 ? (
-              <div className="text-center py-16">
-                <Activity className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg font-normal">No data available</p>
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                  <Activity className="w-6 h-6 text-gray-400" />
+                </div>
+                <p className="text-sm font-semibold text-gray-700">No data available</p>
+                <p className="text-xs text-gray-500 mt-1">Nothing matches this selection yet.</p>
               </div>
             ) : (
               <div>
@@ -511,19 +514,19 @@ function DrillDownModal({ isOpen, title, deals, accounts, contacts = [], onClose
                     <tr>
                       {isDealData ? (
                         <>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[180px]">Deal Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[160px]">Account</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[130px]">Value</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[220px]">Stage</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[130px]">Owner</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[140px]">Created By</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[140px]">Updated By</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase min-w-[100px]">Probability</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[180px]">Deal Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[160px]">Account</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[130px]">Value</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[220px]">Stage</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[130px]">Owner</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[140px]">Created By</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[140px]">Updated By</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide min-w-[100px]">Probability</th>
                         </>
                       ) : (
                         <>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase">Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-blue-800 uppercase">Details</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Details</th>
                         </>
                       )}
                     </tr>
@@ -581,13 +584,13 @@ function DrillDownModal({ isOpen, title, deals, accounts, contacts = [], onClose
             )}
           </div>
 
-          <div className="px-6 py-2 bg-gradient-to-r from-blue-50 to-blue-100 border-t border-blue-200">
+          <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
-              <div><p className="text-xs text-blue-600">Total Records</p><p className="text-lg font-normal text-blue-900">{filteredDeals.length}</p></div>
+              <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Records</p><p className="text-lg font-semibold text-gray-900">{filteredDeals.length}</p></div>
               {isDealData && <>
-                <div><p className="text-xs text-blue-600">Total Value</p><p className="text-lg font-normal text-blue-900">{formatCurrency(filteredDeals.reduce((s, d) => s + (d.dealValue ?? 0), 0))}</p></div>
-                <div><p className="text-xs text-blue-600">Avg Value</p><p className="text-lg font-normal text-blue-900">{formatCurrency(filteredDeals.reduce((s, d) => s + (d.dealValue ?? 0), 0) / filteredDeals.length)}</p></div>
-                <div><p className="text-xs text-blue-600">Avg Probability</p><p className="text-lg font-normal text-blue-900">{(filteredDeals.reduce((s, d) => s + (d.probability ?? 0), 0) / filteredDeals.length).toFixed(1)}%</p></div>
+                <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Value</p><p className="text-lg font-semibold text-gray-900">{formatCurrency(filteredDeals.reduce((s, d) => s + (d.dealValue ?? 0), 0))}</p></div>
+                <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Avg Value</p><p className="text-lg font-semibold text-gray-900">{formatCurrency(filteredDeals.reduce((s, d) => s + (d.dealValue ?? 0), 0) / filteredDeals.length)}</p></div>
+                <div><p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Avg Probability</p><p className="text-lg font-semibold text-gray-900">{(filteredDeals.reduce((s, d) => s + (d.probability ?? 0), 0) / filteredDeals.length).toFixed(1)}%</p></div>
               </>}
             </div>
           </div>
@@ -758,7 +761,7 @@ function AnticipatedOutcomeCard({ canEdit, index = 4 }) {
               />
             </div>
           ) : selectedTarget !== '' ? (
-            <h3 className="text-lg sm:text-xl font-normal text-gray-900 truncate mt-1">₹{formatTargetValue(selectedTarget)}</h3>
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 truncate mt-1">₹{formatTargetValue(selectedTarget)}</h3>
           ) : (
             <p className="text-sm text-gray-400 italic mt-1">No outcome set yet</p>
           )}
@@ -791,7 +794,7 @@ function AnticipatedOutcomeCard({ canEdit, index = 4 }) {
           </>
         ) : (
           <>
-            <ArrowDownRight className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+            <ArrowDownRight className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
             <span className="text-xs font-normal text-gray-400">{canEdit ? 'Enter target above' : 'Not yet defined'}</span>
           </>
         )}
@@ -799,7 +802,7 @@ function AnticipatedOutcomeCard({ canEdit, index = 4 }) {
         {loading && <span className="text-xs font-normal text-slate-500">Loading targets…</span>}
       </div>
 
-      {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+      {error && <p className="text-xs text-orange-500 mt-2">{error}</p>}
     </div>
   );
 }
@@ -2191,7 +2194,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 w-full min-w-0">
             <div className="min-w-0 shrink">
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-base sm:text-lg font-normal text-gray-900 truncate">Dashboard</h1>
+                <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">Dashboard</h1>
                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-normal rounded-full ${accessLabel.badge}`}>
                   {userAccessLevel === 'user' ? 'Your' : canViewAll ? 'All Users' : 'Team'}
                 </span>
@@ -2439,7 +2442,7 @@ export default function Home() {
                     <p className="text-xs text-gray-500">{owner.deals} deals • {formatCurrency(owner.revenue)}</p>
                   </div>
                   <div className="text-right flex-shrink-0 ml-3">
-                    <p className="text-lg font-medium text-blue-600">{owner.winRate}%</p>
+                    <p className="text-lg font-semibold text-slate-800">{owner.winRate}%</p>
                     <p className="text-xs text-gray-500">win rate</p>
                   </div>
                 </div>
@@ -2608,9 +2611,12 @@ export default function Home() {
 
                 if (data.length === 0) {
                   return (
-                    <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
-                      <TrendingDown className="w-8 h-8 text-gray-300" />
-                      <p className="text-sm">No significant lost reasons yet</p>
+                    <div className="flex flex-col items-center justify-center h-40 text-center">
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <TrendingDown className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-700">No significant lost reasons yet</p>
+                      <p className="text-xs text-gray-500 mt-1">Reasons appear once enough deals are lost.</p>
                     </div>
                   );
                 }
@@ -2622,7 +2628,7 @@ export default function Home() {
                     {data.map((item, i) => {
                       const pct = Math.round((item.count / maxCount) * 100);
                       const lostPct = ((item.count / total) * 100).toFixed(1);
-                      const barColor = 'from-orange-400 to-orange-300';
+                      const barColor = 'bg-amber-400';
 
                       return (
                         <div
@@ -2636,11 +2642,11 @@ export default function Home() {
                           className="cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-xs font-medium text-gray-700 truncate max-w-[55%] group-hover:text-rose-600 transition-colors">{item.reason}</span>
+                            <span className="text-xs font-medium text-gray-700 truncate max-w-[55%] group-hover:text-amber-600 transition-colors">{item.reason}</span>
                             <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{item.count} deal{item.count !== 1 ? 's' : ''} · {lostPct}%</span>
                           </div>
                           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                            <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       );
@@ -2653,9 +2659,12 @@ export default function Home() {
             {/* Top High-Value Deals */}
             <ChartCard title="Top High-Value Deals" subtitle="Deals exceeding ₹1,00,000 in value">
               {analytics.highValueDeals.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
-                  <DollarSign className="w-8 h-8 text-gray-300" />
-                  <p className="text-sm">No high-value deals found</p>
+                <div className="flex flex-col items-center justify-center h-40 text-center">
+                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                    <DollarSign className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-700">No high-value deals found</p>
+                  <p className="text-xs text-gray-500 mt-1">Deals above ₹1,00,000 will show up here.</p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-72 overflow-y-auto pr-1 deal-cards-scrollbar">
@@ -2663,7 +2672,7 @@ export default function Home() {
                     const maxValue = Math.max(...analytics.highValueDeals.map(d => d.dealValue ?? 0), 1);
                     return analytics.highValueDeals.map((deal, i) => {
                       const pct = Math.round(((deal.dealValue ?? 0) / maxValue) * 100);
-                      const barColor = 'from-indigo-500 to-sky-400';
+                      const barColor = 'bg-slate-500';
 
                       return (
                         <div
@@ -2681,7 +2690,7 @@ export default function Home() {
                           </div>
                           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all`}
+                              className={`h-full ${barColor} rounded-full transition-all`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -2721,9 +2730,9 @@ export default function Home() {
                 {analytics.pipelineByStage.map((stage, i) => {
                   const maxCount = Math.max(...analytics.pipelineByStage.map(s => s.count), 1);
                   const pct = Math.round((stage.count / maxCount) * 100);
-                  const barColor = stage.name === 'Won' ? 'from-emerald-500 to-emerald-400' :
-                    stage.name === 'Lost' ? 'from-rose-500 to-rose-400' :
-                      'from-blue-500 to-cyan-400';
+                  const barColor = stage.name === 'Won' ? 'bg-emerald-500' :
+                    stage.name === 'Lost' ? 'bg-amber-500' :
+                      'bg-slate-400';
                   return (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-0.5">
@@ -2731,7 +2740,7 @@ export default function Home() {
                         <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{stage.count} deal{stage.count !== 1 ? 's' : ''} · {formatCurrency(stage.value)}</span>
                       </div>
                       <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                        <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -2772,7 +2781,7 @@ export default function Home() {
               ? 100
               : Math.round(((openDeals.length - stalledCount) / openDeals.length) * 100);
             const responsivenessLabel = responsivenessScore >= 80 ? 'Active' : responsivenessScore >= 60 ? 'Fair' : 'At Risk';
-            const responsivenessColor = responsivenessScore >= 80 ? 'bg-emerald-100 text-emerald-700' : responsivenessScore >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700';
+            const responsivenessColor = responsivenessScore >= 80 ? 'bg-emerald-100 text-emerald-700' : responsivenessScore >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-amber-100 text-amber-700';
 
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -2828,30 +2837,27 @@ export default function Home() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             {/* System Activity Heatmap */}
-            <ChartCard title="Team Activity Timeline" subtitle="Total opened and closed deals this month (click to view)">
+            <ChartCard title="Deals by Priority" subtitle="Number of deals per priority (click to view)">
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={[
-                  { name: 'Opened', value: analytics.teamActivityTotals?.opened ?? 0, key: 'opened' },
-                  { name: 'Closed', value: analytics.teamActivityTotals?.closed ?? 0, key: 'closed' }
+                  { name: 'High', value: filteredDeals.filter(d => String(d.priority ?? d.Priority ?? '').trim().toLowerCase() === 'high').length, key: 'High' },
+                  { name: 'Medium', value: filteredDeals.filter(d => String(d.priority ?? d.Priority ?? '').trim().toLowerCase() === 'medium').length, key: 'Medium' },
+                  { name: 'Low', value: filteredDeals.filter(d => String(d.priority ?? d.Priority ?? '').trim().toLowerCase() === 'low').length, key: 'Low' },
                 ]}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]} fill="#3b82f6" onClick={(data) => {
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} onClick={(data) => {
                     if (!data || !data.payload) return;
                     const key = data.payload.key;
-                    const now = new Date();
-                    const year = now.getFullYear();
-                    const month = now.getMonth();
-                    if (key === 'opened') {
-                      const monthDeals = deals.filter(d => d.createdAt && (() => { const c = new Date(d.createdAt); return c.getFullYear() === year && c.getMonth() === month; })());
-                      handleDrillDown(`Deals Opened This Month (${monthDeals.length})`, monthDeals);
-                    } else if (key === 'closed') {
-                      const monthDeals = deals.filter(d => d.closedDate && (() => { const c = new Date(d.closedDate); return c.getFullYear() === year && c.getMonth() === month; })());
-                      handleDrillDown(`Deals Closed This Month (${monthDeals.length})`, monthDeals);
-                    }
-                  }} />
+                    const matched = filteredDeals.filter(d => String(d.priority ?? d.Priority ?? '').trim().toLowerCase() === key.toLowerCase());
+                    handleDrillDown(`${key} Priority Deals (${matched.length})`, matched);
+                  }}>
+                    {['#f97316', '#f59e0b', '#10b981'].map((color, i) => (
+                      <Cell key={i} fill={color} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -2859,20 +2865,20 @@ export default function Home() {
             {/* Summary Statistics */}
             <ChartCard title="Dashboard Summary" subtitle="Key metrics overview">
               <div className="space-y-4">
-                <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                  <p className="text-xs text-blue-600 font-normal uppercase">Total Deals</p>
-                  <p className="text-2xl font-normal text-blue-900 mt-1">{filteredDeals.length}</p>
-                  <p className="text-xs text-blue-600 mt-1">{analytics.dealsWon} won | {analytics.dealsLost} lost</p>
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Deals</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{filteredDeals.length}</p>
+                  <p className="text-xs text-gray-500 mt-1">{analytics.dealsWon} won | {analytics.dealsLost} lost</p>
                 </div>
-                <div className="p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg border border-emerald-200">
-                  <p className="text-xs text-emerald-600 font-normal uppercase">Total Revenue</p>
-                  <p className="text-2xl font-normal text-emerald-900 mt-1">{formatCurrency(analytics.totalRevenue)}</p>
-                  <p className="text-xs text-emerald-600 mt-1">from {analytics.dealsWon} closed deals</p>
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Revenue</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.totalRevenue)}</p>
+                  <p className="text-xs text-gray-500 mt-1">from {analytics.dealsWon} closed deals</p>
                 </div>
-                <div className="p-3 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
-                  <p className="text-xs text-amber-600 font-normal uppercase">Pipeline Value</p>
-                  <p className="text-2xl font-normal text-amber-900 mt-1">{formatCurrency(analytics.pipelineValue)}</p>
-                  <p className="text-xs text-amber-600 mt-1">{filteredDeals.filter(d => !['Won', 'Lost', 'PO Received'].includes(d.dealStage)).length} open deals</p>
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pipeline Value</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(analytics.pipelineValue)}</p>
+                  <p className="text-xs text-gray-500 mt-1">{filteredDeals.filter(d => !['Won', 'Lost', 'PO Received'].includes(d.dealStage)).length} open deals</p>
                 </div>
               </div>
             </ChartCard>
@@ -3013,7 +3019,7 @@ export default function Home() {
                     <div
                       key={i}
                       onClick={() => handleCreatorClick(creator)}
-                      className="flex items-center justify-between p-3 bg-gradient-to-r from-emerald-50 to-transparent rounded-lg border border-emerald-100 hover:border-emerald-200 transition-colors cursor-pointer hover:shadow-md"
+                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-200 flex items-center justify-center text-sm font-normal text-emerald-700">
@@ -3025,7 +3031,7 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-lg font-normal text-emerald-600">{formatCurrency(creator.totalRevenue)}</p>
+                        <p className="text-lg font-semibold text-emerald-600">{formatCurrency(creator.totalRevenue)}</p>
                         <p className="text-xs text-gray-500">{creator.winRate}% win</p>
                       </div>
                     </div>
@@ -3040,7 +3046,7 @@ export default function Home() {
                     <div
                       key={i}
                       onClick={() => handleCreatorClick(creator)}
-                      className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-transparent rounded-lg border border-blue-100 hover:border-blue-200 transition-colors cursor-pointer hover:shadow-md"
+                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center text-sm font-normal text-blue-700">
@@ -3052,7 +3058,7 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-lg font-normal text-blue-600">{creator.dealsCreated}</p>
+                        <p className="text-lg font-semibold text-slate-800">{creator.dealsCreated}</p>
                         <p className="text-xs text-gray-500">deals</p>
                       </div>
                     </div>
@@ -3115,9 +3121,9 @@ export default function Home() {
                       e.preventDefault();
                       openDealInDealsPage(deal);
                     }}
-                    className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors cursor-pointer hover:shadow-sm"
+                    className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
                   >
-                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-2" />
+                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-slate-800 mt-2" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{deal.dealName || 'Unnamed Deal'}</p>
                       <p className="text-xs text-gray-600 truncate">
@@ -3166,8 +3172,8 @@ export default function Home() {
       {toastMsg && (
         <div
           className={`fixed bottom-6 right-6 z-[9999] px-5 py-3 rounded-xl shadow-xl text-white text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${toastMsg.type === 'success' ? 'bg-emerald-600' :
-            toastMsg.type === 'error' ? 'bg-red-600' :
-              'bg-blue-600'
+            toastMsg.type === 'error' ? 'bg-orange-600' :
+              'bg-slate-800'
             }`}
         >
           {toastMsg.type === 'success' && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}

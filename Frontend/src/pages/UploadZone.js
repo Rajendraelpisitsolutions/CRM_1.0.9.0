@@ -117,7 +117,7 @@ function UploadZone({ onFileSelect, selectedFile, isLoading, supportedFormats = 
               type="button"
               onClick={(e) => {e.stopPropagation(); handleClick();}}
               disabled={isLoading}
-              className="inline-block px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+              className="inline-block px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900 transition-colors disabled:bg-gray-400"
             >
               Browse Files
             </button>

@@ -177,65 +177,83 @@ export default function RecycleBin() {
   };
 
   return (
-    <div className="p-4 sm:p-6 h-full overflow-y-auto bg-gray-50">
-      <div className="max-w-7xl mx-auto">
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 font-medium mb-3"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Recycle Bin</h1>
-            <p className="text-sm text-gray-500">Recover or permanently remove deleted CRM records.</p>
+    <div className="p-4 sm:p-6 h-full flex flex-col overflow-hidden bg-gray-50">
+      <div className="max-w-7xl mx-auto w-full flex flex-col flex-1 min-h-0">
+        {/* Non-scrolling header area: back button, message, filters */}
+        <div className="flex-shrink-0">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 font-medium mb-3"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-gray-500" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Recycle Bin</h1>
+                <p className="text-sm text-gray-500">Recover or permanently remove deleted CRM records.</p>
+              </div>
+            </div>
+            <span className="text-sm text-gray-500">{filteredItems.length} record{filteredItems.length !== 1 ? "s" : ""}</span>
           </div>
-          <span className="text-sm text-gray-500">{filteredItems.length} record{filteredItems.length !== 1 ? "s" : ""}</span>
+
+          {message && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">{message}</div>
+          )}
+
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search item, deleted by, details…"
+              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+            />
+            <select value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
+              <option value="">All entities</option>
+              {entityTypes.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
+            </select>
+            <button onClick={handleRefresh}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg">Refresh</button>
+          </div>
         </div>
 
-        {message && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm">{message}</div>
-        )}
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search item, deleted by, details…"
-            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <select value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All entities</option>
-            {entityTypes.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
-          </select>
-          <button onClick={handleRefresh}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg">Refresh</button>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+        {/* Table: only this area scrolls; header row stays pinned via sticky */}
+        <div className="bg-white border border-gray-200 rounded-xl flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="overflow-auto flex-1 min-h-0">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide sticky top-0 z-10">
                 <tr>
-                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Item</th>
-                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Deleted By</th>
-                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Deleted At</th>
-                  <th className="text-left font-semibold px-4 py-3">Details</th>
-                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap">Actions</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap bg-gray-50">Item</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap bg-gray-50">Deleted By</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap bg-gray-50">Deleted At</th>
+                  <th className="text-left font-semibold px-4 py-3 bg-gray-50">Details</th>
+                  <th className="text-left font-semibold px-4 py-3 whitespace-nowrap bg-gray-50">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
-                  <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-500">Loading…</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-16 text-center text-sm text-gray-500">Loading…</td></tr>
                 ) : pagedItems.length === 0 ? (
-                  <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">
-                    {items.length === 0 ? "No deleted items found." : "No items match your filters."}
+                  <tr><td colSpan={5} className="px-4 py-16">
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <Trash2 className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700">
+                        {items.length === 0 ? "Recycle bin is empty" : "No matching items"}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {items.length === 0 ? "Deleted records will appear here for recovery." : "Try adjusting your search or entity filter."}
+                      </p>
+                    </div>
                   </td></tr>
                 ) : pagedItems.map((item) => (
                   <tr key={`${item.entityType}-${item.entityId}`} className="hover:bg-gray-50 align-top">
@@ -271,8 +289,8 @@ export default function RecycleBin() {
           </div>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between mt-4 text-sm">
+        {/* Pagination: stays pinned below the scrollable table */}
+        <div className="flex items-center justify-between mt-4 text-sm flex-shrink-0">
           <span className="text-gray-500">Page {page} of {totalPages}</span>
           <div className="flex items-center gap-1">
             <button
@@ -291,7 +309,7 @@ export default function RecycleBin() {
                   onClick={() => setPage(p)}
                   className={`px-3 py-1.5 rounded-lg border text-sm ${
                     p === page
-                      ? "bg-indigo-600 border-indigo-600 text-white"
+                      ? "bg-slate-800 border-slate-800 text-white"
                       : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -313,10 +331,10 @@ export default function RecycleBin() {
       {/* Restore Confirmation Modal */}
       {showRestoreModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
-          <div className="bg-white w-full sm:w-96 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full sm:w-96 rounded-xl border border-gray-200 shadow-xl p-6 transform animate-in zoom-in-95 duration-200">
             <div className="mb-6 text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <RotateCcw className="w-8 h-8 text-emerald-600" />
+              <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <RotateCcw className="w-7 h-7 text-emerald-600" />
               </div>
               <h4 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Restore Item</h4>
               <p className="text-sm sm:text-base text-gray-600">
@@ -331,14 +349,14 @@ export default function RecycleBin() {
               <button
                 type="button"
                 onClick={() => { setShowRestoreModal(false); setRestoreTarget(null); }}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmRestore}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-sm hover:shadow-md focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               >
                 Restore
               </button>
@@ -350,10 +368,10 @@ export default function RecycleBin() {
       {/* Permanent Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
-          <div className="bg-white w-full sm:w-96 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
+          <div className="bg-white w-full sm:w-96 rounded-xl border border-gray-200 shadow-xl p-6 transform animate-in zoom-in-95 duration-200">
             <div className="mb-6 text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
@@ -370,14 +388,14 @@ export default function RecycleBin() {
               <button
                 type="button"
                 onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmPermanentDelete}
-                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-sm hover:shadow-md focus:ring-2 focus:ring-red-500 focus:outline-none"
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium text-sm focus:ring-2 focus:ring-red-500 focus:outline-none"
               >
                 Delete
               </button>

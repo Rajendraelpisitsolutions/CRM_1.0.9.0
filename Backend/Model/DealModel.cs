@@ -25,6 +25,7 @@ namespace Elpis_CRM.Model
         public DateTime? UpdatedAt { get; set; }
         public string? DealPipeline { get; set; }
         public string? DealStage { get; set; }
+        public string? Priority { get; set; }
         public string? LostReason { get; set; }
         public string? WonReasons { get; set; }
         public string? PaymentStatus { get; set; }

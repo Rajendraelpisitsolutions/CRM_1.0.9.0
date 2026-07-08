@@ -336,14 +336,14 @@ function Users() {
           {/* Header */}
           <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">User Management</h1>
+              <h1 className="text-xl font-semibold text-gray-900">User Management</h1>
               <p className="text-sm text-gray-500">Manage users, roles, and permissions</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500">{total} user{total !== 1 ? "s" : ""}</span>
               <button
                 onClick={() => handleOpenForm()}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg"
               >
                 <FiPlus size={16} />
                 Add User
@@ -376,7 +376,7 @@ function Users() {
                 setPage(1);
               }}
               placeholder="Search by name, email, or phone…"
-              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
             />
             <select
               value={roleFilter}
@@ -384,7 +384,7 @@ function Users() {
                 setRoleFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
             >
               <option value="">All roles</option>
               {roles.map((r) => (
@@ -399,7 +399,7 @@ function Users() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
             >
               <option value="">All statuses</option>
               <option value="Active">Active</option>
@@ -407,7 +407,7 @@ function Users() {
             </select>
             <button
               onClick={() => fetchUsers()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg"
+              className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 text-sm font-medium rounded-lg"
             >
               Refresh
             </button>
@@ -437,8 +437,14 @@ function Users() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                      No users found.
+                    <td colSpan={6} className="px-4 py-16 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                          <FiSearch size={22} className="text-gray-400" />
+                        </div>
+                        <p className="text-sm font-medium text-gray-700">No users found</p>
+                        <p className="text-sm text-gray-500 mt-0.5">Try adjusting your search or filters.</p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -469,14 +475,14 @@ function Users() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => handleOpenForm(u)}
-                            className="p-2 text-blue-600 hover:bg-blue-100 rounded transition"
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
                             title="Edit"
                           >
                             <FiEdit2 size={16} />
                           </button>
                           <button
                             onClick={() => handleOpenPasswordModal(u.loginId)}
-                            className="p-2 text-orange-600 hover:bg-orange-100 rounded transition"
+                            className="p-2 text-orange-600 hover:bg-orange-100 rounded-lg transition"
                             title="Change Password"
                           >
                             <FiLock size={16} />
@@ -484,7 +490,7 @@ function Users() {
                           {u.isActive ? (
                             <button
                               onClick={() => handleDeactivate(u.loginId)}
-                              className="p-2 text-yellow-600 hover:bg-yellow-100 rounded transition"
+                              className="p-2 text-yellow-600 hover:bg-yellow-100 rounded-lg transition"
                               title="Deactivate"
                             >
                               <FiX size={16} />
@@ -492,7 +498,7 @@ function Users() {
                           ) : (
                             <button
                               onClick={() => handleActivate(u.loginId)}
-                              className="p-2 text-green-600 hover:bg-green-100 rounded transition"
+                              className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition"
                               title="Activate"
                             >
                               <FiCheck size={16} />
@@ -503,7 +509,7 @@ function Users() {
                               setDeleteId(u.loginId);
                               setShowDeleteConfirm(true);
                             }}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded transition"
+                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
                             title="Delete"
                           >
                             <FiTrash2 size={16} />
@@ -528,7 +534,7 @@ function Users() {
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Previous
               </button>
@@ -536,9 +542,9 @@ function Users() {
                 <button
                   key={i + 1}
                   onClick={() => setPage(i + 1)}
-                  className={`px-3 py-1 rounded border ${
+                  className={`px-3 py-1 rounded-lg border ${
                     page === i + 1
-                      ? "bg-indigo-600 text-white border-indigo-600"
+                      ? "bg-slate-800 text-white border-slate-800"
                       : "border-gray-300 hover:bg-gray-50"
                   }`}
                 >
@@ -548,7 +554,7 @@ function Users() {
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
               >
                 Next
               </button>

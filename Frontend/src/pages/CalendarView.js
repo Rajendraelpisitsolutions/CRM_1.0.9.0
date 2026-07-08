@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useMsal } from "@azure/msal-react";
 import {
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, Video,
-  X, RefreshCw, Search, Users, FileText, Star,
+  X, RefreshCw, Search, Users, FileText, Star, AlertTriangle,
 } from "lucide-react";
 
 /* ─── constants ────────────────────────────────────────────── */
@@ -138,13 +138,13 @@ function MiniCalendar({ focusDate, onSelectDate, meetings }) {
           {cells.map((d, i) => (
             <button key={i} disabled={!d} onClick={() => d && onSelectDate(new Date(year, month, d))}
               className={`relative w-full aspect-square flex items-center justify-center rounded-full text-[11px] transition-all
-                ${!d ? "" : isFocus(d) ? "bg-[#6264A7] text-white font-semibold shadow-sm"
-                  : isToday(d) ? "bg-blue-100 text-blue-700 font-semibold"
+                ${!d ? "" : isFocus(d) ? "bg-slate-800 text-white font-semibold shadow-sm"
+                  : isToday(d) ? "bg-slate-100 text-slate-700 font-semibold"
                   : "text-gray-700 hover:bg-gray-100"}`}
             >
               {d}
               {d && meetingDays.has(d) && !isFocus(d) && (
-                <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#6264A7]" />
+                <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-slate-400" />
               )}
             </button>
           ))}
@@ -174,7 +174,7 @@ function EventChip({ meeting, onClick, compact }) {
 
   return (
     <button onClick={(e) => { e.stopPropagation(); onClick(meeting); }}
-      className={`w-full text-left px-2 py-1 rounded-lg border mb-1 transition-all hover:shadow-sm hover:-translate-y-px ${color.light}`}
+      className={`w-full text-left px-2 py-1 rounded-lg border mb-1 transition-all hover:shadow-sm ${color.light}`}
     >
       <div className="flex items-start gap-1.5">
         <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${color.dot}`} />
@@ -197,7 +197,7 @@ function MeetingDetailPanel({ meeting, onClose }) {
   const { title, from, to, location, description, attendees, isOnlineMeeting, teamsJoinUrl, organizer } = meeting;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-[380px] bg-white shadow-2xl z-50 flex flex-col cal-panel-in">
+    <div className="fixed inset-y-0 right-0 w-[380px] bg-white shadow-xl border-l border-gray-200 z-50 flex flex-col cal-panel-in">
       <style>{`
         @keyframes calPanelIn { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:none; } }
         .cal-panel-in { animation: calPanelIn 220ms cubic-bezier(.22,.68,0,1.2) forwards; }
@@ -210,7 +210,7 @@ function MeetingDetailPanel({ meeting, onClose }) {
               <div className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />
               {isOnlineMeeting ? "Teams Meeting" : "Calendar Event"}
             </div>
-            <h2 className="text-base font-bold text-gray-900 leading-snug">{title}</h2>
+            <h2 className="text-base font-semibold text-gray-900 leading-snug">{title}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/10 transition-colors flex-shrink-0">
             <X className="w-4 h-4 text-gray-600" />
@@ -471,24 +471,24 @@ export default function CalendarView() {
       <div className="w-64 flex-shrink-0 flex flex-col bg-white border-r border-gray-100 shadow-sm z-10">
         <div className="px-4 pt-5 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
-            <div className="p-1.5 bg-[#6264A7]/10 rounded-lg">
-              <Calendar className="w-4 h-4 text-[#6264A7]" />
+            <div className="p-1.5 bg-slate-100 rounded-lg">
+              <Calendar className="w-4 h-4 text-slate-600" />
             </div>
-            <span className="text-sm font-bold text-gray-800">Teams Calendar</span>
+            <span className="text-sm font-semibold text-gray-900">Teams Calendar</span>
             {(loading || tokenLoading) && <RefreshCw className="w-3 h-3 text-gray-400 animate-spin ml-auto" />}
           </div>
 
           {!isSignedIn ? (
-            <div className="p-3 bg-[#6264A7]/10 rounded-xl border border-[#6264A7]/20 text-xs text-[#4f518a] space-y-2">
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 space-y-2">
               <p>Sign in to Microsoft to view your Teams Calendar.</p>
               <button onClick={handleSignIn}
-                className="w-full py-1.5 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg text-xs font-semibold transition-colors">
+                className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors">
                 Sign in
               </button>
             </div>
           ) : (
-            <div className="p-3 bg-[#6264A7]/10 rounded-xl border border-[#6264A7]/20 text-xs text-[#4f518a]">
-              <span className="font-semibold">✓ Connected</span> — showing your Teams Calendar
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-700">
+              <span className="font-semibold">Connected</span> — showing your Teams Calendar
             </div>
           )}
         </div>
@@ -516,10 +516,10 @@ export default function CalendarView() {
                     className="w-full text-left flex items-start gap-2 py-2 px-1 rounded-lg hover:bg-gray-50 transition-colors group">
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${color.dot}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-800 font-medium truncate group-hover:text-[#6264A7]">{m.title}</p>
-                      <p className="text-[10px] text-gray-400">
+                      <p className="text-xs text-gray-800 font-medium truncate group-hover:text-gray-900">{m.title}</p>
+                      <p className="text-[10px] text-gray-400 flex items-center gap-1">
                         {new Date(m.from).toLocaleDateString([], { month: "short", day: "numeric" })} · {fmtTime(m.from)}
-                        {m.isOnlineMeeting && " 🎥"}
+                        {m.isOnlineMeeting && <Video className="w-2.5 h-2.5" />}
                       </p>
                     </div>
                   </button>
@@ -535,20 +535,20 @@ export default function CalendarView() {
         {/* Toolbar */}
         <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 shadow-sm flex-shrink-0">
           <button onClick={goToday}
-            className="px-4 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
+            className="px-4 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 font-medium transition-colors">
             Today
           </button>
           <div className="flex items-center gap-1">
             <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronLeft className="w-4 h-4" /></button>
             <button onClick={() => navigate(1)}  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronRight className="w-4 h-4" /></button>
           </div>
-          <h1 className="text-lg font-bold text-gray-900 flex-1">{calTitle}</h1>
+          <h1 className="text-xl font-semibold text-gray-900 flex-1">{calTitle}</h1>
 
           <div className="relative">
             <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-400" />
             <input type="text" placeholder="Search events…" value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-44 pl-7 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#6264A7]/30 bg-gray-50 transition-all"
+              className="w-44 pl-7 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-gray-50 transition-all"
             />
           </div>
 
@@ -556,7 +556,7 @@ export default function CalendarView() {
             {["month","week","day"].map((v) => (
               <button key={v} onClick={() => setViewMode(v)}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all
-                  ${viewMode === v ? "bg-white text-[#6264A7] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                  ${viewMode === v ? "bg-white text-slate-800 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
                 {v}
               </button>
             ))}
@@ -569,16 +569,16 @@ export default function CalendarView() {
 
         {/* Not signed in full-page prompt */}
         {!isSignedIn && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
-            <div className="p-5 bg-[#6264A7]/10 rounded-full">
-              <Video className="w-12 h-12 text-[#6264A7]" />
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+            <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+              <Video className="w-6 h-6 text-gray-400" />
             </div>
-            <p className="text-xl font-bold text-gray-800">Connect Microsoft Teams</p>
+            <p className="text-base font-semibold text-gray-900">Connect Microsoft Teams</p>
             <p className="text-sm text-gray-500 max-w-sm">
               Sign in with your Microsoft account to see your real Teams Calendar here.
             </p>
             <button onClick={handleSignIn}
-              className="px-6 py-2.5 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg font-semibold shadow-md transition-colors">
+              className="mt-1 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors">
               Sign in to Microsoft
             </button>
           </div>
@@ -587,7 +587,7 @@ export default function CalendarView() {
         {/* Error banner */}
         {isSignedIn && error && (
           <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
-            <span>⚠</span>{error}
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />{error}
           </div>
         )}
 
@@ -628,7 +628,7 @@ export default function CalendarView() {
               <div className="min-h-full flex flex-col">
                 <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                   {DAYS.map((d) => (
-                    <div key={d} className="py-2.5 text-center text-[11px] font-bold text-gray-500 uppercase tracking-wider">{d}</div>
+                    <div key={d} className="py-2.5 text-center text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{d}</div>
                   ))}
                 </div>
                 <div className="flex-1 grid grid-cols-7" style={{ gridAutoRows: "minmax(100px, 1fr)" }}>
@@ -640,12 +640,12 @@ export default function CalendarView() {
                     return (
                       <div key={idx} onClick={() => { setCurrentDate(date); setViewMode("day"); }}
                         className={`border-b border-r border-gray-100 p-1.5 cursor-pointer transition-colors group
-                          ${overflow ? "bg-gray-50/50" : "bg-white hover:bg-blue-50/20"}`}>
+                          ${overflow ? "bg-gray-50/50" : "bg-white hover:bg-gray-50"}`}>
                         <div className="flex items-center justify-end mb-1">
                           <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full font-semibold
-                            ${isToday2 ? "bg-[#6264A7] text-white shadow-sm"
+                            ${isToday2 ? "bg-slate-800 text-white shadow-sm"
                               : overflow ? "text-gray-300"
-                              : "text-gray-700 group-hover:bg-[#6264A7]/10 group-hover:text-[#6264A7]"}`}>
+                              : "text-gray-700 group-hover:bg-gray-100 group-hover:text-gray-900"}`}>
                             {date.getDate()}
                           </span>
                         </div>
@@ -653,7 +653,7 @@ export default function CalendarView() {
                           {dayMeetings.slice(0, MAX_VISIBLE).map((m, i) => (
                             <EventChip key={m.id || i} meeting={m} onClick={setSelectedMeeting} compact />
                           ))}
-                          {extra > 0 && <p className="text-[10px] text-[#6264A7] font-semibold px-1">+{extra} more</p>}
+                          {extra > 0 && <p className="text-[10px] text-slate-600 font-semibold px-1">+{extra} more</p>}
                         </div>
                       </div>
                     );
@@ -671,14 +671,14 @@ export default function CalendarView() {
                     const isToday2 = sameDay(d, new Date());
                     return (
                       <div key={i} onClick={() => { setCurrentDate(d); setViewMode("day"); }}
-                        className={`py-3 text-center border-r border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors`}>
+                        className={`py-3 text-center border-r border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors`}>
                         <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{DAYS[d.getDay()]}</p>
-                        <div className={`text-lg font-bold mx-auto w-9 h-9 flex items-center justify-center rounded-full mt-0.5
-                          ${isToday2 ? "bg-[#6264A7] text-white shadow-sm" : "text-gray-800"}`}>
+                        <div className={`text-lg font-semibold mx-auto w-9 h-9 flex items-center justify-center rounded-full mt-0.5
+                          ${isToday2 ? "bg-slate-800 text-white shadow-sm" : "text-gray-800"}`}>
                           {d.getDate()}
                         </div>
                         {getMeetingsForDate(d).length > 0 && !isToday2 && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#6264A7] mx-auto mt-0.5" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400 mx-auto mt-0.5" />
                         )}
                       </div>
                     );
@@ -699,7 +699,7 @@ export default function CalendarView() {
                     const dayMtgs  = getMeetingsForDate(d);
                     const isToday2 = sameDay(d, new Date());
                     return (
-                      <div key={di} className={`relative border-r border-gray-100 ${isToday2 ? "bg-[#6264A7]/5" : "bg-white"}`}>
+                      <div key={di} className={`relative border-r border-gray-100 ${isToday2 ? "bg-slate-50" : "bg-white"}`}>
                         {WEEK_HOURS.map((h) => <div key={h} className="h-10 border-b border-gray-50" />)}
                         {dayMtgs.map((m, mi) => {
                           const color = getColor(colorIdxFromId(m.id));
@@ -711,8 +711,8 @@ export default function CalendarView() {
                           return (
                             <button key={mi} onClick={() => setSelectedMeeting(m)}
                               style={{ top: `${topPct}%`, height: `${heightPct}%` }}
-                              className={`absolute inset-x-1 rounded-lg px-1.5 py-0.5 text-left overflow-hidden border shadow-sm hover:shadow-md hover:-translate-y-px transition-all z-10 ${color.light}`}>
-                              <p className="text-[10px] font-bold truncate">{m.title}</p>
+                              className={`absolute inset-x-1 rounded-lg px-1.5 py-0.5 text-left overflow-hidden border shadow-sm hover:shadow-md transition-all z-10 ${color.light}`}>
+                              <p className="text-[10px] font-semibold truncate">{m.title}</p>
                               <p className="text-[9px] opacity-70">{fmtTime(m.from)}</p>
                             </button>
                           );
@@ -729,12 +729,12 @@ export default function CalendarView() {
               <div className="min-h-full flex flex-col bg-white">
                 <div className="px-6 py-4 border-b border-gray-100 bg-white sticky top-0 z-10 shadow-sm">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold
-                      ${sameDay(currentDate, new Date()) ? "bg-[#6264A7] text-white shadow-lg" : "bg-gray-100 text-gray-800"}`}>
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-semibold
+                      ${sameDay(currentDate, new Date()) ? "bg-slate-800 text-white shadow-sm" : "bg-gray-100 text-gray-800"}`}>
                       {currentDate.getDate()}
                     </div>
                     <div>
-                      <p className="text-lg font-bold text-gray-900">
+                      <p className="text-lg font-semibold text-gray-900">
                         {DAYS[currentDate.getDay()]}, {MONTHS[currentDate.getMonth()]} {currentDate.getDate()}
                       </p>
                       <p className="text-sm text-gray-500">
@@ -765,10 +765,10 @@ export default function CalendarView() {
                     return (
                       <button key={mi} onClick={() => setSelectedMeeting(m)}
                         style={{ top: `${topPct}%`, height: `${heightPct}%`, left: "64px", right: "24px" }}
-                        className={`absolute rounded-xl px-4 py-2 text-left overflow-hidden border-l-4 shadow-md hover:shadow-lg hover:-translate-y-px transition-all z-10 ${color.light}`}>
+                        className={`absolute rounded-xl px-4 py-2 text-left overflow-hidden border-l-4 shadow-sm hover:shadow-md transition-all z-10 ${color.light}`}>
                         <div className="flex items-start gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold truncate">{m.title}</p>
+                            <p className="text-sm font-semibold truncate">{m.title}</p>
                             <p className="text-xs opacity-70 mt-0.5">
                               {fmtTime(from)} – {fmtTime(to)} · {meetingDuration(from, to)}
                             </p>
@@ -788,8 +788,11 @@ export default function CalendarView() {
 
                   {getMeetingsForDate(currentDate).length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none" style={{ top: "200px" }}>
-                      <Calendar className="w-12 h-12 text-gray-200 mb-3" />
-                      <p className="text-gray-400 text-sm">No events for this day</p>
+                      <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <Calendar className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-600">No events for this day</p>
+                      <p className="text-xs text-gray-400 mt-1">Your schedule is clear.</p>
                     </div>
                   )}
                 </div>

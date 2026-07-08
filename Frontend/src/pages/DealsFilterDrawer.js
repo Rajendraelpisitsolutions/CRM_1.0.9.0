@@ -14,7 +14,7 @@ const PIPELINE_OPTIONS = [
 
 const LABEL_CLS = "block text-xs font-medium text-gray-600 mb-1.5";
 const INPUT_CLS =
-  "w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50/60 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all";
+  "w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50/60 text-sm text-gray-800 placeholder:text-gray-400 outline-none focus:bg-white focus:border-slate-500 focus:ring-2 focus:ring-blue-100 transition-all";
 
 function SectionTitle({ children }) {
   return (
@@ -110,7 +110,7 @@ function DealsFilterDrawer({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+            <span className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
               <Filter className="w-4 h-4 text-white" />
             </span>
             <div>
@@ -179,7 +179,7 @@ function DealsFilterDrawer({
           </button>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors">Cancel</button>
-            <button onClick={handleApply} className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors">
+            <button onClick={handleApply} className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 rounded-lg shadow-sm transition-colors">
               <Check className="w-4 h-4" /> Apply
             </button>
           </div>

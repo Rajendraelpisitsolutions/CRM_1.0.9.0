@@ -477,7 +477,7 @@ function FilterPanel({
             </button>
             <button
               onClick={handleApply}
-              className="px-5 py-2 text-sm font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg transition-all shadow-sm hover:shadow-md"
+              className="px-5 py-2 text-sm font-semibold bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-slate-900 text-white rounded-lg transition-all shadow-sm hover:shadow-md"
             >
               Apply
             </button>

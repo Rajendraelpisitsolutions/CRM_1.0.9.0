@@ -14,6 +14,7 @@ const Contacts = lazy(() => import("./pages/Contacts"));
 const Product = lazy(() => import("./pages/Product"));
 const Deals = lazy(() => import("./pages/Deals"));
 const OutlookEmail = lazy(() => import("./pages/OutlookEmail"));
+const EmailTracking = lazy(() => import("./pages/EmailTracking"));
 const Users = lazy(() => import("./pages/Users"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Unauthorized = lazy(() => import("./pages/Unauthorized"));
@@ -22,6 +23,8 @@ const Teams = lazy(() => import("./pages/Teams"));
 const Profile = lazy(() => import("./pages/Profile"));
 const CalendarPage = lazy(() => import("./pages/CalendarView"));
 const RecycleBin = lazy(() => import("./pages/RecycleBin"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const RecentActivityPage = lazy(() => import("./pages/RecentActivityPage"));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -68,6 +71,7 @@ function App() {
             <Route path="Products" element={<Product />} />
             <Route path="Deals" element={<Deals />} />
             <Route path="OutlookEmail" element={<OutlookEmail />} />
+            <Route path="EmailTracking" element={<EmailTracking />} />
             <Route path="users" element={<Users />} />
             <Route path="audit-logs" element={<ProtectedRoute allowedRoles={["admin"]}><AuditLogs /></ProtectedRoute>} />
             <Route path="import" element={<ImportData />} />
@@ -75,6 +79,8 @@ function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="Calendar" element={<CalendarPage />} />
             <Route path="recycle-bin" element={<RecycleBin />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="activity" element={<RecentActivityPage />} />
           </Route>
 
           {/* Role specific entry points */}

@@ -22,6 +22,8 @@ import {
   Users,
   Video,
   StickyNote,
+  CheckSquare,
+  Info,
 } from "lucide-react";
 
 function extractUniqueEmails(...values) {
@@ -277,6 +279,17 @@ export default function ContactEmailLogs({
     dealId: "", // Don't show dealId in contacts conversation
   });
   const [editCallLog, setEditCallLog] = useState(null);
+  // Optional task attached while adding a call log. It is saved as a normal Task
+  // (linked to this contact) so it shows up under the Tasks tab — not the call log.
+  const [callLogTaskOpen, setCallLogTaskOpen] = useState(false);
+  const emptyCallLogTask = {
+    Title: "",
+    TaskType: "",
+    DueDate: "",
+    Status: "Open",
+    Description: "",
+  };
+  const [callLogTask, setCallLogTask] = useState(emptyCallLogTask);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -645,8 +658,37 @@ export default function ContactEmailLogs({
         : apiClient.post(url.replace(/^\//, ""), payload));
       if (!r || r.status < 200 || r.status >= 300)
         throw new Error("HTTP error");
+
+      // Optional attached task → saved as a Task for this contact so it surfaces
+      // under the Tasks tab. Non-fatal: a task error won't undo the saved call log.
+      if (callLogTaskOpen && callLogTask.Title.trim()) {
+        try {
+          const nowIso = new Date().toISOString();
+          await apiClient.post("TaskList", {
+            title: callLogTask.Title.trim(),
+            description: callLogTask.Description || "",
+            status: callLogTask.Status || "Open",
+            taskType: callLogTask.TaskType || "",
+            dueDate: callLogTask.DueDate ? callLogTask.DueDate.split("T")[0] : null,
+            completedDate: null,
+            outcome: "",
+            ownerId: null,
+            contactId: Number.isFinite(contactIdNumber) ? contactIdNumber : null,
+            createdById: null,
+            updatedById: null,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          });
+          if (typeof fetchTasks === "function") fetchTasks();
+        } catch (taskErr) {
+          console.error("Failed to create task from call log:", taskErr);
+        }
+      }
+
       setShowCallLogForm(false);
       setEditCallLog(null);
+      setCallLogTaskOpen(false);
+      setCallLogTask(emptyCallLogTask);
       setCallLogForm({
         id: "",
         callOwner: contactName || "",
@@ -694,6 +736,8 @@ export default function ContactEmailLogs({
       accountId: log.accountId || log.AccountId || "",
       dealId: log.dealId || log.DealId || "",
     });
+    setCallLogTaskOpen(false);
+    setCallLogTask(emptyCallLogTask);
     setShowCallLogForm(true);
   };
 
@@ -1053,7 +1097,7 @@ export default function ContactEmailLogs({
       <button
         type="button"
         onClick={() => setNoteDealFilter(null)}
-        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter == null ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter == null ? "bg-slate-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
       >
         Contact
       </button>
@@ -1062,7 +1106,7 @@ export default function ContactEmailLogs({
           key={deal.id}
           type="button"
           onClick={() => setNoteDealFilter(deal.id)}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter === deal.id ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter === deal.id ? "bg-slate-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
         >
           {deal.name}
         </button>
@@ -1231,6 +1275,8 @@ export default function ContactEmailLogs({
           id: noteForm.NoteId,
           description: noteForm.Description,
           contactId: Number(contactId),
+          // Ticked deals in the edit checklist → new NoteTargets references (backend is idempotent).
+          mirrorToDealIds: Array.from(noteDealSelections).map(Number).filter((n) => Number.isFinite(n) && n > 0),
         }
       : {
           description: noteForm.Description,
@@ -1273,9 +1319,16 @@ export default function ContactEmailLogs({
       Description: note.Description,
     });
 
-    // Editing doesn't touch destinations — clear any add-mode dropdown state.
+    // Seed the destination checklist with the deals this note is already shared with, so the
+    // user can tick more (creating new NoteTargets references) — helpful for old notes that
+    // never picked destinations. Matched against the eligible deals so the ids line up.
+    const sharedIds = (note.SharedWithDeals ?? note.sharedWithDeals ?? [])
+      .map((d) => String(d.id ?? d.Id));
+    const seeded = new Set(
+      noteEligibleDeals.filter((d) => sharedIds.includes(String(d.id))).map((d) => d.id)
+    );
     setShowDealDropdown(false);
-    setNoteDealSelections(new Set());
+    setNoteDealSelections(seeded);
     setNoteDealOnlySelected(false);
     setNoteDestinationError("");
     setShowNoteForm(true);
@@ -1560,8 +1613,7 @@ export default function ContactEmailLogs({
               <button
                 type="button"
                 onClick={confirmDeleteCallLog}
-                className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700
-                 hover:to-red-800 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Delete
               </button>
@@ -1570,7 +1622,7 @@ export default function ContactEmailLogs({
         </div>
       )}
       {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 via-white to-blue-100 shadow-sm">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-white">
         {/* Left Section */}
         <div className="flex items-center gap-4 min-w-0">
           <div className="min-w-0 space-y-2">
@@ -1581,7 +1633,7 @@ export default function ContactEmailLogs({
 
             {/* Account Name */}
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 text-[11px] font-semibold bg-blue-100 text-blue-700 rounded-full">
+              <span className="px-2 py-0.5 text-[11px] font-semibold bg-gray-100 text-gray-600 rounded-full">
                 Account
               </span>
 
@@ -1604,7 +1656,7 @@ export default function ContactEmailLogs({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="p-2 rounded-xl hover:bg-white transition-all duration-200 shadow-sm"
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           aria-label="Close"
         >
           <X className="w-5 h-5 text-gray-500 hover:text-gray-700" />
@@ -1613,9 +1665,9 @@ export default function ContactEmailLogs({
       {/* Tabs */}
       <div className="flex border-b border-gray-200 bg-white overflow-x-auto scrollbar-none">
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "email"
-            ? "border-blue-600 text-blue-700 bg-blue-50/50"
-            : "border-transparent text-gray-500 hover:text-blue-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "email"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("email")}
         >
@@ -1625,9 +1677,9 @@ export default function ContactEmailLogs({
           </div>
         </button>
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "call"
-            ? "border-green-600 text-green-700 bg-green-50/50"
-            : "border-transparent text-gray-500 hover:text-green-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "call"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("call")}
         >
@@ -1637,9 +1689,9 @@ export default function ContactEmailLogs({
           </div>
         </button>
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "notes"
-            ? "border-indigo-600 text-indigo-700 bg-indigo-50/50"
-            : "border-transparent text-gray-500 hover:text-indigo-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "notes"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("notes")}
         >
@@ -1649,9 +1701,9 @@ export default function ContactEmailLogs({
           </div>
         </button>
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "meetings"
-            ? "border-purple-600 text-purple-700 bg-purple-50/50"
-            : "border-transparent text-gray-500 hover:text-purple-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "meetings"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("meetings")}
         >
@@ -1661,9 +1713,9 @@ export default function ContactEmailLogs({
           </div>
         </button>
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "tasks"
-            ? "border-yellow-600 text-yellow-700 bg-yellow-50/50"
-            : "border-transparent text-gray-500 hover:text-yellow-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "tasks"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("tasks")}
         >
@@ -1673,9 +1725,9 @@ export default function ContactEmailLogs({
           </div>
         </button>
         <button
-          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-all duration-200 flex-shrink-0 ${activeTab === "deals"
-            ? "border-pink-600 text-pink-700 bg-pink-50/50"
-            : "border-transparent text-gray-500 hover:text-pink-600 hover:bg-gray-50"
+          className={`px-3 sm:px-6 py-3 font-medium text-xs sm:text-sm border-b-2 transition-colors flex-shrink-0 ${activeTab === "deals"
+            ? "border-slate-800 text-gray-900 bg-gray-50"
+            : "border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-50"
             }`}
           onClick={() => setActiveTab("deals")}
         >
@@ -1700,9 +1752,9 @@ export default function ContactEmailLogs({
               >
                 <div className="bg-white w-full max-w-sm mx-4 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
                   <div className="mb-6 text-center">
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <svg
-                        className="w-8 h-8 text-purple-600"
+                        className="w-8 h-8 text-red-600"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1733,7 +1785,7 @@ export default function ContactEmailLogs({
                     <button
                       type="button"
                       onClick={confirmDeleteMeeting}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
                     >
                       Delete
                     </button>
@@ -1757,7 +1809,7 @@ export default function ContactEmailLogs({
                 </p>
                 <button
                   onClick={handleOutlookLogin}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg font-semibold text-sm shadow-md transition-colors"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg font-medium text-sm transition-colors"
                 >
                   <Video className="w-4 h-4" /> Sign in to Microsoft
                 </button>
@@ -1773,7 +1825,7 @@ export default function ContactEmailLogs({
                     </span>
                   </div>
                   <button
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#6264A7] to-purple-700 hover:from-[#4f518a] hover:to-purple-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm font-semibold"
+                    className="flex items-center gap-2 px-4 py-2 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg transition-colors text-sm font-medium"
                     onClick={() => {
                       setShowMeetingForm(true);
                       setEditMeeting(null);
@@ -1788,9 +1840,9 @@ export default function ContactEmailLogs({
                 {showMeetingForm && (
                   <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                     <div className="bg-white shadow-2xl w-full sm:max-w-md h-full flex flex-col animate-in slide-in-from-right duration-200">
-                      <div className="bg-gradient-to-r from-[#6264A7] to-purple-700 px-6 py-4 flex items-center justify-between flex-shrink-0">
+                      <div className="bg-[#6264A7] px-6 py-4 flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white/20 rounded-lg">
+                          <div className="p-2 bg-white/10 rounded-lg">
                             <Video className="w-5 h-5 text-white" />
                           </div>
                           <div>
@@ -1831,7 +1883,7 @@ export default function ContactEmailLogs({
                           </label>
                           <input
                             required
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none transition-all"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                             value={meetingForm.Title}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1852,7 +1904,7 @@ export default function ContactEmailLogs({
                             <input
                               type="datetime-local"
                               required
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
                               value={meetingForm.From}
                               onChange={(e) =>
                                 setMeetingForm((f) => ({
@@ -1870,7 +1922,7 @@ export default function ContactEmailLogs({
                             <input
                               type="datetime-local"
                               required
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
                               value={meetingForm.To}
                               onChange={(e) =>
                                 setMeetingForm((f) => ({
@@ -1888,7 +1940,7 @@ export default function ContactEmailLogs({
                             Time Zone
                           </label>
                           <select
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
                             value={meetingForm.TimeZone}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1934,7 +1986,7 @@ export default function ContactEmailLogs({
                             Location
                           </label>
                           <input
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
                             value={meetingForm.Location}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1953,7 +2005,7 @@ export default function ContactEmailLogs({
                           </label>
                           <textarea
                             rows={3}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none resize-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none resize-none"
                             value={meetingForm.Description}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1987,7 +2039,7 @@ export default function ContactEmailLogs({
                           </button>
                           <button
                             type="submit"
-                            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6264A7] to-purple-700 hover:opacity-90 text-white rounded-lg text-sm font-semibold shadow-md transition-all"
+                            className="flex-1 px-4 py-2.5 bg-[#6264A7] hover:bg-[#4f518a] text-white rounded-lg text-sm font-medium transition-colors"
                           >
                             {editMeeting
                               ? "Update Meeting"
@@ -2154,9 +2206,9 @@ export default function ContactEmailLogs({
               >
                 <div className="bg-white w-full max-w-sm mx-4 rounded-2xl shadow-2xl p-6 transform animate-in zoom-in-95 duration-200">
                   <div className="mb-6 text-center">
-                    <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <svg
-                        className="w-8 h-8 text-yellow-600"
+                        className="w-8 h-8 text-red-600"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -2187,7 +2239,7 @@ export default function ContactEmailLogs({
                     <button
                       type="button"
                       onClick={confirmDeleteTask}
-                      className="px-6 py-2.5 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                      className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
                     >
                       Delete
                     </button>
@@ -2197,7 +2249,7 @@ export default function ContactEmailLogs({
             )}
             <div className="flex justify-end px-6 pt-4 pb-2 bg-white border-b border-gray-200">
               <button
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                 onClick={() => {
                   setShowTaskForm(true);
                   setEditTask(null);
@@ -2227,12 +2279,12 @@ export default function ContactEmailLogs({
               <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                 <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                   {/* Form Header */}
-                  <div className="sticky top-0 z-100 bg-gradient-to-r from-yellow-600 to-yellow-700 px-6 py-4 flex items-center justify-between">
+                  <div className="sticky top-0 z-100 bg-slate-800 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white/20 rounded-lg">
+                      <div className="p-2 bg-white/10 rounded-lg">
                         <FileText className="w-5 h-5 text-white" />
                       </div>
-                      <h3 className="text-white">{editTask ? "Edit Task" : "New Task"}</h3>
+                      <h3 className="text-white font-semibold">{editTask ? "Edit Task" : "New Task"}</h3>
                     </div>
                     <button type="button" className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" onClick={() => { setShowTaskForm(false); setEditTask(null); }}>
                       <X className="w-5 h-5 text-white" />
@@ -2250,7 +2302,7 @@ export default function ContactEmailLogs({
                           Title <span className="text-red-500">*</span>
                         </label>
                         <input
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.Title}
                           onChange={(e) =>
@@ -2265,7 +2317,7 @@ export default function ContactEmailLogs({
                           Description
                         </label>
                         <textarea
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all resize-none"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
                           rows="3"
                           value={taskForm.Description}
                           onChange={(e) =>
@@ -2283,7 +2335,7 @@ export default function ContactEmailLogs({
                           Task Type
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.TaskType}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2303,7 +2355,7 @@ export default function ContactEmailLogs({
                           Status <span className="text-red-500">*</span>
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.Status}
                           onChange={(e) =>
@@ -2324,7 +2376,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="datetime-local"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.DueDate}
                           onChange={(e) =>
@@ -2341,7 +2393,7 @@ export default function ContactEmailLogs({
                           Outcome
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.Outcome}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2363,7 +2415,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.OwnerId}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2382,7 +2434,7 @@ export default function ContactEmailLogs({
                           </label>
                           <input
                             type="datetime-local"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-yellow-500 focus:border-transparent outline-none transition-all"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                             value={taskForm.CompletedDate}
                             onChange={(e) =>
                               setTaskForm((f) => ({
@@ -2407,7 +2459,7 @@ export default function ContactEmailLogs({
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-4 py-2.5 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                       >
                         {editTask ? "Update Task" : "Create Task"}
                       </button>
@@ -2432,8 +2484,8 @@ export default function ContactEmailLogs({
             )}
             {!loadingTasks && tasks.length === 0 && !tasksError && (
               <div className="flex flex-col items-center justify-center py-16 px-6">
-                <div className="p-4 bg-gray-100 rounded-full mb-4">
-                  <FileText className="w-8 h-8 text-gray-400" />
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-gray-400" />
                 </div>
                 <p className="text-gray-600">
                   No tasks found for this contact.
@@ -2445,13 +2497,13 @@ export default function ContactEmailLogs({
               {tasks.map((task, index) => (
                 <div
                   key={task.TaskId || task.taskId || index}
-                  className="bg-white hover:bg-yellow-50/30 transition-all duration-200 border-l-4 border-transparent hover:border-yellow-500"
+                  className="bg-white hover:bg-gray-50 transition-colors border-l-4 border-transparent hover:border-gray-300"
                 >
                   <div className="px-6 py-4">
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-100 to-yellow-200 flex-shrink-0">
-                          <FileText className="w-4 h-4 text-yellow-700" />
+                        <div className="p-2 rounded-lg bg-gray-100 flex-shrink-0">
+                          <FileText className="w-4 h-4 text-gray-500" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className="text-gray-900 font-semibold">
@@ -2469,19 +2521,19 @@ export default function ContactEmailLogs({
                       </div>
                       <div className="flex gap-1.5">
                         <button
-                          className="p-2 rounded-lg hover:bg-blue-100 transition-colors group"
+                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
                           title="Edit"
                           onClick={() => handleEditTask(task)}
                         >
-                          <Edit className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+                          <Edit className="w-4 h-4 text-gray-500" />
                         </button>
                         {isAdmin && (
                           <button
-                            className="p-2 rounded-lg hover:bg-red-100 transition-colors group"
+                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
                             title="Delete"
                             onClick={() => handleDeleteTask(task.TaskId)}
                           >
-                            <Trash2 className="w-4 h-4 text-red-600 group-hover:scale-110 transition-transform" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </button>
                         )}
                       </div>
@@ -2520,11 +2572,7 @@ export default function ContactEmailLogs({
                                       Description: "",
                                     });
                                   }}
-                                  className="flex items-center gap-2 px-4 py-2.5 
-                                    bg-gradient-to-r from-indigo-600 to-indigo-700 
-                                    hover:from-indigo-700 hover:to-indigo-800 
-                                    text-white rounded-lg shadow-md hover:shadow-lg 
-                                    transition-all duration-200 transform hover:scale-105"
+                                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                                 >
                                   <Plus className="w-4 h-4" />
                                   New Note
@@ -2630,8 +2678,8 @@ export default function ContactEmailLogs({
           <div className="flex-1 overflow-y-auto bg-white">
             {!isOutlookLoggedIn ? (
               <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                <div className="p-4 bg-blue-50 rounded-full mb-4">
-                  <Mail className="w-10 h-10 text-blue-600" />
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <Mail className="w-6 h-6 text-gray-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   You are not signed in to Microsoft Outlook
@@ -2644,7 +2692,7 @@ export default function ContactEmailLogs({
                 <button
                   type="button"
                   onClick={handleOutlookLogin}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow-sm transition-colors"
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium shadow-sm transition-colors"
                 >
                   Sign in with Microsoft
                 </button>
@@ -2652,8 +2700,8 @@ export default function ContactEmailLogs({
             ) : (
               <>
                 {!loadingEmails && !emailError && (
-                  <div className="px-6 py-3 border-b border-gray-200 bg-blue-50">
-                    <p className="text-sm text-blue-900 font-medium">
+                  <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
+                    <p className="text-sm text-gray-600 font-medium">
                       Latest emails loaded: {totalConversationEmails}
                     </p>
                   </div>
@@ -2674,8 +2722,8 @@ export default function ContactEmailLogs({
                 )}
                 {!loadingEmails && emails.length === 0 && !emailError && (
                   <div className="flex flex-col items-center justify-center py-16 px-6">
-                    <div className="p-4 bg-gray-100 rounded-full mb-4">
-                      <Inbox className="w-8 h-8 text-gray-400" />
+                    <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                      <Inbox className="w-6 h-6 text-gray-400" />
                     </div>
                     <p className="text-gray-600">
                       No emails found with this contact.
@@ -2869,10 +2917,7 @@ export default function ContactEmailLogs({
                   setNoteDealOnlySelected(false);
                   setNoteDestinationError("");
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 
-                  hover:from-indigo-700 hover:to-indigo-800 
-                  text-white rounded-lg shadow-md hover:shadow-lg 
-                  transition-all duration-200 transform hover:scale-105"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 New Note
@@ -2906,7 +2951,7 @@ export default function ContactEmailLogs({
                 {displayedNotes.map((note) => (
                   <div
                     key={note.NoteId}
-                    className="bg-white hover:bg-indigo-50/40 transition-all duration-200 border-l-4 border-transparent hover:border-indigo-500"
+                    className="bg-white hover:bg-gray-50 transition-colors border-l-4 border-transparent hover:border-gray-300"
                   >
                     <div className="px-6 py-4">
                       {/* LEFT */}
@@ -3017,12 +3062,12 @@ export default function ContactEmailLogs({
                 <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                   <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                     {/* HEADER (same as meeting) */}
-                    <div className="sticky top-0 z-10 bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4 flex items-center justify-between">
+                    <div className="sticky top-0 z-10 bg-slate-800 px-6 py-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/20 rounded-lg">
+                        <div className="p-2 bg-white/10 rounded-lg">
                           <FileText className="w-5 h-5 text-white" />
                         </div>
-                        <h3 className="text-white">{editNote ? "Edit Note" : "New Note"}</h3>
+                        <h3 className="text-white font-semibold">{editNote ? "Edit Note" : "New Note"}</h3>
                       </div>
                       <button type="button" className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" onClick={() => { setShowNoteForm(false); setEditNote(null); setShowDealDropdown(false); setNoteDealSelections(new Set()); setNoteDealOnlySelected(false); setNoteDestinationError(""); }}>
                         <X className="w-5 h-5 text-white" />
@@ -3034,17 +3079,17 @@ export default function ContactEmailLogs({
                       className="flex-1 flex flex-col overflow-hidden"
                     >
                       <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                        {!editNote && (
+                        {(
                         <div className="space-y-2" ref={dealDropdownRef} onMouseDown={(e) => e.stopPropagation()}>
-                          <div className="rounded-2xl border-2 border-gray-200 bg-white p-4">
-                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                          <div className="rounded-xl border border-gray-200 bg-white p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
                               Show this note in
                             </p>
                             <div className="relative">
                               <button
                                 type="button"
                                 onClick={() => setShowDealDropdown((v) => !v)}
-                                className="w-full flex items-center justify-between rounded-xl border border-gray-300 px-3 py-2 text-sm bg-white hover:border-blue-400"
+                                className="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white hover:border-slate-400"
                               >
                                 <span className="truncate">
                                   {selectedDealsText}
@@ -3121,7 +3166,7 @@ export default function ContactEmailLogs({
                               }))
                             }
                             className="w-full border border-gray-300 rounded-lg px-4 py-2.5 
-            bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent 
+            bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent 
             outline-none transition-all resize-none"
                             placeholder="Write your note..."
                           />
@@ -3151,7 +3196,7 @@ export default function ContactEmailLogs({
 
                         <button
                           type="submit"
-                          className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                          className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                         >
                           {editNote ? "Update Note" : "Create Note"}
                         </button>
@@ -3163,7 +3208,7 @@ export default function ContactEmailLogs({
 
               {showDeleteNoteModal && (
                 <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 py-6">
-                  <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+                  <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
                     <h3 className="text-lg font-semibold text-gray-900">
                       Delete Note
                     </h3>
@@ -3175,14 +3220,14 @@ export default function ContactEmailLogs({
                       <button
                         type="button"
                         onClick={() => setShowDeleteNoteModal(false)}
-                        className="rounded-2xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         onClick={confirmDeleteNote}
-                        className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                       >
                         Delete
                       </button>
@@ -3195,15 +3240,15 @@ export default function ContactEmailLogs({
         ) : activeTab === "deals" ? (
           <div className="flex-1 overflow-y-auto bg-gray-50 min-h-full">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-6 py-4 bg-white border-b border-gray-200 gap-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
-                <FileText className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <FileText className="w-4 h-4 text-gray-400" />
                 Related Deals
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <button
                   type="button"
                   onClick={handleAddDeal}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-pink-600 text-white text-sm font-medium hover:bg-pink-700 transition-all duration-200"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   New Deal
@@ -3229,8 +3274,8 @@ export default function ContactEmailLogs({
             )}
             {!loadingDeals && deals.length === 0 && !dealsError && (
               <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-                <div className="p-4 bg-pink-50 rounded-full mb-4">
-                  <FileText className="w-8 h-8 text-pink-600" />
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-gray-400" />
                 </div>
                 <p className="text-gray-600">No deals found for this contact.</p>
               </div>
@@ -3249,7 +3294,7 @@ export default function ContactEmailLogs({
                 return (
                   <div
                     key={dealId || `${dealName}-${index}`}
-                    className="bg-white p-5 rounded-2xl border border-gray-200 hover:shadow-sm transition-all duration-200"
+                    className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-gray-300 transition-colors"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
@@ -3264,7 +3309,7 @@ export default function ContactEmailLogs({
                             }
                             if (typeof onClose === "function") onClose();
                           }}
-                          className="text-base font-semibold text-gray-900 hover:text-blue-600 truncate"
+                          className="text-base font-semibold text-gray-900 hover:text-slate-600 truncate"
                         >
                           {dealName}
                         </a>
@@ -3299,10 +3344,12 @@ export default function ContactEmailLogs({
                 <Plus className="w-4 h-4" /> Import Call Logs
               </button>
               <button
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                 onClick={() => {
                   setShowCallLogForm(true);
                   setEditCallLog(null);
+                  setCallLogTaskOpen(false);
+                  setCallLogTask(emptyCallLogTask);
                   setCallLogForm({
                     id: "",
                     name: contactName || "",
@@ -3370,7 +3417,7 @@ export default function ContactEmailLogs({
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
                         disabled={importLoading}
                       >
                         {importLoading ? "Importing..." : "Upload File"}
@@ -3384,12 +3431,12 @@ export default function ContactEmailLogs({
               <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                 <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                   {/* Form Header */}
-                  <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
+                  <div className="sticky top-0 bg-slate-800 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white/20 rounded-lg">
+                      <div className="p-2 bg-white/10 rounded-lg">
                         <PhoneCall className="w-5 h-5 text-white" />
                       </div>
-                      <h3 className="text-white">{editCallLog ? "Edit Call Log" : "New Call Log"}</h3>
+                      <h3 className="text-white font-semibold">{editCallLog ? "Edit Call Log" : "New Call Log"}</h3>
                     </div>
                     <button type="button" className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" onClick={() => { setShowCallLogForm(false); setEditCallLog(null); }}>
                       <X className="w-5 h-5 text-white" />
@@ -3409,7 +3456,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="text"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           placeholder="Person who made the call"
                           value={callLogForm.callOwner}
                           onChange={(e) =>
@@ -3428,7 +3475,7 @@ export default function ContactEmailLogs({
                           Call Type
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callType}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3452,7 +3499,7 @@ export default function ContactEmailLogs({
                           Call Direction
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callDirection}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3474,7 +3521,7 @@ export default function ContactEmailLogs({
                           Call Status
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callStatus}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3500,7 +3547,7 @@ export default function ContactEmailLogs({
                         <input
                           type="text"
                           placeholder="00:00"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callDuration}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3519,7 +3566,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="tel"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           placeholder="(123) 456-7890"
                           value={callLogForm.phone}
                           onChange={(e) =>
@@ -3538,7 +3585,7 @@ export default function ContactEmailLogs({
                           Outcome
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.outcome}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3565,7 +3612,7 @@ export default function ContactEmailLogs({
                           Associated With Call
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.associatedWithCall}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3592,7 +3639,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           placeholder="Account ID"
                           value={callLogForm.accountId}
                           onChange={(e) =>
@@ -3612,7 +3659,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           placeholder="Deal ID"
                           value={callLogForm.dealId}
                           onChange={(e) =>
@@ -3632,7 +3679,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="datetime-local"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
                           required
                           value={callLogForm.createdAt}
                           onChange={(e) =>
@@ -3651,7 +3698,7 @@ export default function ContactEmailLogs({
                           Notes
                         </label>
                         <textarea
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all resize-none"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
                           rows="4"
                           placeholder="Add any additional notes about this call..."
                           value={callLogForm.notes}
@@ -3665,6 +3712,102 @@ export default function ContactEmailLogs({
                       </div>
 
                     </div>
+
+                    {/* ── Optional task (hidden until "Add Task" is clicked) ── */}
+                    <div className="px-6 pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setCallLogTaskOpen((o) => !o)}
+                        aria-expanded={callLogTaskOpen}
+                        className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-dashed transition-colors ${
+                          callLogTaskOpen
+                            ? "border-green-400 bg-green-50/50 text-green-800"
+                            : "border-gray-300 text-gray-600 hover:border-green-400 hover:bg-green-50/40"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <CheckSquare className="w-4 h-4 text-green-600" />
+                          {callLogTaskOpen ? "Task for this call" : "Add a task (optional)"}
+                        </span>
+                        <ChevronDown
+                          className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callLogTaskOpen ? "rotate-180" : ""}`}
+                        />
+                      </button>
+
+                      {callLogTaskOpen && (
+                        <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
+                          <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>
+                              This task is saved for the contact and appears under the{" "}
+                              <span className="font-semibold text-gray-700">Tasks</span> tab.
+                            </span>
+                          </p>
+
+                          <div className="space-y-1.5">
+                            <label className="text-sm text-gray-700">Task Title</label>
+                            <input
+                              type="text"
+                              value={callLogTask.Title}
+                              onChange={(e) => setCallLogTask((t) => ({ ...t, Title: e.target.value }))}
+                              placeholder="e.g. Follow up with pricing details"
+                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-sm text-gray-700">Type</label>
+                              <select
+                                value={callLogTask.TaskType}
+                                onChange={(e) => setCallLogTask((t) => ({ ...t, TaskType: e.target.value }))}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                              >
+                                <option value="">Select type</option>
+                                <option value="Call">Call</option>
+                                <option value="Follow-up">Follow-up</option>
+                                <option value="Email">Email</option>
+                                <option value="Meeting">Meeting</option>
+                                <option value="To-Do">To-Do</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-sm text-gray-700">Due Date</label>
+                              <input
+                                type="date"
+                                value={callLogTask.DueDate ? callLogTask.DueDate.split("T")[0] : ""}
+                                onChange={(e) => setCallLogTask((t) => ({ ...t, DueDate: e.target.value }))}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-sm text-gray-700">Status</label>
+                              <select
+                                value={callLogTask.Status}
+                                onChange={(e) => setCallLogTask((t) => ({ ...t, Status: e.target.value }))}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                              >
+                                <option value="Open">Open</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-sm text-gray-700">Description</label>
+                            <textarea
+                              rows="2"
+                              value={callLogTask.Description}
+                              onChange={(e) => setCallLogTask((t) => ({ ...t, Description: e.target.value }))}
+                              placeholder="Optional details…"
+                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Action Buttons */}
                     <div className="flex-shrink-0 flex gap-3 p-6 border-t border-gray-200 bg-white">
                       <button
@@ -3673,13 +3816,15 @@ export default function ContactEmailLogs({
                         onClick={() => {
                           setShowCallLogForm(false);
                           setEditCallLog(null);
+                          setCallLogTaskOpen(false);
+                          setCallLogTask(emptyCallLogTask);
                         }}
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+                        className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
                       >
                         {editCallLog ? "Update Call Log" : "Create Call Log"}
                       </button>
@@ -3704,8 +3849,8 @@ export default function ContactEmailLogs({
             )}
             {!loadingCalls && callLogs.length === 0 && !callError && (
               <div className="flex flex-col items-center justify-center py-16 px-6">
-                <div className="p-4 bg-gray-100 rounded-full mb-4">
-                  <FileText className="w-8 h-8 text-gray-400" />
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-gray-400" />
                 </div>
                 <p className="text-gray-600">
                   No call logs found for this contact.
@@ -3717,13 +3862,13 @@ export default function ContactEmailLogs({
               {callLogs.map((log, index) => (
                 <div
                   key={log.id || log.Id || index}
-                  className="bg-white hover:bg-green-50/30 transition-all duration-200 border-l-4 border-transparent hover:border-green-500"
+                  className="bg-white hover:bg-gray-50 transition-colors border-l-4 border-transparent hover:border-gray-300"
                 >
                   <div className="px-6 py-4">
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="p-2 rounded-lg bg-gradient-to-br from-green-100 to-green-200 flex-shrink-0">
-                          <PhoneCall className="w-4 h-4 text-green-700" />
+                        <div className="p-2 rounded-lg bg-gray-100 flex-shrink-0">
+                          <PhoneCall className="w-4 h-4 text-gray-500" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <span className="text-gray-900 font-semibold  ">
@@ -3749,15 +3894,15 @@ export default function ContactEmailLogs({
                       </div>
                       <div className="flex gap-1.5">
                         <button
-                          className="p-2 rounded-lg hover:bg-blue-100 transition-colors group"
+                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
                           title="Edit"
                           onClick={() => handleEditCallLog(log)}
                         >
-                          <Edit className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+                          <Edit className="w-4 h-4 text-gray-500" />
                         </button>
                         {isAdmin && (
                           <button
-                            className="p-2 rounded-lg hover:bg-red-100 transition-colors group"
+                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
                             title="Delete"
                             onClick={() =>
                               handleDeleteCallLog(
@@ -3768,7 +3913,7 @@ export default function ContactEmailLogs({
                               )
                             }
                           >
-                            <Trash2 className="w-4 h-4 text-red-600 group-hover:scale-110 transition-transform" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </button>
                         )}
                       </div>

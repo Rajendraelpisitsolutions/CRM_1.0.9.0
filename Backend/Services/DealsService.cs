@@ -254,6 +254,7 @@ namespace Elpis_CRM.Services
             existing.RecentNote = deal.RecentNote;
             existing.DealPipeline = deal.DealPipeline;
             existing.DealStage = deal.DealStage;
+            existing.Priority = deal.Priority;
             existing.LostReason = deal.LostReason;
             existing.WonReasons = deal.WonReasons;
             existing.PaymentStatus = deal.PaymentStatus;

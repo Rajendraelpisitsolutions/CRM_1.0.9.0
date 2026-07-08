@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useContext } from "react";
 import { useLocation, Outlet, useNavigate } from "react-router-dom";
 // Import icons for upload button
-import { ArrowDownToLine, X, FileSpreadsheet, CheckCircle2, Upload, Filter, Mail, Plus } from "lucide-react";
+import { ArrowDownToLine, X, FileSpreadsheet, CheckCircle2, Upload, Filter, Plus } from "lucide-react";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import AuthContext from "../auth/AuthContext";
@@ -16,7 +16,7 @@ import Home from "./Home";
 import Sidebar from "./Sidebar";
 import Header from "./header";
 import Deals from "./Deals";
-import OutlookEmail, { Email } from "./OutlookEmail";
+import OutlookEmail from "./OutlookEmail";
 import Teams from "./Teams";
 import CalendarView from "./CalendarView";
 import Users from "./Users";
@@ -106,7 +106,6 @@ function Dashboard() {
   const [search, setSearch] = useState("");
   // State for which active section.
   const [activeContent, setActiveContent] = useState("home");
-  const [showEmailPanel, setShowEmailPanel] = useState(false);
   const [openTabs, setOpenTabs] = useState(["home"]);
   // Search highlight: { type, id } — tells child pages to auto-open this record
   const [searchHighlight, setSearchHighlight] = useState(null);
@@ -336,6 +335,8 @@ function Dashboard() {
     else if (path.includes("/dashboard/audit-logs")) tab = "auditLogs";
     else if (path.includes("/dashboard/recycle-bin")) tab = "recycle-bin";
     else if (path.includes("/dashboard/calllogs")) tab = "calllogs";
+    else if (path.includes("/dashboard/notifications")) tab = "notifications";
+    else if (path.includes("/dashboard/activity")) tab = "activity";
     else if (path.includes("/dashboard/profile")) return; // profile renders via Outlet, don't touch activeContent
     else if (path.includes("/dashboard/calendar")) return; // calendar renders via Outlet
     else if (path.includes("/dashboard")) tab = "home";
@@ -382,6 +383,8 @@ function Dashboard() {
     calllogs: "Call Logs",
     calendar: "Calendar",
     "recycle-bin": "Recycle Bin",
+    notifications: "Notifications",
+    activity: "Recent Activity",
   };
   // Highlight search matches in text
   function highlightMatch(text, search) {
@@ -420,6 +423,8 @@ function Dashboard() {
     else if (tabId === "calllogs") url = "/dashboard/calllogs";
     else if (tabId === "calendar") url = "/dashboard/Calendar";
     else if (tabId === "recycle-bin") url = "/dashboard/recycle-bin";
+    else if (tabId === "notifications") url = "/dashboard/notifications";
+    else if (tabId === "activity") url = "/dashboard/activity";
     window.history.pushState({}, "", url);
   };
 
@@ -719,7 +724,7 @@ function Dashboard() {
                     {activeContent === "products" && (
                       <select
                         id="category-filter"
-                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-slate-500"
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
                       >
@@ -735,13 +740,6 @@ function Dashboard() {
                     {/* Contacts Action Buttons */}
                     {activeContent === "contacts" && (
                       <>
-                        <button
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-transparent text-teal-600 border border-teal-600 text-sm font-small hover:bg-teal-50 transition-colors"
-                          onClick={() => setShowEmailPanel(true)}
-                        >
-                          <Mail className="w-4 h-4" />
-                          <span className="hidden sm:inline">Send Mail</span>
-                        </button>
                         {canAddEdit && (
                           <button
                             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-transparent text-teal-600 border border-teal-600 text-sm font-small hover:bg-teal-50 transition-colors"
@@ -899,7 +897,7 @@ function Dashboard() {
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Render nested routes (like Import) via Outlet */}
 
-            {location.pathname.includes("/Import") || location.pathname.includes("/Contacts") || location.pathname.includes("/Teams") || location.pathname.includes("/OutlookEmail") || location.pathname.includes("/users") || location.pathname.toLowerCase().includes("/audit-logs") || location.pathname.toLowerCase().includes("/profile") || location.pathname.toLowerCase().includes("/calendar") ? (
+            {location.pathname.includes("/Import") || location.pathname.includes("/Contacts") || location.pathname.includes("/Teams") || location.pathname.includes("/OutlookEmail") || location.pathname.includes("/EmailTracking") || location.pathname.includes("/users") || location.pathname.toLowerCase().includes("/audit-logs") || location.pathname.toLowerCase().includes("/profile") || location.pathname.toLowerCase().includes("/calendar") || location.pathname.toLowerCase().includes("/notifications") || location.pathname.toLowerCase().includes("/activity") ? (
 
               <Outlet />
 
@@ -1097,7 +1095,7 @@ function Dashboard() {
           onColumnsChange={setSelectedContactColumns}
           filters={contactFilters}
           onFiltersChange={setContactFilters}
-          tagOptions={[]}
+          tagOptions={tagOptions}
           onApply={() => { }}
           onClear={() => {
             setContactFilters([]);
@@ -1164,8 +1162,6 @@ function Dashboard() {
         />
       )}
 
-      {/* Email Panel */}
-      {showEmailPanel && <Email onClose={() => setShowEmailPanel(false)} />}
       {/* Add Form Side Panel */}
       {showPanel && (
         <>
@@ -1399,7 +1395,7 @@ function Dashboard() {
               ? "bg-emerald-600"
               : toast.type === "error"
                 ? "bg-red-600"
-                : "bg-blue-600"
+                : "bg-slate-800"
               }`}
           >
             <span className="flex-1">{toast.message}</span>
