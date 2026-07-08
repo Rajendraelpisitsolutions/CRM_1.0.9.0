@@ -2672,7 +2672,8 @@ export default function Home() {
                     const maxValue = Math.max(...analytics.highValueDeals.map(d => d.dealValue ?? 0), 1);
                     return analytics.highValueDeals.map((deal, i) => {
                       const pct = Math.round(((deal.dealValue ?? 0) / maxValue) * 100);
-                      const barColor = 'bg-slate-500';
+                      const dealBarColors = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-cyan-500', 'bg-pink-500'];
+                      const barColor = dealBarColors[i % dealBarColors.length];
 
                       return (
                         <div
@@ -2730,9 +2731,10 @@ export default function Home() {
                 {analytics.pipelineByStage.map((stage, i) => {
                   const maxCount = Math.max(...analytics.pipelineByStage.map(s => s.count), 1);
                   const pct = Math.round((stage.count / maxCount) * 100);
+                  const stageColors = ['bg-blue-500', 'bg-violet-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-sky-500', 'bg-purple-500', 'bg-teal-500'];
                   const barColor = stage.name === 'Won' ? 'bg-emerald-500' :
                     stage.name === 'Lost' ? 'bg-amber-500' :
-                      'bg-slate-400';
+                      stageColors[i % stageColors.length];
                   return (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-0.5">
