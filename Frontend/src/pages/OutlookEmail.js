@@ -20,26 +20,41 @@ import DOMPurify from "dompurify";
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const TRANSPARENT_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-// A template footer can carry an optional company logo (a data URL). It is stored
-// inside the template body wrapped in a sentinel so no schema change is needed,
-// and split back out into { logo, text } when the template is loaded.
+// A template packs a body, a footer and an optional company logo (a data URL) into the
+// single Template.Body column using sentinels, so no schema change is needed. It splits
+// back into { body, footer, logo } on load (the subject lives in Template.Subject).
+// `text` is kept as an alias of `footer` for older callers.
 const LOGO_OPEN = "[[LOGO]]";
 const LOGO_CLOSE = "[[/LOGO]]";
-function buildTemplateBody(text, logo) {
-  return logo ? `${LOGO_OPEN}${logo}${LOGO_CLOSE}\n${text || ""}` : (text || "");
+const FOOTER_OPEN = "[[FOOTER]]";
+const FOOTER_CLOSE = "[[/FOOTER]]";
+function buildTemplateBody(body, footer, logo) {
+  let out = "";
+  if (logo) out += `${LOGO_OPEN}${logo}${LOGO_CLOSE}`;
+  out += `${FOOTER_OPEN}${footer || ""}${FOOTER_CLOSE}`;
+  out += (body || "");
+  return out;
 }
-function parseTemplateBody(body) {
-  const b = body || "";
+function parseTemplateBody(raw) {
+  let b = raw || "";
+  let logo = "";
   if (b.startsWith(LOGO_OPEN)) {
     const end = b.indexOf(LOGO_CLOSE);
+    if (end !== -1) { logo = b.slice(LOGO_OPEN.length, end); b = b.slice(end + LOGO_CLOSE.length); }
+  }
+  if (b.startsWith("\n")) b = b.slice(1);
+  if (b.startsWith(FOOTER_OPEN)) {
+    // New format: [[FOOTER]]footer[[/FOOTER]]body
+    const end = b.indexOf(FOOTER_CLOSE);
     if (end !== -1) {
-      const logo = b.slice(LOGO_OPEN.length, end);
-      let text = b.slice(end + LOGO_CLOSE.length);
-      if (text.startsWith("\n")) text = text.slice(1);
-      return { logo, text };
+      const footer = b.slice(FOOTER_OPEN.length, end);
+      let body = b.slice(end + FOOTER_CLOSE.length);
+      if (body.startsWith("\n")) body = body.slice(1);
+      return { body, footer, logo, text: footer };
     }
   }
-  return { logo: "", text: b };
+  // Legacy format: the remaining text was the footer (no separate body).
+  return { body: "", footer: b, logo, text: b };
 }
 
 function replaceCidImages(html, attachments = []) {
@@ -395,10 +410,10 @@ function OutlookEmail({ onToast }) {
   // A template is "assigned" to an email (stored in CreatedBy). That email is the
   // key used to auto-load a user's template on compose.
   const loggedInEmail = (typeof window !== "undefined" ? sessionStorage.getItem("userEmail") : "") || "";
-  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", assignedEmail: "", logo: "" });
+  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editTemplateIdx, setEditTemplateIdx] = useState(null);
-  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", assignedEmail: "", logo: "" });
+  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
 
   // A user only sees / manages templates assigned to them (CreatedBy == their email);
   // legacy templates with no assignment are owned if their footer carries the email.
@@ -1217,19 +1232,19 @@ function OutlookEmail({ onToast }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const footerText = newTemplate.body || "";
-      const footerName = footerText.trim().slice(0, 40);
+      const name = (newTemplate.subject || newTemplate.body || newTemplate.footer || "")
+        .trim().slice(0, 40) || "Template";
       // CreatedBy = the logged-in user's email: each user owns only their own templates.
-      // The optional logo is embedded into the body via buildTemplateBody.
+      // Subject is stored on its own; body + footer + logo are packed into Body.
       const r = await apiClient.post("/Template", {
-        name: footerName,
-        subject: "",
-        body: buildTemplateBody(footerText, newTemplate.logo),
+        name,
+        subject: newTemplate.subject || "",
+        body: buildTemplateBody(newTemplate.body, newTemplate.footer, newTemplate.logo),
         createdBy: loggedInEmail,
       });
       if (r.status >= 200 && r.status < 300) {
         setShowAddTemplate(false);
-        setNewTemplate({ name: "", subject: "", body: "", assignedEmail: "", logo: "" });
+        setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
         apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
         showPopup("Template created");
       }
@@ -2496,7 +2511,7 @@ function OutlookEmail({ onToast }) {
                   <div className={`${openedTemplateIdx !== null || showAddTemplate ? "hidden md:flex" : "flex"} w-full md:w-80 border-r ${th.border} flex-col ${th.bg}`}>
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
-                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", assignedEmail: loggedInEmail, logo: "" }); }}
+                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: loggedInEmail, logo: "" }); }}
                         className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
@@ -2543,11 +2558,26 @@ function OutlookEmail({ onToast }) {
                               <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it, and it auto-loads on new email.</p>
                             </div>
                             <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Subject</label>
+                              <input type="text" value={newTemplate.subject}
+                                onChange={e => setNewTemplate(p => ({ ...p, subject: e.target.value }))}
+                                placeholder="Email subject..."
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
                               <textarea value={newTemplate.body}
                                 onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))}
-                                required rows={6}
-                                placeholder="Enter footer content..."
+                                rows={6}
+                                placeholder="Email body..."
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                              <textarea value={newTemplate.footer}
+                                onChange={e => setNewTemplate(p => ({ ...p, footer: e.target.value }))}
+                                rows={4}
+                                placeholder="Footer content (signature, company info)..."
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                             </div>
                             <div>
@@ -2597,7 +2627,7 @@ function OutlookEmail({ onToast }) {
                             <form onSubmit={async e => {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
-                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.body || "").trim().slice(0, 40), subject: "", body: buildTemplateBody(editTemplate.body, editTemplate.logo), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
+                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || editTemplate.body || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate.body, editTemplate.footer, editTemplate.logo), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
@@ -2611,9 +2641,24 @@ function OutlookEmail({ onToast }) {
                                 <div className={`px-4 py-2.5 border rounded-xl text-sm ${th.input} opacity-80`}>{editTemplate.assignedEmail || loggedInEmail || "you"}</div>
                               </div>
                               <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Subject</label>
+                                <input type="text" value={editTemplate.subject}
+                                  onChange={e => setEditTemplate(p => ({ ...p, subject: e.target.value }))}
+                                  placeholder="Email subject..."
+                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              </div>
+                              <div>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
                                 <textarea value={editTemplate.body}
-                                  onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} required rows={6}
+                                  onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} rows={6}
+                                  placeholder="Email body..."
+                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              </div>
+                              <div>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                                <textarea value={editTemplate.footer}
+                                  onChange={e => setEditTemplate(p => ({ ...p, footer: e.target.value }))} rows={4}
+                                  placeholder="Footer content (signature, company info)..."
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                               </div>
                               <div>
@@ -2657,7 +2702,7 @@ function OutlookEmail({ onToast }) {
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
                             <h2 className="text-sm font-semibold truncate">{tpl.name || tpl.body || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
-                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject, body: parsed.text, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo }); }}
+                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject ?? tpl.Subject ?? "", body: parsed.body, footer: parsed.footer, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo }); }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
                               <button onClick={() => setTemplateToDelete(tpl)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
@@ -2671,16 +2716,30 @@ function OutlookEmail({ onToast }) {
                                 <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Assigned Email</label>
                                 <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{(tpl.createdBy ?? tpl.CreatedBy) || "— not assigned —"}</div>
                               </div>
+                              {(() => { const { body, footer, logo } = parseTemplateBody(tpl.body); const subj = tpl.subject ?? tpl.Subject ?? ""; return (
+                              <>
+                              {subj && (
+                                <div>
+                                  <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Subject</label>
+                                  <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{subj}</div>
+                                </div>
+                              )}
+                              {body && (
+                                <div>
+                                  <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Body</label>
+                                  <div className={`px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} whitespace-pre-wrap min-h-24 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{body}</div>
+                                </div>
+                              )}
                               <div>
                                 <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Footer</label>
-                                {(() => { const { logo, text } = parseTemplateBody(tpl.body); return (
                                   <div className={`flex gap-4 items-start px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} min-h-32 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
                                     {logo && <img src={logo} alt="Company logo" className="h-16 max-w-[160px] object-contain shrink-0" />}
-                                    <div className="whitespace-pre-wrap flex-1 min-w-0">{text}</div>
+                                    <div className="whitespace-pre-wrap flex-1 min-w-0">{footer}</div>
                                   </div>
-                                ); })()}
                               </div>
-                              <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject, body: tpl.body }); }}
+                              </>
+                              ); })()}
+                              <button onClick={() => { const p = parseTemplateBody(tpl.body); startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: p.body }); setFooterText(p.footer); setFooterLogo(p.logo); }}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition">
                                 <Mail size={14} />Use Template
                               </button>
@@ -3806,9 +3865,10 @@ useEffect(() => {
     if (!selectedTemplate) return;
     const tpl = templates.find((t) => (t.name ?? t.Name) === selectedTemplate);
     if (tpl) {
-      const { logo, text } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
+      const { body, footer, logo } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
       setSubject(tpl.subject ?? tpl.Subject ?? "");
-      setFooterText(text);
+      if (body) setBody(body);
+      setFooterText(footer);
       setFooterLogo(logo);
     }
   }, [selectedTemplate, templates]);
