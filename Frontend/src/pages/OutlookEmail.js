@@ -28,19 +28,29 @@ const LOGO_OPEN = "[[LOGO]]";
 const LOGO_CLOSE = "[[/LOGO]]";
 const FOOTER_OPEN = "[[FOOTER]]";
 const FOOTER_CLOSE = "[[/FOOTER]]";
-function buildTemplateBody(body, footer, logo) {
+const ATTACH_OPEN = "[[ATTACH]]";
+const ATTACH_CLOSE = "[[/ATTACH]]";
+function buildTemplateBody(body, footer, logo, attachments) {
   let out = "";
   if (logo) out += `${LOGO_OPEN}${logo}${LOGO_CLOSE}`;
+  if (attachments && attachments.length) out += `${ATTACH_OPEN}${JSON.stringify(attachments)}${ATTACH_CLOSE}`;
   out += `${FOOTER_OPEN}${footer || ""}${FOOTER_CLOSE}`;
   out += (body || "");
   return out;
 }
 function parseTemplateBody(raw) {
   let b = raw || "";
-  let logo = "";
+  let logo = "", attachments = [];
   if (b.startsWith(LOGO_OPEN)) {
     const end = b.indexOf(LOGO_CLOSE);
     if (end !== -1) { logo = b.slice(LOGO_OPEN.length, end); b = b.slice(end + LOGO_CLOSE.length); }
+  }
+  if (b.startsWith(ATTACH_OPEN)) {
+    const end = b.indexOf(ATTACH_CLOSE);
+    if (end !== -1) {
+      try { attachments = JSON.parse(b.slice(ATTACH_OPEN.length, end)) || []; } catch { attachments = []; }
+      b = b.slice(end + ATTACH_CLOSE.length);
+    }
   }
   if (b.startsWith("\n")) b = b.slice(1);
   if (b.startsWith(FOOTER_OPEN)) {
@@ -50,11 +60,11 @@ function parseTemplateBody(raw) {
       const footer = b.slice(FOOTER_OPEN.length, end);
       let body = b.slice(end + FOOTER_CLOSE.length);
       if (body.startsWith("\n")) body = body.slice(1);
-      return { body, footer, logo, text: footer };
+      return { body, footer, logo, attachments, text: footer };
     }
   }
   // Legacy format: the remaining text was the footer (no separate body).
-  return { body: "", footer: b, logo, text: b };
+  return { body: "", footer: b, logo, attachments, text: b };
 }
 
 // Ensures an Outlook mail folder with the given name exists (creating it once if not) and
@@ -436,10 +446,10 @@ function OutlookEmail({ onToast }) {
   // A template is "assigned" to an email (stored in CreatedBy). That email is the
   // key used to auto-load a user's template on compose.
   const loggedInEmail = (typeof window !== "undefined" ? sessionStorage.getItem("userEmail") : "") || "";
-  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
+  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editTemplateIdx, setEditTemplateIdx] = useState(null);
-  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
+  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
 
   // A user only sees / manages templates assigned to them (CreatedBy == their email);
   // legacy templates with no assignment are owned if their footer carries the email.
@@ -1254,6 +1264,24 @@ function OutlookEmail({ onToast }) {
     setSentMails(p => [newMail, ...p]);
   };
 
+  // Reads picked files into base64 attachment objects for a template (create/edit).
+  // They're persisted inside the template, so total size is capped.
+  const addTemplateAttachments = async (fileList, setter, current) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const readOne = (file) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, contentType: file.type || "application/octet-stream", contentBytes: (String(reader.result || "").split(",")[1] || ""), size: file.size });
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+    const read = (await Promise.all(files.map(readOne))).filter(Boolean);
+    const existingTotal = (current || []).reduce((s, a) => s + (a.size || 0), 0);
+    const addTotal = read.reduce((s, a) => s + (a.size || 0), 0);
+    if (existingTotal + addTotal > 4 * 1024 * 1024) { showPopup("Attachments too large (max ~4 MB total per template)", "error"); return; }
+    setter((p) => ({ ...p, attachments: [...(p.attachments || []), ...read] }));
+  };
+
   const handleAddTemplate = async e => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -1265,12 +1293,12 @@ function OutlookEmail({ onToast }) {
       const r = await apiClient.post("/Template", {
         name,
         subject: newTemplate.subject || "",
-        body: buildTemplateBody(newTemplate.body, newTemplate.footer, newTemplate.logo),
+        body: buildTemplateBody(newTemplate.body, newTemplate.footer, newTemplate.logo, newTemplate.attachments),
         createdBy: loggedInEmail,
       });
       if (r.status >= 200 && r.status < 300) {
         setShowAddTemplate(false);
-        setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "" });
+        setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
         apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
         showPopup("Template created");
       }
@@ -2537,7 +2565,7 @@ function OutlookEmail({ onToast }) {
                   <div className={`${openedTemplateIdx !== null || showAddTemplate ? "hidden md:flex" : "flex"} w-full md:w-80 border-r ${th.border} flex-col ${th.bg}`}>
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
-                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: loggedInEmail, logo: "" }); }}
+                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: loggedInEmail, logo: "", attachments: [] }); }}
                         className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
@@ -2599,6 +2627,24 @@ function OutlookEmail({ onToast }) {
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                             </div>
                             <div>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
+                              {(newTemplate.attachments || []).length > 0 && (
+                                <div className="space-y-1.5 mb-2">
+                                  {newTemplate.attachments.map((a, i) => (
+                                    <div key={i} className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-lg text-sm ${th.input}`}>
+                                      <span className="truncate flex items-center gap-2 min-w-0"><Paperclip size={14} className="shrink-0" /><span className="truncate">{a.name}</span></span>
+                                      <button type="button" onClick={() => setNewTemplate(p => ({ ...p, attachments: (p.attachments || []).filter((_, idx) => idx !== i) }))} className="text-xs text-red-600 hover:underline shrink-0">Remove</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
+                                <Paperclip size={16} /><span>Add files</span>
+                                <input type="file" multiple className="hidden" onChange={(e) => { addTemplateAttachments(e.target.files, setNewTemplate, newTemplate.attachments); e.target.value = ""; }} />
+                              </label>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
+                            </div>
+                            <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
                               <textarea value={newTemplate.footer}
                                 onChange={e => setNewTemplate(p => ({ ...p, footer: e.target.value }))}
@@ -2653,7 +2699,7 @@ function OutlookEmail({ onToast }) {
                             <form onSubmit={async e => {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
-                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || editTemplate.body || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate.body, editTemplate.footer, editTemplate.logo), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
+                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || editTemplate.body || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate.body, editTemplate.footer, editTemplate.logo, editTemplate.attachments), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
@@ -2679,6 +2725,24 @@ function OutlookEmail({ onToast }) {
                                   onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} rows={6}
                                   placeholder="Email body..."
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              </div>
+                              <div>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
+                                {(editTemplate.attachments || []).length > 0 && (
+                                  <div className="space-y-1.5 mb-2">
+                                    {editTemplate.attachments.map((a, i) => (
+                                      <div key={i} className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-lg text-sm ${th.input}`}>
+                                        <span className="truncate flex items-center gap-2 min-w-0"><Paperclip size={14} className="shrink-0" /><span className="truncate">{a.name}</span></span>
+                                        <button type="button" onClick={() => setEditTemplate(p => ({ ...p, attachments: (p.attachments || []).filter((_, idx) => idx !== i) }))} className="text-xs text-red-600 hover:underline shrink-0">Remove</button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
+                                  <Paperclip size={16} /><span>Add files</span>
+                                  <input type="file" multiple className="hidden" onChange={(e) => { addTemplateAttachments(e.target.files, setEditTemplate, editTemplate.attachments); e.target.value = ""; }} />
+                                </label>
+                                <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
@@ -2728,7 +2792,7 @@ function OutlookEmail({ onToast }) {
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
                             <h2 className="text-sm font-semibold truncate">{tpl.name || tpl.body || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
-                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject ?? tpl.Subject ?? "", body: parsed.body, footer: parsed.footer, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo }); }}
+                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject ?? tpl.Subject ?? "", body: parsed.body, footer: parsed.footer, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo, attachments: parsed.attachments || [] }); }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
                               <button onClick={() => setTemplateToDelete(tpl)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
@@ -3891,11 +3955,12 @@ useEffect(() => {
     if (!selectedTemplate) return;
     const tpl = templates.find((t) => (t.name ?? t.Name) === selectedTemplate);
     if (tpl) {
-      const { body, footer, logo } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
+      const { body, footer, logo, attachments } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
       setSubject(tpl.subject ?? tpl.Subject ?? "");
       if (body) setBody(body);
       setFooterText(footer);
       setFooterLogo(logo);
+      if (Array.isArray(attachments) && attachments.length) setAttachments(attachments);
     }
   }, [selectedTemplate, templates]);
 
@@ -3944,11 +4009,12 @@ useEffect(() => {
       setSubject(replyData.subject || "");
 
       if (replyData.type === "new" && replyData.body) {
-        // "Use Template" passed a packed template body (body + footer + optional logo).
-        const { body, footer, logo } = parseTemplateBody(replyData.body);
+        // "Use Template" passed a packed template body (body + footer + optional logo + attachments).
+        const { body, footer, logo, attachments } = parseTemplateBody(replyData.body);
         if (body) setBody(body);
         setFooterText(footer);
         setFooterLogo(logo);
+        if (Array.isArray(attachments) && attachments.length) setAttachments(attachments);
         setQuoteHtml("");
       } else if (replyData.type === "reply" || replyData.type === "replyAll") {
         // Body starts empty — user types reply above the quoted original
@@ -4155,12 +4221,23 @@ useEffect(() => {
     let attachmentsPayload = [];
     try {
       for (const file of attachments) {
-        const base64 = await fileToBase64(file);
-        attachmentsPayload.push({
-          "@odata.type": "#microsoft.graph.fileAttachment",
-          name: file.name,
-          contentBytes: base64,
-        });
+        // Template/reply attachments arrive already base64-encoded ({name, contentBytes});
+        // freshly-picked files are File objects that need reading.
+        if (file && file.contentBytes) {
+          attachmentsPayload.push({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: file.name,
+            contentBytes: file.contentBytes,
+            contentType: file.contentType || "application/octet-stream",
+          });
+        } else {
+          const base64 = await fileToBase64(file);
+          attachmentsPayload.push({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: file.name,
+            contentBytes: base64,
+          });
+        }
       }
 
       for (const file of images) {
