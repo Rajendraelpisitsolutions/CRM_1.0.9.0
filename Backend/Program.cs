@@ -26,6 +26,8 @@ builder.WebHost.ConfigureKestrel(serverOptions =>
 {
     serverOptions.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(1800);  // 30 minutes
     serverOptions.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(1800);  // 30 minutes
+    // Allow larger request bodies (e.g. templates that carry base64 attachments).
+    serverOptions.Limits.MaxRequestBodySize = 60 * 1024 * 1024;  // 60 MB
 });
 
 builder.Services.AddCors(options =>
@@ -323,7 +325,11 @@ BEGIN
     );
     CREATE INDEX IX_EmailEvents_Recipient ON dbo.EmailEvents (RecipientId);
     CREATE INDEX IX_EmailEvents_Campaign ON dbo.EmailEvents (CampaignId);
-END");
+END
+-- Ensure Templates.Body can hold large content (templates now carry base64 attachments).
+IF OBJECT_ID(N'dbo.Templates', N'U') IS NOT NULL
+   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Templates') AND name = 'Body' AND max_length <> -1)
+    ALTER TABLE dbo.Templates ALTER COLUMN Body NVARCHAR(MAX) NULL;");
 }
 catch (Exception ex)
 {

@@ -1302,8 +1302,15 @@ function OutlookEmail({ onToast }) {
         apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
         showPopup("Template created");
       }
-    } catch {
-      showPopup("Could not create template", "error");
+    } catch (err) {
+      const status = err?.response?.status;
+      const tooBig = status === 413 || status === 400;
+      const msg = tooBig
+        ? "Template too large to save — the attachment exceeds the server upload limit. Use a smaller file."
+        : (err?.response?.data?.title || err?.response?.data?.message ||
+           (typeof err?.response?.data === "string" ? err.response.data : "") ||
+           err?.message || "Could not create template");
+      showPopup(String(msg).slice(0, 220), "error");
     }
     setIsSubmitting(false);
   };
@@ -2703,8 +2710,15 @@ function OutlookEmail({ onToast }) {
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
-                              } catch {
-                                showPopup("Could not update template", "error");
+                              } catch (err) {
+                                const status = err?.response?.status;
+                                const tooBig = status === 413 || status === 400;
+                                const msg = tooBig
+                                  ? "Template too large to save — the attachment exceeds the server upload limit. Use a smaller file."
+                                  : (err?.response?.data?.title || err?.response?.data?.message ||
+                                     (typeof err?.response?.data === "string" ? err.response.data : "") ||
+                                     err?.message || "Could not update template");
+                                showPopup(String(msg).slice(0, 220), "error");
                               }
                               setIsSubmitting(false);
                             }} className="max-w-2xl space-y-5">
