@@ -175,7 +175,7 @@ export default function NotificationsPage() {
         {/* Title row */}
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-white flex-shrink-0">
+            <span className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white flex-shrink-0">
               <FiBell size={20} />
             </span>
             <div>
@@ -207,7 +207,7 @@ export default function NotificationsPage() {
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setFilter(t.key)}
               className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium border transition ${
-                filter === t.key ? "bg-slate-800 text-white border-blue-600 shadow-sm" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                filter === t.key ? "bg-blue-500 text-white border-blue-600 shadow-sm" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
               }`}>
               {t.label}
               <span className={`text-[11px] font-bold px-1.5 rounded-full ${filter === t.key ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500"}`}>{counts[t.key]}</span>
@@ -216,7 +216,7 @@ export default function NotificationsPage() {
           <div className="relative flex-1 min-w-[180px]">
             <FiSearch size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search notifications…"
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" />
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
 
@@ -271,7 +271,7 @@ export default function NotificationsPage() {
                         {n.preview && <p className="text-xs text-gray-400 truncate mt-0.5">{n.preview}</p>}
                       </div>
                       <div className="flex flex-col items-end justify-between flex-shrink-0">
-                        {!isRead && <div className="w-2.5 h-2.5 rounded-full bg-slate-800 mt-1.5" />}
+                        {!isRead && <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1.5" />}
                         {n.link && <FiExternalLink size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors mt-auto" />}
                       </div>
                     </button>

@@ -19,7 +19,7 @@ function EditUserModal({
           <h2 className="text-lg font-semibold text-gray-900">Edit User</h2>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-slate-500 focus:outline-none"
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,7 +38,7 @@ function EditUserModal({
               name="name"
               value={editData.name}
               onChange={onChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               placeholder="Full Name"
             />
             {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
@@ -53,7 +53,7 @@ function EditUserModal({
               name="email"
               value={editData.email}
               onChange={onChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               placeholder="user@example.com"
             />
             {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
@@ -68,7 +68,7 @@ function EditUserModal({
               name="phone"
               value={editData.phone}
               onChange={onChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               placeholder="Phone Number"
             />
             {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
@@ -82,7 +82,7 @@ function EditUserModal({
               name="role"
               value={editData.role}
               onChange={onChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all appearance-none"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none"
             >
               <option value="User">User</option>
               <option value="Manager">Manager</option>
@@ -97,7 +97,7 @@ function EditUserModal({
               id="editIsActive"
               checked={editData.isActive}
               onChange={onChange}
-              className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-2 focus:ring-slate-500"
+              className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-2 focus:ring-blue-500"
             />
             <label htmlFor="editIsActive" className="text-sm font-medium text-gray-700">
               Active
@@ -121,7 +121,7 @@ function EditUserModal({
           <div className="flex gap-3 pt-6 border-t border-gray-200">
             <button
               type="submit"
-              className="flex-1 bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-lg transition-colors font-medium focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-lg transition-colors font-medium focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               Update User
             </button>

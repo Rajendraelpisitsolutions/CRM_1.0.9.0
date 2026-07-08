@@ -21,7 +21,7 @@ function PasswordModal({
           <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-slate-500 focus:outline-none"
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:ring-2 focus:ring-blue-500 focus:outline-none"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -41,7 +41,7 @@ function PasswordModal({
                 name="newPassword"
                 value={passwordData.newPassword}
                 onChange={onChange}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all pr-10"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all pr-10"
                 placeholder="New Password"
               />
               <button
@@ -63,7 +63,7 @@ function PasswordModal({
               name="confirmPassword"
               value={passwordData.confirmPassword}
               onChange={onChange}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               placeholder="Confirm Password"
             />
           </div>
@@ -92,7 +92,7 @@ function PasswordModal({
           <div className="flex gap-3 pt-6 border-t border-gray-200">
             <button
               type="submit"
-              className="flex-1 bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-lg transition-colors font-medium focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-lg transition-colors font-medium focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               Update Password
             </button>

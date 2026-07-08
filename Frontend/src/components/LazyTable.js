@@ -108,7 +108,7 @@ const LazyTable = ({
                 const newPage = parseInt(e.target.value);
                 if (!isNaN(newPage)) onChangePage(newPage);
               }}
-              className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Go to page"
             />
           </div>

@@ -13,8 +13,8 @@ const ACTION_STYLES = {
 
 function TabButton({ active, onClick, label, accent }) {
   const activeClasses = accent === "sky"
-    ? "bg-slate-800 text-white border-slate-800 shadow-sm"
-    : "bg-slate-800 text-white border-slate-800 shadow-sm";
+    ? "bg-blue-500 text-white border-slate-800 shadow-sm"
+    : "bg-blue-500 text-white border-slate-800 shadow-sm";
   const idleClasses = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
 
   return (
@@ -190,20 +190,20 @@ export default function AuditLogs() {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search user, entity, record, change…"
-            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+            className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <select value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">All entities</option>
             {entities.map((en) => <option key={en} value={en}>{en}</option>)}
           </select>
           <select value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">All actions</option>
             {["Insert", "Create", "Update", "Delete", "Login"].map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
           <button onClick={() => fetchLogs()}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg">Refresh</button>
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg">Refresh</button>
         </div>
 
         {error && (

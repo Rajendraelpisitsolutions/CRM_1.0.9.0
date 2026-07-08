@@ -343,7 +343,7 @@ function Users() {
               <span className="text-sm text-gray-500">{total} user{total !== 1 ? "s" : ""}</span>
               <button
                 onClick={() => handleOpenForm()}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg"
               >
                 <FiPlus size={16} />
                 Add User
@@ -376,7 +376,7 @@ function Users() {
                 setPage(1);
               }}
               placeholder="Search by name, email, or phone…"
-              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <select
               value={roleFilter}
@@ -384,7 +384,7 @@ function Users() {
                 setRoleFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All roles</option>
               {roles.map((r) => (
@@ -399,7 +399,7 @@ function Users() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All statuses</option>
               <option value="Active">Active</option>
@@ -544,7 +544,7 @@ function Users() {
                   onClick={() => setPage(i + 1)}
                   className={`px-3 py-1 rounded-lg border ${
                     page === i + 1
-                      ? "bg-slate-800 text-white border-slate-800"
+                      ? "bg-blue-500 text-white border-slate-800"
                       : "border-gray-300 hover:bg-gray-50"
                   }`}
                 >

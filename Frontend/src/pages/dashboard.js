@@ -724,7 +724,7 @@ function Dashboard() {
                     {activeContent === "products" && (
                       <select
                         id="category-filter"
-                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-900 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
                       >
@@ -1395,7 +1395,7 @@ function Dashboard() {
               ? "bg-emerald-600"
               : toast.type === "error"
                 ? "bg-red-600"
-                : "bg-slate-800"
+                : "bg-blue-500"
               }`}
           >
             <span className="flex-1">{toast.message}</span>

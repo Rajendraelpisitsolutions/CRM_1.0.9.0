@@ -812,7 +812,7 @@ function Accounts({
       {selected.size > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 mb-4 w-full">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-slate-800 text-white rounded-full flex items-center justify-center font-medium text-sm">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-medium text-sm">
               {selected.size}
             </div>
             <span className="text-sm sm:text-base text-gray-700">selected</span>
@@ -862,7 +862,7 @@ function Accounts({
             </div>
             <div className="flex gap-3 justify-center">
               <button type="button" onClick={() => setShowDeleteModal(false)}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:outline-none">
+                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none">
                 Cancel
               </button>
               <button type="button" onClick={confirmDelete}
@@ -899,7 +899,7 @@ function Accounts({
                   <input type="checkbox" aria-label="Select all" checked={allSelected}
                     ref={(el) => { if (el) el.indeterminate = someSelected; }}
                     onChange={toggleAll}
-                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                    className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </th>
                 {/* Column Headers with Sorting */}
@@ -940,7 +940,7 @@ function Accounts({
                         aria-label={`Select row ${index + 1}`}
                         checked={selected.has(absoluteIndex)}
                         onChange={() => toggleRow(absoluteIndex)}
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-700 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </td>
                     {/* Data Cells */}
@@ -1039,7 +1039,7 @@ function Accounts({
                                   <button
                                     ref={isExpanded ? expandButtonRef : null}
                                     type="button"
-                                    className={`ml-auto rounded-full text-[10px] font-semibold transition-colors duration-150 ${isExpanded ? 'w-6 h-6 bg-slate-800 text-white flex items-center justify-center' : 'w-5 h-5 bg-transparent text-gray-500 hover:text-gray-800'}`}
+                                    className={`ml-auto rounded-full text-[10px] font-semibold transition-colors duration-150 ${isExpanded ? 'w-6 h-6 bg-blue-500 text-white flex items-center justify-center' : 'w-5 h-5 bg-transparent text-gray-500 hover:text-gray-800'}`}
                                     aria-expanded={isExpanded}
                                     aria-label={isExpanded ? 'Hide related contacts' : 'Show related contacts'}
                                     onClick={(e) => {
@@ -1228,7 +1228,7 @@ function Accounts({
                   for (let i = startPage; i <= endPage; i++) {
                     pages.push(
                       <button key={i} onClick={() => goToPage(i)} disabled={paginationLoading}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-slate-800 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
                           }`}>{i}</button>
                     );
                   }
@@ -1304,11 +1304,11 @@ function Accounts({
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Industry Type</label>
-                    <input type="text" value={editForm.IndustryType || ""} onChange={(e) => setEditForm({ ...editForm, IndustryType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.IndustryType || ""} onChange={(e) => setEditForm({ ...editForm, IndustryType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Business Type</label>
-                    <input type="text" value={editForm.BusinessType || ""} onChange={(e) => setEditForm({ ...editForm, BusinessType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.BusinessType || ""} onChange={(e) => setEditForm({ ...editForm, BusinessType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -1319,23 +1319,23 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Country</label>
-                    <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">State</label>
-                    <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">City</label>
-                    <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Zipcode</label>
-                    <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="sm:col-span-2 flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Address</label>
-                    <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
+                    <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
                   </div>
                 </div>
               </div>
@@ -1346,27 +1346,27 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Website</label>
-                    <input type="url" value={editForm.Website || ""} onChange={(e) => setEditForm({ ...editForm, Website: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="url" value={editForm.Website || ""} onChange={(e) => setEditForm({ ...editForm, Website: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Phone</label>
-                    <input type="tel" value={editForm.Phone || ""} onChange={(e) => setEditForm({ ...editForm, Phone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="tel" value={editForm.Phone || ""} onChange={(e) => setEditForm({ ...editForm, Phone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Display Phone</label>
-                    <input type="tel" value={editForm.DisplayPhone || ""} onChange={(e) => setEditForm({ ...editForm, DisplayPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="tel" value={editForm.DisplayPhone || ""} onChange={(e) => setEditForm({ ...editForm, DisplayPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Territory</label>
-                    <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Number of Employees</label>
-                    <input type="number" value={editForm.NumberOfEmployees || ""} onChange={(e) => setEditForm({ ...editForm, NumberOfEmployees: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="number" value={editForm.NumberOfEmployees || ""} onChange={(e) => setEditForm({ ...editForm, NumberOfEmployees: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Annual Revenue</label>
-                    <input type="number" value={editForm.AnnualRevenue || ""} onChange={(e) => setEditForm({ ...editForm, AnnualRevenue: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="number" value={editForm.AnnualRevenue || ""} onChange={(e) => setEditForm({ ...editForm, AnnualRevenue: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -1377,15 +1377,15 @@ function Accounts({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Facebook</label>
-                    <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Twitter</label>
-                    <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">LinkedIn</label>
-                    <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
               </div>
@@ -1397,36 +1397,36 @@ function Accounts({
                   {/* âŒ REMOVED: Sales Owner ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner ID</label>
-                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner</label>
-                    <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Mode</label>
-                    <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   {/* âŒ REMOVED: Last Contacted Time - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Time</label>
-                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Type</label>
-                    <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   {/* âŒ REMOVED: Last Activity Date - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Date</label>
-                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                   <div className="sm:col-span-2 flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Recent Note</label>
-                    <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
+                    <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
                   </div>
                 </div>
               </div>
@@ -1441,7 +1441,7 @@ function Accounts({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
+                  className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
                 >
                   Save Changes
                 </button>
@@ -1459,7 +1459,7 @@ function Accounts({
             {/* Header */}
             <div className="relative flex items-center gap-4 sm:gap-5 p-4 sm:p-8 border-b border-gray-200/80 bg-white/80 backdrop-blur-sm">
               <div
-                className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-semibold text-2xl sm:text-3xl flex-shrink-0 bg-slate-800 text-white"
+                className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-semibold text-2xl sm:text-3xl flex-shrink-0 bg-blue-500 text-white"
               >
                 {getField(selectedAccountDetails, "Name")
                   ? String(getField(selectedAccountDetails, "Name")).charAt(0).toUpperCase()
@@ -1566,7 +1566,7 @@ function Accounts({
                 })()}
               </div>
               <button
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-2 transition-all duration-200 flex-shrink-0 focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg p-2 transition-all duration-200 flex-shrink-0 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 aria-label="Close details"
                 onClick={handleCloseAccountDetails}
               >
@@ -1760,7 +1760,7 @@ function Accounts({
                                   </label>
                                   {col.key === "Country" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "Country") || ""}
                                       onChange={(e) => {
                                         setSelectedAccountDetails({
@@ -1783,7 +1783,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "State" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "State") || ""}
                                       onChange={(e) => {
                                         setSelectedAccountDetails({
@@ -1805,7 +1805,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "City" ? (
                                     <select
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, "City") || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1824,7 +1824,7 @@ function Accounts({
                                     </select>
                                   ) : col.key === "Address" || col.key === "RecentNote" || col.key === "Tags" || col.key === "ImportID" ? (
                                     <textarea
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150 resize-none"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150 resize-none"
                                       rows="2"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
@@ -1837,7 +1837,7 @@ function Accounts({
                                   ) : col.key === "NumberOfEmployees" || col.key === "AnnualRevenue" || col.key === "ActiveSalesSequences" || col.key === "CompletedSalesSequences" || col.key === "SalesOwnerId" || col.key === "ParentAccountId" ? (
                                     <input
                                       type="number"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1849,7 +1849,7 @@ function Accounts({
                                   ) : col.key === "DisplayPhone" || col.key === "Phone" ? (
                                     <input
                                       type="tel"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1861,7 +1861,7 @@ function Accounts({
                                   ) : col.key === "Facebook" || col.key === "Twitter" || col.key === "LinkedIn" || col.key === "Website" ? (
                                     <input
                                       type="url"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       placeholder="https://..."
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
@@ -1874,7 +1874,7 @@ function Accounts({
                                   ) : col.key === "LastActivityDate" || col.key === "LastAssignedAt" || col.key === "LastContactedTime" || col.key === "CreatedAt" || col.key === "UpdatedAt" ? (
                                     <input
                                       type="date"
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={formatDateOnly(getField(selectedAccountDetails, col.key))}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1886,7 +1886,7 @@ function Accounts({
                                   ) : (
                                     <input
                                       type={col.type || "text"}
-                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-slate-500 focus:bg-white focus:ring-4 focus:ring-slate-500/10 outline-none transition-all duration-150"
+                                      className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border-2 border-gray-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all duration-150"
                                       value={getField(selectedAccountDetails, col.key) || ""}
                                       onChange={(e) =>
                                         setSelectedAccountDetails({
@@ -1950,7 +1950,7 @@ function Accounts({
                   {canEditAccount(selectedAccountDetails) ? (
                     <button
                       type="submit"
-                      className="px-8 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
+                      className="px-8 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

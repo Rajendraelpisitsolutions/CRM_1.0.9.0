@@ -89,7 +89,7 @@ function ContactUs() {
         className={`w-full h-11 px-4 rounded-lg border bg-slate-50/60 text-slate-800 placeholder:text-slate-400 text-[0.95rem] outline-none transition-colors duration-200 focus:bg-white focus:ring-2 ${
           errors[name]
             ? "border-rose-300 focus:ring-rose-200"
-            : "border-gray-300 focus:border-transparent focus:ring-slate-500"
+            : "border-gray-300 focus:border-transparent focus:ring-blue-500"
         }`}
       />
       {errors[name] && <p className="text-rose-500 text-xs">{errors[name]}</p>}
@@ -103,7 +103,7 @@ function ContactUs() {
     >
       <div className="w-full max-w-5xl bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden grid grid-cols-1 lg:grid-cols-5">
         {/* Left info panel */}
-        <aside className="lg:col-span-2 relative bg-slate-800 text-white p-8 sm:p-10 flex flex-col">
+        <aside className="lg:col-span-2 relative bg-blue-500 text-white p-8 sm:p-10 flex flex-col">
           <img
             src={logo}
             alt="Logo"
@@ -159,7 +159,7 @@ function ContactUs() {
               )}
               <button
                 onClick={() => setResult(null)}
-                className="mt-8 h-11 px-6 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-colors duration-200"
+                className="mt-8 h-11 px-6 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
               >
                 Submit another enquiry
               </button>
@@ -195,7 +195,7 @@ function ContactUs() {
                     placeholder="Tell us more about what you need..."
                     value={form.message}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-slate-50/60 text-slate-800 placeholder:text-slate-400 text-[0.95rem] outline-none transition-colors duration-200 focus:bg-white focus:border-transparent focus:ring-2 focus:ring-slate-500 resize-y"
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 bg-slate-50/60 text-slate-800 placeholder:text-slate-400 text-[0.95rem] outline-none transition-colors duration-200 focus:bg-white focus:border-transparent focus:ring-2 focus:ring-blue-500 resize-y"
                   />
                 </div>
 
@@ -211,7 +211,7 @@ function ContactUs() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
+                    className="w-full h-12 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     {loading ? (
                       <>

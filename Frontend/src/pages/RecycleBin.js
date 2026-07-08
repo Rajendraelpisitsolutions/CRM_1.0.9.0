@@ -213,15 +213,15 @@ export default function RecycleBin() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search item, deleted by, details…"
-              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <select value={entity} onChange={(e) => { setEntity(e.target.value); setPage(1); }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-500">
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">All entities</option>
               {entityTypes.map((en) => <option key={en} value={en}>{entityLabel(en)}</option>)}
             </select>
             <button onClick={handleRefresh}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg">Refresh</button>
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg">Refresh</button>
           </div>
         </div>
 
@@ -309,7 +309,7 @@ export default function RecycleBin() {
                   onClick={() => setPage(p)}
                   className={`px-3 py-1.5 rounded-lg border text-sm ${
                     p === page
-                      ? "bg-slate-800 border-slate-800 text-white"
+                      ? "bg-blue-500 border-slate-800 text-white"
                       : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -349,7 +349,7 @@ export default function RecycleBin() {
               <button
                 type="button"
                 onClick={() => { setShowRestoreModal(false); setRestoreTarget(null); }}
-                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 Cancel
               </button>
@@ -388,7 +388,7 @@ export default function RecycleBin() {
               <button
                 type="button"
                 onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
-                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                className="px-6 py-2.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg font-medium text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 Cancel
               </button>

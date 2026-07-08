@@ -138,7 +138,7 @@ function MiniCalendar({ focusDate, onSelectDate, meetings }) {
           {cells.map((d, i) => (
             <button key={i} disabled={!d} onClick={() => d && onSelectDate(new Date(year, month, d))}
               className={`relative w-full aspect-square flex items-center justify-center rounded-full text-[11px] transition-all
-                ${!d ? "" : isFocus(d) ? "bg-slate-800 text-white font-semibold shadow-sm"
+                ${!d ? "" : isFocus(d) ? "bg-blue-500 text-white font-semibold shadow-sm"
                   : isToday(d) ? "bg-slate-100 text-slate-700 font-semibold"
                   : "text-gray-700 hover:bg-gray-100"}`}
             >
@@ -482,7 +482,7 @@ export default function CalendarView() {
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 space-y-2">
               <p>Sign in to Microsoft to view your Teams Calendar.</p>
               <button onClick={handleSignIn}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors">
+                className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors">
                 Sign in
               </button>
             </div>
@@ -548,7 +548,7 @@ export default function CalendarView() {
             <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-400" />
             <input type="text" placeholder="Search events…" value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-44 pl-7 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent bg-gray-50 transition-all"
+              className="w-44 pl-7 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition-all"
             />
           </div>
 
@@ -578,7 +578,7 @@ export default function CalendarView() {
               Sign in with your Microsoft account to see your real Teams Calendar here.
             </p>
             <button onClick={handleSignIn}
-              className="mt-1 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors">
+              className="mt-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors">
               Sign in to Microsoft
             </button>
           </div>
@@ -643,7 +643,7 @@ export default function CalendarView() {
                           ${overflow ? "bg-gray-50/50" : "bg-white hover:bg-gray-50"}`}>
                         <div className="flex items-center justify-end mb-1">
                           <span className={`text-xs w-6 h-6 flex items-center justify-center rounded-full font-semibold
-                            ${isToday2 ? "bg-slate-800 text-white shadow-sm"
+                            ${isToday2 ? "bg-blue-500 text-white shadow-sm"
                               : overflow ? "text-gray-300"
                               : "text-gray-700 group-hover:bg-gray-100 group-hover:text-gray-900"}`}>
                             {date.getDate()}
@@ -674,7 +674,7 @@ export default function CalendarView() {
                         className={`py-3 text-center border-r border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors`}>
                         <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">{DAYS[d.getDay()]}</p>
                         <div className={`text-lg font-semibold mx-auto w-9 h-9 flex items-center justify-center rounded-full mt-0.5
-                          ${isToday2 ? "bg-slate-800 text-white shadow-sm" : "text-gray-800"}`}>
+                          ${isToday2 ? "bg-blue-500 text-white shadow-sm" : "text-gray-800"}`}>
                           {d.getDate()}
                         </div>
                         {getMeetingsForDate(d).length > 0 && !isToday2 && (
@@ -730,7 +730,7 @@ export default function CalendarView() {
                 <div className="px-6 py-4 border-b border-gray-100 bg-white sticky top-0 z-10 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-semibold
-                      ${sameDay(currentDate, new Date()) ? "bg-slate-800 text-white shadow-sm" : "bg-gray-100 text-gray-800"}`}>
+                      ${sameDay(currentDate, new Date()) ? "bg-blue-500 text-white shadow-sm" : "bg-gray-100 text-gray-800"}`}>
                       {currentDate.getDate()}
                     </div>
                     <div>

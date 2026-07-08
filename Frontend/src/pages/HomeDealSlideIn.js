@@ -307,7 +307,7 @@ export default function HomeDealSlideIn({ dealId, onClose, userName, userRole, o
                       className={[
                         'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                         deal.dealStage === s
-                          ? 'bg-slate-800 text-white shadow-md scale-105 ring-2 ring-slate-300'
+                          ? 'bg-blue-500 text-white shadow-md scale-105 ring-2 ring-blue-300'
                           : editable
                             ? 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'
                             : 'bg-white border border-gray-100 text-gray-400 cursor-default',
@@ -487,7 +487,7 @@ export default function HomeDealSlideIn({ dealId, onClose, userName, userRole, o
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2 disabled:opacity-60"
+                    className="px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2 disabled:opacity-60"
                   >
                     {saving ? (
                       <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block" /> Saving…</>
@@ -524,12 +524,12 @@ export default function HomeDealSlideIn({ dealId, onClose, userName, userRole, o
                   value={newNote}
                   onChange={e => setNewNote(e.target.value)}
                   placeholder="Write a note…"
-                  className="w-full text-sm border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-slate-500 resize-none"
+                  className="w-full text-sm border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
                 <button
                   onClick={handleAddNote}
                   disabled={savingNote || !newNote.trim()}
-                  className="w-full py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors disabled:opacity-50"
+                  className="w-full py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
                   {savingNote ? 'Adding…' : '+ Add Note'}
                 </button>
@@ -581,7 +581,7 @@ function inputCls(editable) {
   return [
     'w-full rounded-lg px-3 py-2 text-sm border-2 text-gray-800 outline-none transition-all',
     editable
-      ? 'bg-white border-gray-200 focus:border-slate-500 focus:ring-4 focus:ring-slate-500/10'
+      ? 'bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10'
       : 'bg-gray-50 border-gray-100 text-gray-500 cursor-default',
   ].join(' ');
 }

@@ -327,7 +327,7 @@ function MeetingDetail({ meeting, onClose }) {
     <div className="h-full flex flex-col bg-[#1e1e2e] text-white">
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-[#6264A7]/30 to-[#464775]/20">
         <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl ${meeting.isOnlineMeeting ? "bg-[#6264A7]/40" : "bg-slate-800/30"}`}>
+          <div className={`p-2.5 rounded-xl ${meeting.isOnlineMeeting ? "bg-[#6264A7]/40" : "bg-blue-500/30"}`}>
             {meeting.isOnlineMeeting ? <Video className="w-5 h-5 text-[#c7c9f3]" /> : <Calendar className="w-5 h-5 text-blue-300" />}
           </div>
           <div>
@@ -1413,7 +1413,7 @@ export default function TeamsView() {
     if (["xlsx", "xls", "csv"].includes(ext) || mime.includes("excel") || mime.includes("spreadsheet"))
       return { bg: "bg-emerald-500/20", text: "text-emerald-400", label: ext.toUpperCase().slice(0, 3) || "XLS" };
     if (["docx", "doc"].includes(ext) || mime.includes("word"))
-      return { bg: "bg-slate-800/20", text: "text-blue-400", label: ext.toUpperCase().slice(0, 3) || "DOC" };
+      return { bg: "bg-blue-500/20", text: "text-blue-400", label: ext.toUpperCase().slice(0, 3) || "DOC" };
     if (ext === "pdf" || mime.includes("pdf"))
       return { bg: "bg-red-500/20", text: "text-red-400", label: "PDF" };
     if (["zip", "rar", "7z", "tar", "gz"].includes(ext))
@@ -2339,7 +2339,7 @@ export default function TeamsView() {
         sub: rawText,
         time: fmtDate(preview.createdDateTime),
         unread: !!chatUnreadCounts[c.id],
-        clr: "bg-slate-800/20 text-blue-300",
+        clr: "bg-blue-500/20 text-blue-300",
         Ico: MessageSquare,
         data: { chat: c, sender, rawText },
       });
@@ -4909,7 +4909,7 @@ export default function TeamsView() {
                                               const extColors = {
                                                 PDF: "text-red-400 bg-red-500/15",
                                                 ZIP: "text-yellow-400 bg-yellow-500/15",
-                                                DOC: "text-blue-400 bg-slate-800/15", DOCX: "text-blue-400 bg-slate-800/15",
+                                                DOC: "text-blue-400 bg-blue-500/15", DOCX: "text-blue-400 bg-blue-500/15",
                                                 XLS: "text-emerald-400 bg-emerald-500/15", XLSX: "text-emerald-400 bg-emerald-500/15",
                                                 PNG: "text-purple-400 bg-purple-500/15", JPG: "text-purple-400 bg-purple-500/15",
                                                 JPEG: "text-purple-400 bg-purple-500/15",
@@ -4949,7 +4949,7 @@ export default function TeamsView() {
                                               const extColors = {
                                                 PDF: "text-red-400 bg-red-500/15",
                                                 ZIP: "text-yellow-400 bg-yellow-500/15",
-                                                DOC: "text-blue-400 bg-slate-800/15", DOCX: "text-blue-400 bg-slate-800/15",
+                                                DOC: "text-blue-400 bg-blue-500/15", DOCX: "text-blue-400 bg-blue-500/15",
                                                 XLS: "text-emerald-400 bg-emerald-500/15", XLSX: "text-emerald-400 bg-emerald-500/15",
                                                 PNG: "text-purple-400 bg-purple-500/15", JPG: "text-purple-400 bg-purple-500/15",
                                                 JPEG: "text-purple-400 bg-purple-500/15",
@@ -5790,7 +5790,7 @@ export default function TeamsView() {
                                   <div className="space-y-0.5">
                                     {evts.slice(0, 3).map((ev, ei) => (
                                       <div key={ei} onClick={e => { e.stopPropagation(); setSelectedMeeting(ev); }}
-                                        className={`text-[10px] px-1.5 py-0.5 rounded-md truncate cursor-pointer hover:opacity-80 font-medium ${ev.isOnlineMeeting ? "bg-[#6264A7]/70 text-white" : "bg-slate-800/60 text-white"}`}>
+                                        className={`text-[10px] px-1.5 py-0.5 rounded-md truncate cursor-pointer hover:opacity-80 font-medium ${ev.isOnlineMeeting ? "bg-[#6264A7]/70 text-white" : "bg-blue-500/60 text-white"}`}>
                                         {fmtMeetingTime(ev.from)} {ev.title}
                                       </div>
                                     ))}
@@ -5926,7 +5926,7 @@ export default function TeamsView() {
                 </div>
                 <div className="flex-1 overflow-y-auto teams-scrollbar p-4 space-y-4">
                   <div className="flex items-start gap-3">
-                    <div className={`p-2.5 rounded-xl flex-shrink-0 ${selectedMeeting.isOnlineMeeting ? "bg-[#6264A7]/30" : "bg-slate-800/20"}`}>
+                    <div className={`p-2.5 rounded-xl flex-shrink-0 ${selectedMeeting.isOnlineMeeting ? "bg-[#6264A7]/30" : "bg-blue-500/20"}`}>
                       {selectedMeeting.isOnlineMeeting ? <Video className="w-5 h-5 text-[#c7c9f3]" /> : <Calendar className="w-5 h-5 text-blue-300" />}
                     </div>
                     <div>
@@ -7930,7 +7930,7 @@ export default function TeamsView() {
                         <div className="w-full h-20 bg-[#1a1a2e] rounded-lg p-2 space-y-1.5">
                           <div className="flex gap-1.5 items-center"><div className="w-4 h-4 rounded-full bg-[#6264A7]/60" /><div className="flex-1 h-1.5 bg-white/15 rounded-full" /></div>
                           <div className="flex gap-1.5 items-center pl-5"><div className="flex-1 h-1.5 bg-white/10 rounded-full" /><div className="w-8 h-3 bg-[#6264A7]/40 rounded" /></div>
-                          <div className="flex gap-1.5 items-center"><div className="w-4 h-4 rounded-full bg-slate-800/60" /><div className="flex-1 h-1.5 bg-white/15 rounded-full" /></div>
+                          <div className="flex gap-1.5 items-center"><div className="w-4 h-4 rounded-full bg-blue-500/60" /><div className="flex-1 h-1.5 bg-white/15 rounded-full" /></div>
                           <div className="flex gap-1.5 items-center pl-5"><div className="w-12 h-1.5 bg-white/10 rounded-full" /></div>
                         </div>
                       ),

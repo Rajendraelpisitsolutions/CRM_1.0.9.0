@@ -106,7 +106,7 @@ function FieldRow({ icon: Icon, label, value, editing, inputProps }) {
           <input
             {...inputProps}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-800
-              focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
               transition-all placeholder-gray-400"
           />
         ) : (
@@ -245,7 +245,7 @@ export default function Profile() {
           <p className="text-gray-600">{fetchError}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900"
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600"
           >
             Retry
           </button>
@@ -370,7 +370,7 @@ export default function Profile() {
                 <button
                   onClick={handleSaveInfo}
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-4 py-1.5 bg-slate-800 hover:bg-slate-900
+                  className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-500 hover:bg-blue-600
                     text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-60"
                 >
                   {saving
@@ -477,7 +477,7 @@ export default function Profile() {
                     onChange={(e) => setPwForm((f) => ({ ...f, newPassword: e.target.value }))}
                     placeholder="Enter new password"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm
-                      focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all"
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   <button type="button" onClick={() => setShowNew((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -521,7 +521,7 @@ export default function Profile() {
                         ? "border-red-300 focus:ring-red-300"
                         : pwForm.confirmPassword && pwForm.newPassword === pwForm.confirmPassword
                         ? "border-emerald-300 focus:ring-emerald-300"
-                        : "border-gray-300 focus:ring-slate-500 focus:border-transparent"}`}
+                        : "border-gray-300 focus:ring-blue-500 focus:border-transparent"}`}
                   />
                   <button type="button" onClick={() => setShowConfirm((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -537,7 +537,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={pwSaving}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-900
+                className="w-full py-2.5 bg-blue-500 hover:bg-blue-600
                   text-white font-medium rounded-lg transition-colors
                   disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
               >

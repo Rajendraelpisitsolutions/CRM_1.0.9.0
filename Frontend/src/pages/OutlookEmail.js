@@ -257,7 +257,7 @@ function RailItem({ icon: Icon, label, active, onClick, badge, isDark }) {
       onClick={onClick}
       title={label}
       className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all ${active
-        ? "bg-slate-800 text-white"
+        ? "bg-blue-500 text-white"
         : isDark
           ? "text-gray-300 hover:bg-white/10 hover:text-white"
           : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
@@ -279,7 +279,7 @@ function FolderRow({ icon: Icon, label, active, count, pinned, onPin, onClick, i
     <button
       onClick={onClick}
       className={`group w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-sm transition ${active
-        ? isDark ? "bg-slate-800 text-white" : "bg-blue-100 text-blue-700"
+        ? isDark ? "bg-blue-500 text-white" : "bg-blue-100 text-blue-700"
         : isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"
         }`}
     >
@@ -1434,7 +1434,7 @@ function OutlookEmail({ onToast }) {
             </div>
             <p className={`text-base font-semibold ${th.text}`}>{popup.message}</p>
             <button onClick={() => setPopup(null)}
-              className="mt-5 px-6 py-2 text-sm rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition">
+              className="mt-5 px-6 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition">
               OK
             </button>
           </div>
@@ -1508,7 +1508,7 @@ function OutlookEmail({ onToast }) {
                   { key: "autoreply", label: "Auto Reply", icon: RefreshCw },
                 ].map(({ key, label, icon: Icon }) => (
                   <button key={key} onClick={() => setSettingsTab(key)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs md:text-sm whitespace-nowrap transition shrink-0 ${settingsTab === key ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs md:text-sm whitespace-nowrap transition shrink-0 ${settingsTab === key ? "bg-blue-500 text-white" : `${th.hover} ${th.text}`}`}>
                     <Icon size={14} />{label}
                   </button>
                 ))}
@@ -1537,10 +1537,10 @@ function OutlookEmail({ onToast }) {
                       value={signature}
                       onChange={e => setSignature(e.target.value)}
                       rows={6}
-                      className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`}
+                      className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`}
                       placeholder="Enter your email signature..."
                     />
-                    <button className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">Save Signature</button>
+                    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600">Save Signature</button>
                   </div>
                 )}
                 {settingsTab === "theme" && (
@@ -1570,7 +1570,7 @@ function OutlookEmail({ onToast }) {
                           <p className="text-sm font-medium">{label}</p>
                           <p className={`text-xs ${th.textMuted}`}>{desc}</p>
                         </div>
-                        <div className="w-10 h-6 bg-slate-800 rounded-full flex items-center justify-end px-0.5 cursor-pointer shrink-0">
+                        <div className="w-10 h-6 bg-blue-500 rounded-full flex items-center justify-end px-0.5 cursor-pointer shrink-0">
                           <div className="w-5 h-5 bg-white rounded-full shadow" />
                         </div>
                       </div>
@@ -1589,18 +1589,18 @@ function OutlookEmail({ onToast }) {
                         value={autoReply.message}
                         onChange={e => setAutoReply(p => ({ ...p, message: e.target.value }))}
                         rows={5}
-                        className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`}
+                        className={`w-full px-4 py-3 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`}
                         placeholder="I'm currently out of office..."
                       />
                     )}
-                    <button className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">Save</button>
+                    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600">Save</button>
                   </div>
                 )}
                 {settingsTab === "rules" && (
                   <div className="space-y-4">
                     <h3 className="font-semibold text-base">Mail Rules</h3>
                     <p className={`text-sm ${th.textMuted}`}>Create rules to automatically organize your incoming mail.</p>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600">
                       <Plus size={14} /> New Rule
                     </button>
                     <div className={`p-8 rounded-xl border ${th.border} text-center`}>
@@ -1661,7 +1661,7 @@ function OutlookEmail({ onToast }) {
                       <p className={`text-xs ${th.textMuted} truncate`}>{n.body}</p>
                       <p className={`text-xs ${th.textMuted} mt-0.5`}>{n.time}</p>
                     </div>
-                    {!n.read && <div className="w-2 h-2 bg-slate-800 rounded-full mt-1.5 flex-shrink-0" />}
+                    {!n.read && <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0" />}
                   </div>
                 ))
               )}
@@ -1729,7 +1729,7 @@ function OutlookEmail({ onToast }) {
             </div>
             <div className="p-3 shrink-0">
               <button onClick={() => { startCompose(); setShowMobileSidebar(false); }}
-                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
+                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
                 <Plus size={16} />New email
               </button>
             </div>
@@ -1743,14 +1743,14 @@ function OutlookEmail({ onToast }) {
                 { key: "Deleted", label: "Trash", icon: Trash2 },
               ].map(({ key, label, icon: Icon, count }) => (
                 <button key={key} onClick={() => { setActiveFolder(key); setOpenedMailId(null); setMobileView("list"); setShowMobileSidebar(false); }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === key ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === key ? "bg-blue-500 text-white" : `${th.hover} ${th.text}`}`}>
                   <Icon size={16} />{label}
-                  {count > 0 && <span className="ml-auto text-xs font-semibold bg-slate-800 text-white px-1.5 py-0.5 rounded-full">{count}</span>}
+                  {count > 0 && <span className="ml-auto text-xs font-semibold bg-blue-500 text-white px-1.5 py-0.5 rounded-full">{count}</span>}
                 </button>
               ))}
               <div className={`my-2 border-t ${th.border}`} />
               <button onClick={() => { setActiveFolder("Templates"); setOpenedMailId(null); setShowMobileSidebar(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === "Templates" ? "bg-slate-800 text-white" : `${th.hover} ${th.text}`}`}>
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition ${activeFolder === "Templates" ? "bg-blue-500 text-white" : `${th.hover} ${th.text}`}`}>
                 <FileText size={16} />Templates
               </button>
               <div className={`my-2 border-t ${th.border}`} />
@@ -1806,7 +1806,7 @@ function OutlookEmail({ onToast }) {
             <aside className={`hidden md:flex md:w-56 ${th.surface} border-r ${th.border} flex-col shrink-0`}>
               <div className="p-3">
                 <button onClick={() => startCompose()}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
+                  className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
                   <Plus size={16} />New email
                 </button>
               </div>
@@ -1883,7 +1883,7 @@ function OutlookEmail({ onToast }) {
               <div className="flex gap-1.5 min-w-max">
                 {[...FOLDERS, { key: "Templates", label: "Templates", icon: FileText }].map(({ key, label }) => (
                   <button key={key} onClick={() => { setActiveFolder(key); setOpenedMailId(null); setMobileView("list"); }}
-                    className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap font-medium transition ${activeFolder === key ? "bg-slate-800 text-white" : isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}>
+                    className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap font-medium transition ${activeFolder === key ? "bg-blue-500 text-white" : isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-700"}`}>
                     {label}{folderCounts[key] ? ` (${folderCounts[key]})` : ""}
                   </button>
                 ))}
@@ -2031,7 +2031,7 @@ function OutlookEmail({ onToast }) {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1.5 mb-0.5">
-                                    {!isRead && <div className="w-2 h-2 bg-slate-800 rounded-full shrink-0" />}
+                                    {!isRead && <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0" />}
                                     <span className={`text-sm truncate ${!isRead ? "font-semibold" : ""} ${th.text}`}>
                                       {hl(mail.subject || "(No subject)")}
                                     </span>
@@ -2226,11 +2226,11 @@ function OutlookEmail({ onToast }) {
                                   <div className="relative flex-shrink-0">
                                     <div className="flex rounded-lg overflow-hidden shadow-sm">
                                       <button onClick={handleInlineSend} disabled={inlineSending}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium transition disabled:opacity-50">
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition disabled:opacity-50">
                                         <Send size={14} />{inlineSending ? "Sending…" : "Send"}
                                       </button>
                                       <button onClick={() => setInlineSendDropdown(p => !p)}
-                                        className="flex items-center px-2 py-2 bg-slate-800 hover:bg-slate-900 text-white border-l border-slate-600 transition">
+                                        className="flex items-center px-2 py-2 bg-blue-500 hover:bg-blue-600 text-white border-l border-slate-600 transition">
                                         <ChevronDown size={14} />
                                       </button>
                                     </div>
@@ -2497,7 +2497,7 @@ function OutlookEmail({ onToast }) {
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
                       <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", assignedEmail: loggedInEmail, logo: "" }); }}
-                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs transition">
+                        className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
                     </div>
@@ -2548,7 +2548,7 @@ function OutlookEmail({ onToast }) {
                                 onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))}
                                 required rows={6}
                                 placeholder="Enter footer content..."
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`} />
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -2577,7 +2577,7 @@ function OutlookEmail({ onToast }) {
                             </div>
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
-                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition disabled:opacity-50">
+                                className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
                                 {isSubmitting ? "Creating..." : "Create Template"}
                               </button>
                               <button type="button" onClick={() => setShowAddTemplate(false)}
@@ -2614,7 +2614,7 @@ function OutlookEmail({ onToast }) {
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
                                 <textarea value={editTemplate.body}
                                   onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} required rows={6}
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-slate-500`} />
+                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -2642,7 +2642,7 @@ function OutlookEmail({ onToast }) {
                               </div>
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
-                                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition disabled:opacity-50">
+                                  className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
                                   {isSubmitting ? "Saving..." : "Save Changes"}
                                 </button>
                                 <button type="button" onClick={() => setEditTemplateIdx(null)}
@@ -2681,7 +2681,7 @@ function OutlookEmail({ onToast }) {
                                 ); })()}
                               </div>
                               <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject, body: tpl.body }); }}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-xl transition">
+                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition">
                                 <Mail size={14} />Use Template
                               </button>
                             </div>
@@ -2737,7 +2737,7 @@ function OutlookEmail({ onToast }) {
                         <button key={i}
                           onClick={() => { setSelectedCalDay(cell.date); setCalDate(new Date(cell.date.getFullYear(), cell.date.getMonth(), 1)); setMiniCalDate(new Date(cell.date.getFullYear(), cell.date.getMonth(), 1)); }}
                           className={`flex items-center justify-center w-7 h-7 mx-auto rounded-full text-[11px] transition font-medium
-                            ${isToday ? "bg-slate-800 text-white" :
+                            ${isToday ? "bg-blue-500 text-white" :
                               isSel ? isDark ? "bg-gray-600 text-white" : "bg-gray-200 text-gray-800" :
                                 !cell.curr ? th.textMuted + " opacity-40" :
                                   `${th.hover} ${th.text}`}`}>
@@ -2786,7 +2786,7 @@ function OutlookEmail({ onToast }) {
                 <div className={`border-b ${th.border} px-2 md:px-3 py-2 flex items-center gap-1.5 md:gap-2 flex-wrap shrink-0`}>
                   <button
                     onClick={() => { setEventFormDate(selectedCalDay); setShowEventForm(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm rounded-lg font-medium transition shrink-0">
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg font-medium transition shrink-0">
                     <Plus size={14} />New event <ChevronDown size={11} />
                   </button>
                   <div className={`hidden md:block w-px h-5 ${isDark ? "bg-gray-600" : "bg-gray-300"}`} />
@@ -2858,7 +2858,7 @@ function OutlookEmail({ onToast }) {
                                   className={`border-r last:border-r-0 ${th.border} p-0.5 md:p-1 cursor-pointer transition group ${!cell.curr ? "opacity-40" : ""} ${isSel && !isToday ? isDark ? "bg-gray-800" : "bg-blue-50/50" : isDark ? "hover:bg-gray-800" : "hover:bg-gray-50"}`}>
                                   <div className="mb-0.5">
                                     <span className={`inline-flex items-center justify-center w-6 h-6 md:w-7 md:h-7 text-xs md:text-sm rounded-full font-medium
-                                      ${isToday ? "bg-slate-800 text-white font-bold" :
+                                      ${isToday ? "bg-blue-500 text-white font-bold" :
                                         isSel ? isDark ? "bg-gray-600 text-white" : "bg-blue-100 text-blue-700" :
                                           th.text}`}>
                                       {cell.date.getDate()}
@@ -2936,7 +2936,7 @@ function OutlookEmail({ onToast }) {
                               return (
                                 <div key={i} className={`py-1.5 text-center border-r last:border-r-0 ${th.border}`}>
                                   <p className={`text-[10px] font-medium ${th.textMuted}`}>{d.toLocaleDateString("en-US", { weekday: "short" })}</p>
-                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold mx-auto mt-0.5 ${isTod ? "bg-slate-800 text-white" : th.text}`}>
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold mx-auto mt-0.5 ${isTod ? "bg-blue-500 text-white" : th.text}`}>
                                     {d.getDate()}
                                   </span>
                                 </div>
@@ -3046,7 +3046,7 @@ function OutlookEmail({ onToast }) {
                         <div className="flex items-center gap-0.5 overflow-x-auto">
                           <button onClick={handleSaveEvent}
                             disabled={!newEventTitle.trim()}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md mr-1 transition-colors shrink-0 ${newEventTitle.trim() ? "bg-slate-800 hover:bg-slate-900 text-white" : "bg-slate-800/30 text-white/35 cursor-not-allowed"}`}>
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md mr-1 transition-colors shrink-0 ${newEventTitle.trim() ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-blue-500/30 text-white/35 cursor-not-allowed"}`}>
                             <Bookmark size={13} />Save
                           </button>
                           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 border border-white/20 text-white text-xs font-semibold rounded-md shrink-0">
@@ -3141,7 +3141,7 @@ function OutlookEmail({ onToast }) {
                         <div className="flex-1 overflow-y-auto px-4 md:px-7 py-4 md:py-5">
                           {/* Calendar selector */}
                           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/8">
-                            <span className="w-3 h-3 rounded-full bg-slate-800 shrink-0" />
+                            <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0" />
                             <span className="text-sm text-white/70 truncate">
                               Calendar ({accounts[0]?.username || "your account"})
                             </span>
@@ -3168,7 +3168,7 @@ function OutlookEmail({ onToast }) {
                                       const ac = avatarColors[(p.name || p.email).charCodeAt(0) % avatarColors.length];
                                       const ini = (p.name || p.email).split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                                       return (
-                                        <span key={p.email} className="flex items-center gap-1.5 bg-slate-800/15 border border-blue-500/30 text-white text-xs px-2 py-1 rounded-full max-w-[160px]">
+                                        <span key={p.email} className="flex items-center gap-1.5 bg-blue-500/15 border border-blue-500/30 text-white text-xs px-2 py-1 rounded-full max-w-[160px]">
                                           <span className={`w-4 h-4 rounded-full ${ac} flex items-center justify-center text-[8px] font-bold shrink-0`}>{ini}</span>
                                           <span className="truncate">{p.name || p.email}</span>
                                           <button onMouseDown={e => { e.preventDefault(); setEvSelectedAttendees(a => a.filter(x => x.email !== p.email)); }} className="text-white/35 hover:text-white/80 shrink-0 ml-0.5">
@@ -3261,7 +3261,7 @@ function OutlookEmail({ onToast }) {
                             </div>
                             <label className="flex items-center gap-2 cursor-pointer shrink-0 ml-auto">
                               <div onClick={() => setNewEventAllDay(p => !p)}
-                                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventAllDay ? "bg-slate-800" : "bg-white/20"}`}>
+                                className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventAllDay ? "bg-blue-500" : "bg-white/20"}`}>
                                 <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newEventAllDay ? "translate-x-4" : "translate-x-0.5"}`} />
                               </div>
                               <span className="text-xs text-white/50">All day</span>
@@ -3281,7 +3281,7 @@ function OutlookEmail({ onToast }) {
                           <div className="flex items-center gap-3 py-3 border-b border-white/8 px-1">
                             <Video size={18} className="text-white/35 shrink-0" />
                             <div onClick={() => setNewEventOnline(p => !p)}
-                              className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventOnline ? "bg-slate-800" : "bg-white/20"}`}>
+                              className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${newEventOnline ? "bg-blue-500" : "bg-white/20"}`}>
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newEventOnline ? "translate-x-4" : "translate-x-0.5"}`} />
                             </div>
                             <span className="text-sm text-white/70 font-medium">Teams meeting</span>
@@ -3394,7 +3394,7 @@ function OutlookEmail({ onToast }) {
                 value={scheduleDateTime}
                 onChange={e => setScheduleDateTime(e.target.value)}
                 min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                className={`w-full px-3 py-2.5 border ${th.border} rounded-lg text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-white"} outline-none focus:border-transparent focus:ring-2 focus:ring-slate-500`}
+                className={`w-full px-3 py-2.5 border ${th.border} rounded-lg text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-white"} outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500`}
               />
               {inlineError && <p className="mt-2 text-xs text-red-500">{inlineError}</p>}
             </div>
@@ -3404,7 +3404,7 @@ function OutlookEmail({ onToast }) {
                 Cancel
               </button>
               <button onClick={handleScheduleSend} disabled={!scheduleDateTime || schedulingInProgress}
-                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
                 <Clock size={14} />{schedulingInProgress ? "Scheduling…" : "Schedule"}
               </button>
             </div>
@@ -4333,7 +4333,7 @@ useEffect(() => {
   const d = {
     bg: "bg-white", surface: "bg-gray-50", text: "text-gray-900",
     muted: "text-gray-600", border: "border-gray-200", borderSm: "border-gray-100",
-    input: "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-slate-500",
+    input: "bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:ring-blue-500",
     hover: "hover:bg-gray-100", hoverBlue: "hover:bg-blue-50",
     chip: "bg-white border-gray-300 text-gray-700",
     tag: "bg-blue-100 text-blue-800 border-blue-300",
@@ -4432,7 +4432,7 @@ useEffect(() => {
                 <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${isDark ? "bg-blue-900/20" : "bg-blue-50"}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-800 rounded-lg flex-shrink-0">
+                      <div className="p-2 bg-blue-500 rounded-lg flex-shrink-0">
                         <FileText size={20} className="text-white" />
                       </div>
                       <div className="min-w-0">
@@ -4460,7 +4460,7 @@ useEffect(() => {
                     <input
                       type="text"
                       placeholder="Search tags..."
-                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-slate-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                      className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -4610,7 +4610,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={handleApply}
-                        className="px-3 py-2 bg-slate-800 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-slate-900 transition-colors shadow-sm"
+                        className="px-3 py-2 bg-blue-500 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors shadow-sm"
                       >
                         Apply
                       </button>
@@ -4939,7 +4939,7 @@ useEffect(() => {
                   <button
                     type="submit"
                     disabled={isSending}
-                    className="flex items-center gap-2 bg-slate-800 text-white px-3 sm:px-4 py-2 hover:bg-slate-900 transition disabled:bg-slate-400 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
+                    className="flex items-center gap-2 bg-blue-500 text-white px-3 sm:px-4 py-2 hover:bg-blue-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
                   >
                     <Send size={15} />
                     {isSending ? "Sending..." : "Send"}
@@ -4947,7 +4947,7 @@ useEffect(() => {
                   <button
                     type="button"
                     onClick={() => setSendDropdown(p => !p)}
-                    className="flex items-center px-2 bg-slate-800 hover:bg-slate-900 text-white border-l border-slate-600 transition h-10 sm:h-auto"
+                    className="flex items-center px-2 bg-blue-500 hover:bg-blue-600 text-white border-l border-slate-600 transition h-10 sm:h-auto"
                   >
                     <ChevronDown size={14} />
                   </button>
@@ -5059,7 +5059,7 @@ useEffect(() => {
                     value={toDraft}
                     onChange={handleToInputChange}
                     onFocus={() => setShowEmailSuggestions(filteredEmailSuggestions.length > 0)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-slate-500 focus:ring-2 transition-all text-sm ${d.input}`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
                   />
 
                   {/* Suggestions in modal */}
@@ -5141,7 +5141,7 @@ useEffect(() => {
                   value={scheduleDateTime}
                   onChange={e => setScheduleDateTime(e.target.value)}
                   min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-slate-500 focus:ring-2 ${d.input}`}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 ${d.input}`}
                 />
                 {errors.apiError && <p className="mt-2 text-xs text-red-500">{errors.apiError}</p>}
               </div>
@@ -5152,7 +5152,7 @@ useEffect(() => {
                 </button>
                 <button type="button" onClick={handleScheduleSend}
                   disabled={!scheduleDateTime || schedulingInProgress}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition disabled:opacity-50">
                   <Clock size={14} />{schedulingInProgress ? "Scheduling…" : "Schedule"}
                 </button>
               </div>

@@ -53,7 +53,7 @@ const FormInput = ({
       defaultValue={defaultValue}
       step={step}
       multiple={multiple}
-      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
+      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
         } ${error ? "border-red-500 focus:ring-red-500 bg-red-50/30" : ""} ${className}`}
     />
   </div>
@@ -85,7 +85,7 @@ const FormSelect = ({
       required={required}
       disabled={disabled}
       defaultValue={defaultValue}
-      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
+      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
         } ${error ? "border-red-500 focus:ring-red-500" : ""} ${className}`}
     >
       {children}
@@ -154,7 +154,7 @@ const FormTextarea = ({
       disabled={disabled}
       defaultValue={defaultValue}
       rows={rows}
-      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
+      className={`w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-slate-300 ${disabled ? "bg-slate-50 cursor-not-allowed text-slate-500" : ""
         } ${error ? "border-red-500 focus:ring-red-500" : ""} ${className}`}
     />
     {error && <p className="text-xs text-red-500 font-medium mt-1">{error}</p>}
@@ -1029,7 +1029,7 @@ function AddForms({
                         setShowAccounts(true);
                       }}
                       onFocus={() => setShowAccounts(true)}
-                      className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                      className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     <input type="hidden" name="Account" value={selectedAccountId} />
                     {showAccounts && (
@@ -1088,7 +1088,7 @@ function AddForms({
                       type="checkbox"
                       checked={generateEnquiryNo}
                       onChange={(e) => setGenerateEnquiryNo(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-slate-500"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
                     />
                     Generate Enquiry Number
                   </label>
@@ -1109,7 +1109,7 @@ function AddForms({
                         setGenerateEstimatedQuote(e.target.checked);
                         updateContactField("EstimatedQuote", e.target.checked ? "EST-" : "");
                       }}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-slate-500"
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
                     />
                     Add Estimated Quote
                   </label>
@@ -1119,7 +1119,7 @@ function AddForms({
                       value={contactFormData.EstimatedQuote || ""}
                       onChange={(e) => updateContactField("EstimatedQuote", e.target.value)}
                       placeholder="EST-0019"
-                      className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500"
+                      className="w-full px-3 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                     />
                   )}
                 </div>
@@ -1305,7 +1305,7 @@ function AddForms({
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-slate-900 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-600 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
           >
             <svg
               className="w-5 h-5"
@@ -1742,7 +1742,7 @@ function AddForms({
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-slate-900 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-600 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
           >
             <svg
               className="w-5 h-5"
@@ -1881,7 +1881,7 @@ function AddForms({
                   type="number"
                   step="0.01"
                   placeholder="Amount"
-                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-gray-300"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-gray-300"
                   value={productFormData.BaseCurrencyAmount}
                   onChange={(e) => {
                     updateProductField("BaseCurrencyAmount", e.target.value);
@@ -1927,7 +1927,7 @@ function AddForms({
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-slate-900 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-600 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
           >
             <svg
               className="w-5 h-5"
@@ -2474,7 +2474,7 @@ function AddForms({
                     type="number"
                     step="0.01"
                     placeholder="Total Price"
-                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-gray-300"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-gray-300"
                     value={dealAmount}
                     onChange={(e) => setDealAmount(e.target.value)}
                   />
@@ -2529,7 +2529,7 @@ function AddForms({
                 <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50 space-y-4">
                   <div className="bg-white p-4 rounded-lg border-2 border-gray-200 space-y-3">
                     <label className="block text-sm font-semibold text-gray-700">Add Product</label>
-                    <select id="productSelect" className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent hover:border-gray-300" defaultValue="">
+                    <select id="productSelect" className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 bg-white text-gray-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-gray-300" defaultValue="">
                       <option value="">Select product to add</option>
                       {(Array.isArray(products) ? products : []).map((p) => {
                         const name = p?.name || p?.Name || "";
@@ -2551,7 +2551,7 @@ function AddForms({
                       const cat = prod ? (prod?.category || prod?.Category || "") : "";
                       setSelectedProducts([...selectedProducts, { name, category: cat }]);
                       select.value = "";
-                    }} className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg transition-all duration-200">
+                    }} className="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-all duration-200">
                       Add Product
                     </button>
                   </div>
@@ -2768,7 +2768,7 @@ function AddForms({
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-slate-900 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-600 text-white font-medium shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200"
           >
             <svg
               className="w-5 h-5"

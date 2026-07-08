@@ -197,7 +197,7 @@ const ScannerModal = memo(({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/92 backdrop-blur-2xl animate-in fade-in duration-200"
     >
-      <div className="relative w-full rounded-3xl overflow-hidden max-w-[480px] bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl border border-white/10 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-6 duration-300"
+      <div className="relative w-full rounded-3xl overflow-hidden max-w-[480px] bg-gradient-to-b from-blue-600 to-slate-950 shadow-2xl border border-white/10 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-6 duration-300"
         style={{
           boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)",
           animation: "bcuSlideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1)",
@@ -256,7 +256,7 @@ const ScannerModal = memo(({
 
           {/* Camera error state */}
           {cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 p-7 text-center gap-4 animate-in fade-in duration-200">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-blue-600 to-slate-950 p-7 text-center gap-4 animate-in fade-in duration-200">
               <div className="w-14 h-14 rounded-2xl bg-red-600/15 border border-red-600/25 flex items-center justify-center text-red-400 mb-1">
                 <svg width={24} height={24} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
@@ -725,7 +725,7 @@ const BusinessCardUpload = ({ onSuccess, onError, onSetCountry, onSetState }) =>
   return (
     <>
       {/* ── Main Card Widget ─────────────────────────────────────────────── */}
-      <div className="rounded-[18px]   overflow-hidden border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 font-['DM_Sans,Inter,system-ui,sans-serif'] "
+      <div className="rounded-[18px]   overflow-hidden border border-white/10 bg-gradient-to-b from-blue-600 to-slate-950 font-['DM_Sans,Inter,system-ui,sans-serif'] "
         style={{
           boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.06) inset",
         }}>

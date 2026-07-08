@@ -94,7 +94,7 @@ export default function CallLogs({ onToast }) {
       {/* Selection bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-xl px-6 py-3 mb-4 shadow-sm">
-          <div className="w-8 h-8 bg-slate-800 text-white rounded-full flex items-center justify-center text-sm font-medium">
+          <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
             {selected.size}
           </div>
           <span className="text-sm text-gray-700">selected</span>
@@ -138,7 +138,7 @@ export default function CallLogs({ onToast }) {
             placeholder="Search call logs..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 max-w-xs w-full"
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-xs w-full"
           />
         </div>
 
@@ -157,7 +157,7 @@ export default function CallLogs({ onToast }) {
                       checked={allSelected}
                       ref={el => { if (el) el.indeterminate = someSelected; }}
                       onChange={toggleAll}
-                      className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
+                      className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-blue-500 cursor-pointer"
                     />
                   </th>
                   {COLUMNS.map(col => (
@@ -190,7 +190,7 @@ export default function CallLogs({ onToast }) {
                           type="checkbox"
                           checked={selected.has(i)}
                           onChange={() => toggleRow(i)}
-                          className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-slate-500 cursor-pointer"
+                          className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-blue-500 cursor-pointer"
                         />
                       </td>
                       {COLUMNS.map(col => (

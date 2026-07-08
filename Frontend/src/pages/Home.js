@@ -307,7 +307,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[150px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Created By</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
                   value={filters.createdBy}
                   onChange={(e) => onFilterChange('createdBy', e.target.value)}
                 >
@@ -323,7 +323,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
             <div className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
               <label className="text-xs font-medium text-gray-600 mb-1.5 block">Date Range</label>
               <select
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
                 value={filters.dateRange}
                 onChange={(e) => onFilterChange('dateRange', e.target.value)}
               >
@@ -342,7 +342,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
                   <label className="text-xs font-medium text-gray-600 mb-1.5 block">From Date</label>
                   <input
                     type="date"
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-700 transition-colors"
                     value={filters.customFrom || ''}
                     max={filters.customTo || undefined}
                     onChange={(e) => onFilterChange('customFrom', e.target.value)}
@@ -352,7 +352,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
                   <label className="text-xs font-medium text-gray-600 mb-1.5 block">To Date</label>
                   <input
                     type="date"
-                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
+                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-700 transition-colors"
                     value={filters.customTo || ''}
                     min={filters.customFrom || undefined}
                     onChange={(e) => onFilterChange('customTo', e.target.value)}
@@ -366,7 +366,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Month</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedMonth}
                   onChange={(e) => onFilterChange('selectedMonth', parseInt(e.target.value))}
                 >
@@ -380,7 +380,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[180px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Quarter</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedQuarter}
                   onChange={(e) => onFilterChange('selectedQuarter', parseInt(e.target.value))}
                 >
@@ -397,7 +397,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div className="w-full sm:w-auto flex-shrink-0 min-w-[120px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">Select Year</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-gray-50 text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 text-gray-700 transition-colors"
                   value={filters.selectedYear}
                   onChange={(e) => onFilterChange('selectedYear', parseInt(e.target.value))}
                 >
@@ -417,7 +417,7 @@ function FilterBar({ filters, onFilterChange, deals, onReset, onExport, canViewA
               <div key={key} className="w-full sm:w-auto flex-shrink-0 min-w-[140px]">
                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">{label}</label>
                 <select
-                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-500 bg-white text-gray-700 transition-colors"
+                  className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-700 transition-colors"
                   value={filters[key]}
                   onChange={(e) => onFilterChange(key, e.target.value)}
                 >
@@ -3123,7 +3123,7 @@ export default function Home() {
                     }}
                     className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
                   >
-                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-slate-800 mt-2" />
+                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-2" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{deal.dealName || 'Unnamed Deal'}</p>
                       <p className="text-xs text-gray-600 truncate">
@@ -3173,7 +3173,7 @@ export default function Home() {
         <div
           className={`fixed bottom-6 right-6 z-[9999] px-5 py-3 rounded-xl shadow-xl text-white text-sm font-medium flex items-center gap-2 animate-in slide-in-from-bottom-4 duration-300 ${toastMsg.type === 'success' ? 'bg-emerald-600' :
             toastMsg.type === 'error' ? 'bg-orange-600' :
-              'bg-slate-800'
+              'bg-blue-500'
             }`}
         >
           {toastMsg.type === 'success' && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}

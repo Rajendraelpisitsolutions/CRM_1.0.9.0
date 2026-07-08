@@ -1174,7 +1174,7 @@ function Contacts({
           <div className="flex flex-col gap-2 mb-4 w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 w-full">
               <div className="flex items-center gap-2">
-                <div className="min-w-8 h-8 px-2 bg-slate-800 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                <div className="min-w-8 h-8 px-2 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
                   {selectAllAcrossPages ? totalItems : selected.size}
                 </div>
                 <span className="text-sm sm:text-base text-gray-700">selected</span>
@@ -1183,7 +1183,7 @@ function Contacts({
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 {/* Send Email — always available for any selection (one, some, or all) */}
                 <button
-                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-slate-800 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-white font-medium hover:bg-slate-900 transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-blue-500 rounded-lg px-3 sm:px-4 py-2 text-xs sm:text-sm text-white font-medium hover:bg-blue-600 transition-colors duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
                   onClick={handleSendEmailToSelected}
                   disabled={emailPreparing}
                 >
@@ -1243,7 +1243,7 @@ function Contacts({
               </div>
               <div className="flex gap-3 justify-center">
                 <button type="button" onClick={() => setShowDeleteModal(false)}
-                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:outline-none">
+                  className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:outline-none">
                   Cancel
                 </button>
                 <button type="button" onClick={confirmDelete}
@@ -1291,14 +1291,14 @@ function Contacts({
                         <button
                           type="button"
                           onClick={() => setBusinessCardSide('front')}
-                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'front' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'front' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
                           Front
                         </button>
                         <button
                           type="button"
                           onClick={() => setBusinessCardSide('back')}
-                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'back' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          className={`px-3 py-2 rounded-lg transition-colors duration-150 ${businessCardSide === 'back' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                         >
                           Back
                         </button>
@@ -1372,7 +1372,7 @@ function Contacts({
                         if (el) el.indeterminate = someSelected;
                       }}
                       onChange={toggleAll}
-                      className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                      className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </th>
                   {/* Column Headers with Sorting */}
@@ -1415,7 +1415,7 @@ function Contacts({
                         aria-label={`Select row ${index + 1}`}
                         checked={selected.has(index)}
                         onChange={() => toggleRow(index)}
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded border-gray-300 text-slate-800 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </td>
 
@@ -1662,7 +1662,7 @@ function Contacts({
                     for (let i = startPage; i <= endPage; i++) {
                       pages.push(
                         <button key={i} onClick={() => goToPage(i)} disabled={paginationLoading}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-slate-800 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 ${i === currentPage ? 'bg-blue-500 text-white' : 'bg-transparent text-gray-700 hover:bg-gray-100'
                             }`}>{i}</button>
                       );
                     }
@@ -1733,19 +1733,19 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-xs">First Name</label>
-                      <input type="text" value={editForm.FirstName || ""} onChange={(e) => setEditForm({ ...editForm, FirstName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.FirstName || ""} onChange={(e) => setEditForm({ ...editForm, FirstName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-xs">Last Name</label>
-                      <input type="text" value={editForm.LastName || ""} onChange={(e) => setEditForm({ ...editForm, LastName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.LastName || ""} onChange={(e) => setEditForm({ ...editForm, LastName: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Job Title</label>
-                      <input type="text" value={editForm.JobTitle || ""} onChange={(e) => setEditForm({ ...editForm, JobTitle: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.JobTitle || ""} onChange={(e) => setEditForm({ ...editForm, JobTitle: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     {/* <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Enquiry No</label>
-                    <input type="text" value={editForm.EnquiryNo || ""} onChange={(e) => setEditForm({ ...editForm, EnquiryNo: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="text" value={editForm.EnquiryNo || ""} onChange={(e) => setEditForm({ ...editForm, EnquiryNo: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div> */}
                   </div>
                 </div>
@@ -1756,27 +1756,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Work Email</label>
-                      <input type="email" value={editForm.WorkEmail || ""} onChange={(e) => setEditForm({ ...editForm, WorkEmail: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="email" value={editForm.WorkEmail || ""} onChange={(e) => setEditForm({ ...editForm, WorkEmail: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Work Phone</label>
-                      <input type="tel" value={editForm.WorkPhone || ""} onChange={(e) => setEditForm({ ...editForm, WorkPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="tel" value={editForm.WorkPhone || ""} onChange={(e) => setEditForm({ ...editForm, WorkPhone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Mobile</label>
-                      <input type="tel" value={editForm.Mobile || ""} onChange={(e) => setEditForm({ ...editForm, Mobile: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="tel" value={editForm.Mobile || ""} onChange={(e) => setEditForm({ ...editForm, Mobile: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">LinkedIn</label>
-                      <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.LinkedIn || ""} onChange={(e) => setEditForm({ ...editForm, LinkedIn: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Facebook</label>
-                      <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Facebook || ""} onChange={(e) => setEditForm({ ...editForm, Facebook: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Twitter</label>
-                      <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Twitter || ""} onChange={(e) => setEditForm({ ...editForm, Twitter: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -1787,27 +1787,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Address</label>
-                      <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
+                      <textarea value={editForm.Address || ""} onChange={(e) => setEditForm({ ...editForm, Address: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Country</label>
-                      <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Country || ""} onChange={(e) => setEditForm({ ...editForm, Country: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">State</label>
-                      <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.State || ""} onChange={(e) => setEditForm({ ...editForm, State: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">City</label>
-                      <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.City || ""} onChange={(e) => setEditForm({ ...editForm, City: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Zipcode</label>
-                      <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Zipcode || ""} onChange={(e) => setEditForm({ ...editForm, Zipcode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Time Zone</label>
-                      <input type="text" value={editForm.TimeZone || ""} onChange={(e) => setEditForm({ ...editForm, TimeZone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.TimeZone || ""} onChange={(e) => setEditForm({ ...editForm, TimeZone: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -1819,22 +1819,22 @@ function Contacts({
                     {/* âŒ REMOVED: Account ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Account ID</label>
-                    <input type="number" value={editForm.AccountId || ""} onChange={(e) => setEditForm({...editForm, AccountId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="number" value={editForm.AccountId || ""} onChange={(e) => setEditForm({...editForm, AccountId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Account</label>
-                      <input type="text" value={editForm.Account || ""} onChange={(e) => setEditForm({ ...editForm, Account: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Account || ""} onChange={(e) => setEditForm({ ...editForm, Account: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     {/* âŒ REMOVED: Sales Owner ID - Internal ID should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Sales Owner ID</label>
-                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="number" value={editForm.SalesOwnerId || ""} onChange={(e) => setEditForm({...editForm, SalesOwnerId: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Sales Owner</label>
-                      <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.SalesOwner || ""} onChange={(e) => setEditForm({ ...editForm, SalesOwner: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -1845,39 +1845,39 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Status</label>
-                      <input type="text" value={editForm.Status || ""} onChange={(e) => setEditForm({ ...editForm, Status: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Status || ""} onChange={(e) => setEditForm({ ...editForm, Status: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Life Cycle Stage</label>
-                      <input type="text" value={editForm.LifeCycleStage || ""} onChange={(e) => setEditForm({ ...editForm, LifeCycleStage: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.LifeCycleStage || ""} onChange={(e) => setEditForm({ ...editForm, LifeCycleStage: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Territory</label>
-                      <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Territory || ""} onChange={(e) => setEditForm({ ...editForm, Territory: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Source</label>
-                      <input type="text" value={editForm.Source || ""} onChange={(e) => setEditForm({ ...editForm, Source: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Source || ""} onChange={(e) => setEditForm({ ...editForm, Source: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Campaign</label>
-                      <input type="text" value={editForm.Campaign || ""} onChange={(e) => setEditForm({ ...editForm, Campaign: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Campaign || ""} onChange={(e) => setEditForm({ ...editForm, Campaign: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Customer Fit</label>
-                      <input type="text" value={editForm.CustomerFit || ""} onChange={(e) => setEditForm({ ...editForm, CustomerFit: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.CustomerFit || ""} onChange={(e) => setEditForm({ ...editForm, CustomerFit: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Score</label>
-                      <input type="number" value={editForm.Score || ""} onChange={(e) => setEditForm({ ...editForm, Score: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="number" value={editForm.Score || ""} onChange={(e) => setEditForm({ ...editForm, Score: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Subscription Status</label>
-                      <input type="text" value={editForm.SubscriptionStatus || ""} onChange={(e) => setEditForm({ ...editForm, SubscriptionStatus: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.SubscriptionStatus || ""} onChange={(e) => setEditForm({ ...editForm, SubscriptionStatus: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Tags</label>
-                      <input type="text" value={editForm.Tags || ""} onChange={(e) => setEditForm({ ...editForm, Tags: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.Tags || ""} onChange={(e) => setEditForm({ ...editForm, Tags: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                 </div>
@@ -1888,27 +1888,27 @@ function Contacts({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Last Activity Type</label>
-                      <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.LastActivityType || ""} onChange={(e) => setEditForm({ ...editForm, LastActivityType: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     {/* âŒ REMOVED: Last Activity Date - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Activity Date</label>
-                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="date" value={editForm.LastActivityDate || ""} onChange={(e) => setEditForm({...editForm, LastActivityDate: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                     {/* âŒ REMOVED: Last Contacted Time - System-managed date should not be editable
                   <div className="flex flex-col gap-1.5">
                     <label className="font-medium text-gray-700 text-sm">Last Contacted Time</label>
-                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                    <input type="datetime-local" value={editForm.LastContactedTime || ""} onChange={(e) => setEditForm({...editForm, LastContactedTime: e.target.value})} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                   </div>
                   */}
                     <div className="flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Last Contacted Mode</label>
-                      <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" />
+                      <input type="text" value={editForm.LastContactedMode || ""} onChange={(e) => setEditForm({ ...editForm, LastContactedMode: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="sm:col-span-2 flex flex-col gap-1.5">
                       <label className="font-medium text-gray-700 text-sm">Recent Note</label>
-                      <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500" rows="2" />
+                      <textarea value={editForm.RecentNote || ""} onChange={(e) => setEditForm({ ...editForm, RecentNote: e.target.value })} className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500" rows="2" />
                     </div>
                   </div>
                 </div>
@@ -1923,7 +1923,7 @@ function Contacts({
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium text-sm transition-colors"
+                    className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium text-sm transition-colors"
                   >
                     Save Changes
                   </button>
@@ -2060,8 +2060,8 @@ function Contacts({
                   <button
                     className={`flex items-center justify-center sm:justify-start gap-2 px-2 sm:px-5 py-2 rounded-md text-sm transition-all duration-200 w-full sm:w-auto
                     ${showBusinessCard
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-800 text-white hover:bg-slate-900"
+                        ? "bg-blue-600 text-white"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
                       }`}
                     onClick={async () => {
                       if (!showBusinessCard) {
@@ -2349,7 +2349,7 @@ function Contacts({
                                     onBlur={() => {
                                       setTimeout(() => setSlideAccountMenuOpen(false), 200);
                                     }}
-                                    className="w-full rounded-xl px-4 py-3.5 pr-10 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all"
+                                    className="w-full rounded-xl px-4 py-3.5 pr-10 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                   />
                                   {(slideAccountSearch ||
                                     getField(selectedContactDetails, "AccountId") != null ||
@@ -2435,7 +2435,7 @@ function Contacts({
                               ) : (
                                 <input
                                   type="text"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
@@ -2449,7 +2449,7 @@ function Contacts({
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">Country</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "Country") || ""}
                               onChange={e => {
                                 setSelectedContactDetails({ ...selectedContactDetails, Country: e.target.value, State: "", City: "" });
@@ -2469,7 +2469,7 @@ function Contacts({
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">State</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "State") || ""}
                               onChange={e => {
                                 setSelectedContactDetails({ ...selectedContactDetails, State: e.target.value, City: "" });
@@ -2489,7 +2489,7 @@ function Contacts({
                           <div className="flex flex-col gap-2">
                             <label className="font-normal text-gray-700 text-sm">City</label>
                             <select
-                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                              className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                               value={getField(selectedContactDetails, "City") || ""}
                               onChange={e => setSelectedContactDetails({ ...selectedContactDetails, City: e.target.value })}
                               disabled={!slideStateCode}
@@ -2574,7 +2574,7 @@ function Contacts({
                               <label className="font-normal text-gray-700 text-sm">{label}</label>
                               {key === "Tags" || key === "RecentNote" || key === "OtherUnsubscribeReasons" || key === "WebForms" ? (
                                 <textarea
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 resize-none"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150 resize-none"
                                   rows="2"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
@@ -2582,28 +2582,28 @@ function Contacts({
                               ) : key === "Score" || key === "TotalChatSessions" || key === "ActiveSalesSequences" || key === "CompletedSalesSequences" ? (
                                 <input
                                   type="number"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? Number(e.target.value) : null })}
                                 />
                               ) : key === "WorkPhone" || key === "Mobile" || key === "Phone" ? (
                                 <input
                                   type="tel"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               ) : key === "WorkEmail" ? (
                                 <input
                                   type="email"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
                               ) : key === "Facebook" || key === "Twitter" || key === "LinkedIn" ? (
                                 <input
                                   type="url"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   placeholder="https://..."
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
@@ -2611,21 +2611,21 @@ function Contacts({
                               ) : key === "LastActivityDate" ? (
                                 <input
                                   type="date"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={formatDateOnly(getField(selectedContactDetails, key))}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? new Date(e.target.value).toISOString() : "" })}
                                 />
                               ) : key === "LastContactedTime" || key === "LastAssignedAt" || key === "LastSeenOnChat" || key === "FirstSeenOnChat" || key === "LastSeenOnWeb" || key === "CreatedAt" || key === "UpdatedAt" ? (
                                 <input
                                   type="date"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={formatDateOnly(getField(selectedContactDetails, key))}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value ? new Date(e.target.value).toISOString() : "" })}
                                 />
                               ) : (
                                 <input
                                   type="text"
-                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-slate-500 focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                                  className="w-full rounded-xl px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                                   value={getField(selectedContactDetails, key) || ""}
                                   onChange={e => setSelectedContactDetails({ ...selectedContactDetails, [key]: e.target.value })}
                                 />
@@ -2655,7 +2655,7 @@ function Contacts({
                               checked={slideGenerateEnquiryNo}
                               disabled={hasEnquiryNo}
                               onChange={(e) => setSlideGenerateEnquiryNo(e.target.checked)}
-                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
+                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-blue-500"
                             />
                             <span className="font-normal text-gray-700 text-sm">
                               Generate Enquiry Number
@@ -2684,7 +2684,7 @@ function Contacts({
                                     : ""
                                 );
                               }}
-                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-slate-500"
+                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-blue-500"
                             />
                             <span className="font-normal text-gray-700 text-sm">
                               Add Estimated Quote
@@ -2700,7 +2700,7 @@ function Contacts({
                               value={slideEstimatedQuote}
                               onChange={(e) => setSlideEstimatedQuote(e.target.value)}
                               placeholder="EST-0019"
-                              className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-slate-500 focus:ring-2 focus:ring-slate-500"
+                              className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                             />
                           ) : (
                             <p className="text-xs text-gray-500 mt-1.5 ml-6">
@@ -2759,7 +2759,7 @@ function Contacts({
                     {canEditContact(selectedContactDetails) ? (
                       <button
                         type="submit"
-                        className="px-6 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
+                        className="px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium shadow-sm transition-colors duration-200 flex items-center gap-2 ml-auto"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

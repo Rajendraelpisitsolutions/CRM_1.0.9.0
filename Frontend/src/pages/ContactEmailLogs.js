@@ -1097,7 +1097,7 @@ export default function ContactEmailLogs({
       <button
         type="button"
         onClick={() => setNoteDealFilter(null)}
-        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter == null ? "bg-slate-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter == null ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
       >
         Contact
       </button>
@@ -1106,7 +1106,7 @@ export default function ContactEmailLogs({
           key={deal.id}
           type="button"
           onClick={() => setNoteDealFilter(deal.id)}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter === deal.id ? "bg-slate-800 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${noteDealFilter === deal.id ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
         >
           {deal.name}
         </button>
@@ -1883,7 +1883,7 @@ export default function ContactEmailLogs({
                           </label>
                           <input
                             required
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                             value={meetingForm.Title}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1904,7 +1904,7 @@ export default function ContactEmailLogs({
                             <input
                               type="datetime-local"
                               required
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                               value={meetingForm.From}
                               onChange={(e) =>
                                 setMeetingForm((f) => ({
@@ -1922,7 +1922,7 @@ export default function ContactEmailLogs({
                             <input
                               type="datetime-local"
                               required
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                               value={meetingForm.To}
                               onChange={(e) =>
                                 setMeetingForm((f) => ({
@@ -1940,7 +1940,7 @@ export default function ContactEmailLogs({
                             Time Zone
                           </label>
                           <select
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                             value={meetingForm.TimeZone}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -1986,7 +1986,7 @@ export default function ContactEmailLogs({
                             Location
                           </label>
                           <input
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                             value={meetingForm.Location}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -2005,7 +2005,7 @@ export default function ContactEmailLogs({
                           </label>
                           <textarea
                             rows={3}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none resize-none"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
                             value={meetingForm.Description}
                             onChange={(e) =>
                               setMeetingForm((f) => ({
@@ -2249,7 +2249,7 @@ export default function ContactEmailLogs({
             )}
             <div className="flex justify-end px-6 pt-4 pb-2 bg-white border-b border-gray-200">
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                 onClick={() => {
                   setShowTaskForm(true);
                   setEditTask(null);
@@ -2279,7 +2279,7 @@ export default function ContactEmailLogs({
               <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                 <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                   {/* Form Header */}
-                  <div className="sticky top-0 z-100 bg-slate-800 px-6 py-4 flex items-center justify-between">
+                  <div className="sticky top-0 z-100 bg-blue-500 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white/10 rounded-lg">
                         <FileText className="w-5 h-5 text-white" />
@@ -2302,7 +2302,7 @@ export default function ContactEmailLogs({
                           Title <span className="text-red-500">*</span>
                         </label>
                         <input
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.Title}
                           onChange={(e) =>
@@ -2317,7 +2317,7 @@ export default function ContactEmailLogs({
                           Description
                         </label>
                         <textarea
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
                           rows="3"
                           value={taskForm.Description}
                           onChange={(e) =>
@@ -2335,7 +2335,7 @@ export default function ContactEmailLogs({
                           Task Type
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.TaskType}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2355,7 +2355,7 @@ export default function ContactEmailLogs({
                           Status <span className="text-red-500">*</span>
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.Status}
                           onChange={(e) =>
@@ -2376,7 +2376,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="datetime-local"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           required
                           value={taskForm.DueDate}
                           onChange={(e) =>
@@ -2393,7 +2393,7 @@ export default function ContactEmailLogs({
                           Outcome
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.Outcome}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2415,7 +2415,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={taskForm.OwnerId}
                           onChange={(e) =>
                             setTaskForm((f) => ({
@@ -2434,7 +2434,7 @@ export default function ContactEmailLogs({
                           </label>
                           <input
                             type="datetime-local"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                             value={taskForm.CompletedDate}
                             onChange={(e) =>
                               setTaskForm((f) => ({
@@ -2459,7 +2459,7 @@ export default function ContactEmailLogs({
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                        className="flex-1 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                       >
                         {editTask ? "Update Task" : "Create Task"}
                       </button>
@@ -2572,7 +2572,7 @@ export default function ContactEmailLogs({
                                       Description: "",
                                     });
                                   }}
-                                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                                 >
                                   <Plus className="w-4 h-4" />
                                   New Note
@@ -2692,7 +2692,7 @@ export default function ContactEmailLogs({
                 <button
                   type="button"
                   onClick={handleOutlookLogin}
-                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium shadow-sm transition-colors"
+                  className="px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium shadow-sm transition-colors"
                 >
                   Sign in with Microsoft
                 </button>
@@ -2917,7 +2917,7 @@ export default function ContactEmailLogs({
                   setNoteDealOnlySelected(false);
                   setNoteDestinationError("");
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 New Note
@@ -3062,7 +3062,7 @@ export default function ContactEmailLogs({
                 <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                   <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                     {/* HEADER (same as meeting) */}
-                    <div className="sticky top-0 z-10 bg-slate-800 px-6 py-4 flex items-center justify-between">
+                    <div className="sticky top-0 z-10 bg-blue-500 px-6 py-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white/10 rounded-lg">
                           <FileText className="w-5 h-5 text-white" />
@@ -3166,7 +3166,7 @@ export default function ContactEmailLogs({
                               }))
                             }
                             className="w-full border border-gray-300 rounded-lg px-4 py-2.5 
-            bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent 
+            bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent 
             outline-none transition-all resize-none"
                             placeholder="Write your note..."
                           />
@@ -3196,7 +3196,7 @@ export default function ContactEmailLogs({
 
                         <button
                           type="submit"
-                          className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                          className="flex-1 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                         >
                           {editNote ? "Update Note" : "Create Note"}
                         </button>
@@ -3248,7 +3248,7 @@ export default function ContactEmailLogs({
                 <button
                   type="button"
                   onClick={handleAddDeal}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   New Deal
@@ -3344,7 +3344,7 @@ export default function ContactEmailLogs({
                 <Plus className="w-4 h-4" /> Import Call Logs
               </button>
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                 onClick={() => {
                   setShowCallLogForm(true);
                   setEditCallLog(null);
@@ -3368,7 +3368,7 @@ export default function ContactEmailLogs({
             {showImportModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-                  <div className="flex items-center justify-between gap-3 bg-slate-900 px-6 py-4">
+                  <div className="flex items-center justify-between gap-3 bg-blue-600 px-6 py-4">
                     <div>
                       <h3 className="text-lg font-semibold text-white">
                         Import Call Logs
@@ -3417,7 +3417,7 @@ export default function ContactEmailLogs({
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                        className="px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
                         disabled={importLoading}
                       >
                         {importLoading ? "Importing..." : "Upload File"}
@@ -3431,7 +3431,7 @@ export default function ContactEmailLogs({
               <div className="fixed inset-0 z-50 flex h-full justify-end bg-black/30 backdrop-blur-sm">
                 <div className="bg-white shadow-2xl w-full sm:max-w-lg h-full flex flex-col">
                   {/* Form Header */}
-                  <div className="sticky top-0 bg-slate-800 px-6 py-4 flex items-center justify-between">
+                  <div className="sticky top-0 bg-blue-500 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white/10 rounded-lg">
                         <PhoneCall className="w-5 h-5 text-white" />
@@ -3456,7 +3456,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="text"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           placeholder="Person who made the call"
                           value={callLogForm.callOwner}
                           onChange={(e) =>
@@ -3475,7 +3475,7 @@ export default function ContactEmailLogs({
                           Call Type
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callType}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3499,7 +3499,7 @@ export default function ContactEmailLogs({
                           Call Direction
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callDirection}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3521,7 +3521,7 @@ export default function ContactEmailLogs({
                           Call Status
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callStatus}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3547,7 +3547,7 @@ export default function ContactEmailLogs({
                         <input
                           type="text"
                           placeholder="00:00"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.callDuration}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3566,7 +3566,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="tel"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           placeholder="(123) 456-7890"
                           value={callLogForm.phone}
                           onChange={(e) =>
@@ -3585,7 +3585,7 @@ export default function ContactEmailLogs({
                           Outcome
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.outcome}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3612,7 +3612,7 @@ export default function ContactEmailLogs({
                           Associated With Call
                         </label>
                         <select
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           value={callLogForm.associatedWithCall}
                           onChange={(e) =>
                             setCallLogForm((f) => ({
@@ -3639,7 +3639,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           placeholder="Account ID"
                           value={callLogForm.accountId}
                           onChange={(e) =>
@@ -3659,7 +3659,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="number"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           placeholder="Deal ID"
                           value={callLogForm.dealId}
                           onChange={(e) =>
@@ -3679,7 +3679,7 @@ export default function ContactEmailLogs({
                         </label>
                         <input
                           type="datetime-local"
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           required
                           value={callLogForm.createdAt}
                           onChange={(e) =>
@@ -3698,7 +3698,7 @@ export default function ContactEmailLogs({
                           Notes
                         </label>
                         <textarea
-                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
                           rows="4"
                           placeholder="Add any additional notes about this call..."
                           value={callLogForm.notes}
@@ -3751,7 +3751,7 @@ export default function ContactEmailLogs({
                               value={callLogTask.Title}
                               onChange={(e) => setCallLogTask((t) => ({ ...t, Title: e.target.value }))}
                               placeholder="e.g. Follow up with pricing details"
-                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                             />
                           </div>
 
@@ -3761,7 +3761,7 @@ export default function ContactEmailLogs({
                               <select
                                 value={callLogTask.TaskType}
                                 onChange={(e) => setCallLogTask((t) => ({ ...t, TaskType: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                               >
                                 <option value="">Select type</option>
                                 <option value="Call">Call</option>
@@ -3777,7 +3777,7 @@ export default function ContactEmailLogs({
                                 type="date"
                                 value={callLogTask.DueDate ? callLogTask.DueDate.split("T")[0] : ""}
                                 onChange={(e) => setCallLogTask((t) => ({ ...t, DueDate: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                               />
                             </div>
                             <div className="space-y-1.5">
@@ -3785,7 +3785,7 @@ export default function ContactEmailLogs({
                               <select
                                 value={callLogTask.Status}
                                 onChange={(e) => setCallLogTask((t) => ({ ...t, Status: e.target.value }))}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all"
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                               >
                                 <option value="Open">Open</option>
                                 <option value="In Progress">In Progress</option>
@@ -3801,7 +3801,7 @@ export default function ContactEmailLogs({
                               value={callLogTask.Description}
                               onChange={(e) => setCallLogTask((t) => ({ ...t, Description: e.target.value }))}
                               placeholder="Optional details…"
-                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-slate-500 focus:border-transparent outline-none transition-all resize-none"
+                              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
                             />
                           </div>
                         </div>
@@ -3824,7 +3824,7 @@ export default function ContactEmailLogs({
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors"
+                        className="flex-1 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
                       >
                         {editCallLog ? "Update Call Log" : "Create Call Log"}
                       </button>

@@ -415,7 +415,7 @@ function Product({
       {selected.size > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-white rounded-lg sm:rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 mb-4 w-full">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-slate-800 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+            <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
               {selected.size}
             </div>
             <span className="text-sm sm:text-base text-gray-700">selected</span>
@@ -592,7 +592,7 @@ function Product({
                 const pageNum = Math.max(1, currentPage - 2) + i;
                 if (pageNum > totalPages) return null;
                 return (
-                  <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${pageNum === currentPage ? 'bg-slate-800 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                  <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${pageNum === currentPage ? 'bg-blue-500 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}>
                     {pageNum}
                   </button>
@@ -617,7 +617,7 @@ function Product({
           <div className="fixed inset-0 bg-black/50 z-40" onClick={handleCloseProductDetails} />
           <div className="fixed right-0 top-0 h-full w-[60%] bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200 animate-in slide-in-from-right duration-300 text-sm">
             <div className="flex items-center gap-5 p-8 border-b border-gray-200 bg-white">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-2xl bg-slate-800 text-white">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center font-semibold text-2xl bg-blue-500 text-white">
                 {selectedProductDetails?.name ? String(selectedProductDetails.name).charAt(0).toUpperCase() : "P"}
               </div>
               <div className="flex flex-col gap-1 flex-1">
@@ -704,7 +704,7 @@ function Product({
                           </label>
                           <div className="relative">
                             <select
-                              className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
+                              className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
                               value={selectedProductDetails.active || "Yes"}
                               onChange={(e) =>
                                 setSelectedProductDetails({
@@ -731,7 +731,7 @@ function Product({
                           </label>
                           <div className="relative">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-normal">₹</span>
-                            <input type="number" step="1" min="0" className="w-full rounded-lg pl-10 pr-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 font-normal"
+                            <input type="number" step="1" min="0" className="w-full rounded-lg pl-10 pr-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150 font-normal"
                               value={selectedProductDetails.baseCurrencyAmount || ""}
                               onChange={(e) => setSelectedProductDetails({ ...selectedProductDetails, baseCurrencyAmount: e.target.value })}
                             />
@@ -746,7 +746,7 @@ function Product({
                             Category
                           </label>
                           <div className="relative">
-                            <select className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
+                            <select className="w-full rounded-lg pl-4 pr-10 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150 appearance-none cursor-pointer"
                               value={selectedProductDetails.category || ""}
                               onChange={(e) => setSelectedProductDetails({ ...selectedProductDetails, category: e.target.value })}
                             >
@@ -781,7 +781,7 @@ function Product({
                             </svg>
                             Created At
                           </label>
-                          <input type="date" className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150"
+                          <input type="date" className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150"
                             value={formatDateOnly(selectedProductDetails.createdAt || "")}
                             onChange={(e) => setSelectedProductDetails({
                               ...selectedProductDetails,
@@ -797,7 +797,7 @@ function Product({
                             </svg>
                             Created By
                           </label>
-                          <input type="text" disabled className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-slate-500 outline-none transition-all duration-150 opacity-60 cursor-not-allowed" value={selectedProductDetails.createdBy || ""} />
+                          <input type="text" disabled className="w-full rounded-lg px-4 py-3.5 text-gray-800 bg-gray-50 border border-gray-300 focus:border-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all duration-150 opacity-60 cursor-not-allowed" value={selectedProductDetails.createdBy || ""} />
                         </div>
                         <div className="flex flex-col gap-2">
                           <label className="font-normal text-gray-700 text-sm flex items-center gap-2">
@@ -855,7 +855,7 @@ function Product({
                       Delete Product
                     </button>
                   )}
-                  <button type="submit" className="px-6 py-3 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-medium transition-colors duration-200 flex items-center gap-2">
+                  <button type="submit" className="px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors duration-200 flex items-center gap-2">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
@@ -885,7 +885,7 @@ function Product({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Active</label>
                 <select
-                  className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none"
+                  className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                   value={editForm.active}
                   onChange={(e) => setEditForm({ ...editForm, active: e.target.value })}
                 >
@@ -896,12 +896,12 @@ function Product({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Base Currency Amount</label>
-                <input type="text" value={editForm.baseCurrencyAmount} onChange={(e) => setEditForm({ ...editForm, baseCurrencyAmount: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
+                <input type="text" value={editForm.baseCurrencyAmount} onChange={(e) => setEditForm({ ...editForm, baseCurrencyAmount: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none">
+                <select value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
                   <option value="" disabled>Select Category</option>
                   <option value="Software">Software</option>
                   <option value="Hardware">Hardware</option>
@@ -911,17 +911,17 @@ function Product({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
-                <input type="date" value={formatDateOnly(editForm.createdAt)} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : "" })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
+                <input type="date" value={formatDateOnly(editForm.createdAt)} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value ? new Date(e.target.value).toISOString() : "" })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Created By</label>
-                <input type="text" value={editForm.createdBy} onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 outline-none" />
+                <input type="text" value={editForm.createdBy} onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })} className="w-full rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
               </div>
 
               <div className="flex gap-3 justify-end pt-4">
                 <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium">Save</button>
+                <button type="submit" className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium">Save</button>
               </div>
             </form>
           </div>

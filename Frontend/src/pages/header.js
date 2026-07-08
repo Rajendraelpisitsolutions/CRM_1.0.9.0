@@ -645,7 +645,7 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
           {selectedSearchItem && (() => {
             const item = selectedSearchItem;
             const cm = {
-              contact: { badge: "bg-blue-100 text-blue-700",    hdr: "from-slate-800 to-slate-900",    icon: "👤" },
+              contact: { badge: "bg-blue-100 text-blue-700",    hdr: "from-blue-500 to-blue-600",    icon: "👤" },
               account: { badge: "bg-green-100 text-green-700",  hdr: "from-green-600 to-green-700",  icon: "🏢" },
               deal:    { badge: "bg-purple-100 text-purple-700",hdr: "from-purple-600 to-purple-700",icon: "💰" },
               product: { badge: "bg-orange-100 text-orange-700",hdr: "from-orange-500 to-orange-600",icon: "📦" },
@@ -826,7 +826,7 @@ function Header({ search, setSearch, setShowPanel, setActiveContent, onSearchSel
                                   )}
                                 </div>
                                 {/* Unread dot */}
-                                {!isRead && <div className="w-2 h-2 rounded-full bg-slate-800 flex-shrink-0 mt-1.5" />}
+                                {!isRead && <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />}
                               </button>
                             );
                           })}

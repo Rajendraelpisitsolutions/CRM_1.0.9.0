@@ -209,7 +209,7 @@ function Forgot() {
                         errors.email
                           ? "border-red-400 bg-red-50"
                           : "border-gray-300 bg-white"
-                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200`}
                     />
                     <ErrorMsg text={errors.email} />
                   </div>
@@ -255,7 +255,7 @@ function Forgot() {
                         errors.otp
                           ? "border-red-400 bg-red-50"
                           : "border-gray-300 bg-white"
-                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                      } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200`}
                     />
                     <ErrorMsg text={errors.otp} />
                   </div>
@@ -304,7 +304,7 @@ function Forgot() {
                           errors.newPassword
                             ? "border-red-400 bg-red-50"
                             : "border-gray-300 bg-white"
-                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200`}
                       />
                       <button
                         type="button"
@@ -337,7 +337,7 @@ function Forgot() {
                           errors.confirmPassword
                             ? "border-red-400 bg-red-50"
                             : "border-gray-300 bg-white"
-                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm transition-all duration-200`}
+                        } text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-all duration-200`}
                       />
                       <button
                         type="button"
