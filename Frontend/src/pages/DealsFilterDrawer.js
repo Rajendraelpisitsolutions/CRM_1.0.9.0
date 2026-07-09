@@ -39,6 +39,7 @@ function DealsFilterDrawer({
 }) {
   const [pipeline, setPipeline] = useState("");
   const [createdBy, setCreatedBy] = useState("");
+  const [priority, setPriority] = useState("");
   const [dateField, setDateField] = useState("createdAt"); // which date the From/To below apply to
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -56,6 +57,7 @@ function DealsFilterDrawer({
     if (!isOpen) return;
     setPipeline(getFilterValue(filters, ["dealpipeline", "pipeline"]));
     setCreatedBy(getFilterValue(filters, ["createdby"]));
+    setPriority(getFilterValue(filters, ["priority"]));
     setCreatedFrom(dateRange.createdFrom || "");
     setCreatedTo(dateRange.createdTo || "");
     setUpdatedFrom(dateRange.updatedFrom || "");
@@ -75,7 +77,7 @@ function DealsFilterDrawer({
   if (!isOpen) return null;
 
   const activeCount =
-    [pipeline, createdBy, createdFrom, createdTo, updatedFrom, updatedTo].filter(
+    [pipeline, createdBy, priority, createdFrom, createdTo, updatedFrom, updatedTo].filter(
       (v) => String(v ?? "").trim() !== ""
     ).length;
 
@@ -83,12 +85,13 @@ function DealsFilterDrawer({
     const out = [];
     if (pipeline.trim()) out.push({ field: "dealPipeline", operator: "equals", value: pipeline.trim(), dataType: "select" });
     if (createdBy.trim()) out.push({ field: "createdBy", operator: "equals", value: createdBy.trim(), dataType: "select" });
+    if (priority.trim()) out.push({ field: "priority", operator: "equals", value: priority.trim(), dataType: "select" });
     onApply?.(out, { createdFrom, createdTo, updatedFrom, updatedTo });
     onClose();
   };
 
   const handleClear = () => {
-    setPipeline(""); setCreatedBy("");
+    setPipeline(""); setCreatedBy(""); setPriority("");
     setDateField("createdAt");
     setCreatedFrom(""); setCreatedTo(""); setUpdatedFrom(""); setUpdatedTo("");
     onClear?.();
@@ -143,6 +146,15 @@ function DealsFilterDrawer({
                 {(createdByOptions || []).map((o) => (
                   <option key={o} value={o}>{o}</option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL_CLS}>Priority</label>
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} className={INPUT_CLS}>
+                <option value="">All Priorities</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
               </select>
             </div>
           </div>
