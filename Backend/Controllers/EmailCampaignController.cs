@@ -350,7 +350,7 @@ namespace Elpis_CRM.Controllers
         {
             if (dto == null) return Ok();
             if (!await OwnsCampaignAsync(id)) return NotFound();
-            await _tracking.RecordReceiptsAsync(id, dto.Opens, dto.Delivered, dto.Replies, dto.Bounces);
+            await _tracking.RecordReceiptsAsync(id, dto.Opens, dto.Delivered, dto.Replies);
             return Ok();
         }
 
@@ -407,7 +407,5 @@ namespace Elpis_CRM.Controllers
         public List<string> Opens { get; set; } = new();
         public List<string> Delivered { get; set; } = new();
         public List<string> Replies { get; set; } = new();
-        /// <summary>Addresses that bounced back (NDR / "Undeliverable").</summary>
-        public List<string> Bounces { get; set; } = new();
     }
 }
