@@ -4366,13 +4366,11 @@ useEffect(() => {
     }
   };
 
-  // Helper: parse a user-provided string of emails into an array. Splits on comma, semicolon or ANY
-  // whitespace (space/tab/newline) — email addresses never contain spaces, so space-separated input
-  // is two addresses, not one (otherwise "a@x.com b@y.com" would be treated as a single bad address).
+  // Helper: parse a user-provided string of emails into an array
   const parseEmails = (input) => {
     if (!input) return [];
     return input
-      .split(/[;,\s]+/)
+      .split(/[;,\n]+/) // split on comma, semicolon or newline
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
   };
