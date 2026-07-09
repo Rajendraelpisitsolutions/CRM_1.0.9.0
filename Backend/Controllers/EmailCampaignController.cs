@@ -95,6 +95,10 @@ namespace Elpis_CRM.Controllers
             var baseUrl = !string.IsNullOrWhiteSpace(dto.PublicBaseUrl)
                 ? dto.PublicBaseUrl.TrimEnd('/')
                 : BaseUrl();
+            // The (un)subscribe links target the SPA; default to the API origin if not provided.
+            var subBaseUrl = !string.IsNullOrWhiteSpace(dto.SubscribeBaseUrl)
+                ? dto.SubscribeBaseUrl.TrimEnd('/')
+                : baseUrl;
             var recipients = await _db.EmailRecipients.AsNoTracking()
                 .Where(r => r.CampaignId == campaign.Id)
                 .ToListAsync();
@@ -103,7 +107,7 @@ namespace Elpis_CRM.Controllers
             {
                 recipientId = r.Id,
                 email = r.Email,
-                html = _tracking.BuildTrackedHtml(dto.Body, r.TrackingToken, baseUrl)
+                html = _tracking.BuildTrackedHtml(dto.Body, r.TrackingToken, baseUrl, subBaseUrl)
             });
 
             return Ok(new { campaignId = campaign.Id, items });
@@ -331,8 +335,47 @@ namespace Elpis_CRM.Controllers
             return Ok();
         }
 
+        /// <summary>
+        /// Anonymous unsubscribe-by-token, called by the public /email/unsubscribe page. Routed under
+        /// /api/EmailCampaign (which the frontend already reaches) so it works even where a plain
+        /// /api/track/* path isn't proxied to the API. Idempotent; returns the recipient email when found.
+        /// </summary>
+        [AllowAnonymous]
+        [HttpPost("subscription/unsubscribe")]
+        public async Task<IActionResult> UnsubscribeByToken([FromBody] SubscriptionTokenDto dto)
+        {
+            var token = dto?.Token?.Trim();
+            if (string.IsNullOrWhiteSpace(token)) return Ok(new { found = false });
+            var r = await _tracking.GetByTokenAsync(token);
+            if (r == null) return Ok(new { found = false });
+            await _tracking.RecordUnsubscribeAsync(token,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers["User-Agent"].ToString());
+            return Ok(new { found = true, email = r.Email });
+        }
+
+        /// <summary>Anonymous subscribe-by-token (re-subscribe), for the public /email/subscribe page.</summary>
+        [AllowAnonymous]
+        [HttpPost("subscription/subscribe")]
+        public async Task<IActionResult> SubscribeByToken([FromBody] SubscriptionTokenDto dto)
+        {
+            var token = dto?.Token?.Trim();
+            if (string.IsNullOrWhiteSpace(token)) return Ok(new { found = false });
+            var r = await _tracking.GetByTokenAsync(token);
+            if (r == null) return Ok(new { found = false });
+            await _tracking.RecordSubscribeAsync(token,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Request.Headers["User-Agent"].ToString());
+            return Ok(new { found = true, email = r.Email });
+        }
+
         private static double Rate(int part, int whole) =>
             whole <= 0 ? 0 : Math.Round(part * 100.0 / whole, 1);
+    }
+
+    public class SubscriptionTokenDto
+    {
+        public string? Token { get; set; }
     }
 
     public class RepliesDto

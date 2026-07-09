@@ -14,6 +14,9 @@ namespace Elpis_CRM.Model.DTOs
         /// The open pixel / click / (un)subscribe links are built on this so they resolve to the
         /// backend in production. Falls back to the Tracking:PublicBaseUrl config when absent.</summary>
         public string? PublicBaseUrl { get; set; }
+        /// <summary>The app (SPA) origin, used to build the /email/subscribe and /email/unsubscribe
+        /// links so recipients land on the React page (which records via the working /api path).</summary>
+        public string? SubscribeBaseUrl { get; set; }
         public List<EmailRecipientInputDto> Recipients { get; set; } = new();
     }
 

@@ -154,9 +154,12 @@ namespace Elpis_CRM.Services
         /// and in-page anchors are left alone. <paramref name="baseUrl"/> is the public backend origin
         /// (e.g. https://crm.elpisitsolutions.com) — the recipient's mail client must be able to reach it.
         /// </summary>
-        public string BuildTrackedHtml(string? bodyHtml, string token, string baseUrl)
+        public string BuildTrackedHtml(string? bodyHtml, string token, string baseUrl, string? subBaseUrl = null)
         {
             var b = (baseUrl ?? "").TrimEnd('/');
+            // The (un)subscribe links go through the React app (/email/...), which is always reachable
+            // and records via the working /api path — sidestepping any /api/track routing issue.
+            var sub = string.IsNullOrWhiteSpace(subBaseUrl) ? b : subBaseUrl.TrimEnd('/');
             var html = bodyHtml ?? "";
 
             // 1) Rewrite links → click tracker (keeps the real destination as ?u=).
@@ -178,11 +181,11 @@ namespace Elpis_CRM.Services
             html += $"<div style=\"margin-top:24px;padding-top:16px;border-top:1px solid #eee;" +
                     $"text-align:center;font-family:Arial,Helvetica,sans-serif;\">" +
                     $"<p style=\"font-size:12px;color:#9ca3af;margin:0 0 12px;\">Don't want to receive these emails?</p>" +
-                    $"<a href=\"{b}/api/track/u/{token}\" style=\"display:inline-block;background:#4b5563;" +
+                    $"<a href=\"{sub}/email/unsubscribe?token={token}\" style=\"display:inline-block;background:#4b5563;" +
                     $"color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;" +
                     $"border-radius:8px;\">Unsubscribe</a>" +
                     $"&nbsp;&nbsp;" +
-                    $"<a href=\"{b}/api/track/s/{token}\" style=\"display:inline-block;background:#eff6ff;" +
+                    $"<a href=\"{sub}/email/subscribe?token={token}\" style=\"display:inline-block;background:#eff6ff;" +
                     $"color:#2563eb;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;" +
                     $"border-radius:8px;border:1px solid #bfdbfe;\">Subscribe</a></div>";
 

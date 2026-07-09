@@ -25,6 +25,7 @@ const CalendarPage = lazy(() => import("./pages/CalendarView"));
 const RecycleBin = lazy(() => import("./pages/RecycleBin"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const RecentActivityPage = lazy(() => import("./pages/RecentActivityPage"));
+const EmailSubscription = lazy(() => import("./pages/EmailSubscription"));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -56,6 +57,9 @@ function App() {
           <Route path="/" element={<Login />} />
           <Route path="/forgot" element={<Forgot />} />
           <Route path="/contact-us" element={<ContactUs />} />
+          {/* Public subscribe / unsubscribe pages recipients reach from email buttons */}
+          <Route path="/email/unsubscribe" element={<EmailSubscription mode="unsubscribe" />} />
+          <Route path="/email/subscribe" element={<EmailSubscription mode="subscribe" />} />
 
           {/* Dashboard Routes */}
           <Route

@@ -4423,6 +4423,9 @@ useEffect(() => {
         subject,
         body: html,
         publicBaseUrl,
+        // The Subscribe/Unsubscribe buttons land on this app's /email/* pages (always reachable),
+        // which record via the working /api path.
+        subscribeBaseUrl: window.location.origin,
         recipients: toEmails.map((e) => ({ email: e })),
       });
       const items = Array.isArray(prep.data?.items) ? prep.data.items : null;
