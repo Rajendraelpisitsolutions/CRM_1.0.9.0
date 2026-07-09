@@ -375,6 +375,7 @@ function OutlookEmail({ onToast }) {
   });
   const [outlookFolders, setOutlookFolders] = useState([]);
   const [campaignFolderSaved, setCampaignFolderSaved] = useState(false);
+  const [editCampaignFolder, setEditCampaignFolder] = useState(false);
   const persistCampaignFolder = (name) => {
     setCampaignFolder(name);
     try { localStorage.setItem("_crm_campaign_folder", (name || "").trim() || "CRM Campaigns"); } catch { /* ignore */ }
@@ -396,6 +397,7 @@ function OutlookEmail({ onToast }) {
   const [draftMails, setDraftMails] = useState([]);
   const [junkMails, setJunkMails] = useState([]);
   const [archiveMails, setArchiveMails] = useState([]);
+  const [campaignMails, setCampaignMails] = useState([]);
   const [apiTemplates, setApiTemplates] = useState([]);
 
   // ── Email List UI ─────────────────────────────────────────────────────────
@@ -873,6 +875,48 @@ function OutlookEmail({ onToast }) {
     load();
   }, [activeFolder, accessToken]);
 
+  // ─── Campaign folder fetch ────────────────────────────────────────────────
+  // Loads the messages inside the user's chosen campaign folder (sent copies + moved replies)
+  // by resolving the folder's id from its display name, then listing its messages.
+  useEffect(() => {
+    const load = async () => {
+      if (activeFolder !== "Campaign" || !accessToken) return;
+      try {
+        const name = (campaignFolder || "").trim() || "CRM Campaigns";
+        const fRes = await fetch(
+          "https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=id,displayName",
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        const fData = await fRes.json();
+        const folder = (fData.value || []).find(f => (f.displayName || "").toLowerCase() === name.toLowerCase());
+        if (!folder) { setCampaignMails([]); return; }
+        const res = await fetch(
+          `https://graph.microsoft.com/v1.0/me/mailFolders/${folder.id}/messages?` +
+          "$top=50&$orderby=receivedDateTime desc" +
+          "&$select=id,subject,bodyPreview,from,sender,toRecipients,ccRecipients,receivedDateTime,sentDateTime,hasAttachments,isRead,isDraft",
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!res.ok) { setCampaignMails([]); return; }
+        const data = await res.json();
+        setCampaignMails((data.value || []).map(msg => {
+          const senderName = msg.from?.emailAddress?.name || msg.sender?.emailAddress?.name || msg.from?.emailAddress?.address || "";
+          return {
+            id: msg.id, subject: msg.subject,
+            body: "", bodyPreview: msg.bodyPreview || "", attachments: [],
+            hasAttachments: msg.hasAttachments, bodyLoaded: false,
+            toEmail: msg.toRecipients?.map(r => r.emailAddress.address).join(", ") || "",
+            ccEmail: msg.ccRecipients?.map(r => r.emailAddress.address).join(", ") || "",
+            receivedDateTime: msg.receivedDateTime || msg.sentDateTime, sentDateTime: msg.sentDateTime,
+            sender: senderName, from: senderName,
+            senderEmail: msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "",
+            isRead: msg.isRead, isDraft: msg.isDraft,
+          };
+        }));
+      } catch (e) { console.error("Campaign folder fetch error:", e); setCampaignMails([]); }
+    };
+    load();
+  }, [activeFolder, accessToken, campaignFolder]);
+
   // ─── Templates fetch ──────────────────────────────────────────────────────
   useEffect(() => {
     if (activeFolder === "Templates") {
@@ -940,7 +984,7 @@ function OutlookEmail({ onToast }) {
   useEffect(() => {
     const load = async () => {
       if (!accessToken || !openedMailId) return;
-      const folderMap = { Inbox: inboxEmails, Sent: sentMails, Deleted: trashMails, Drafts: draftMails, Junk: junkMails, Archive: archiveMails };
+      const folderMap = { Inbox: inboxEmails, Sent: sentMails, Deleted: trashMails, Drafts: draftMails, Junk: junkMails, Archive: archiveMails, Campaign: campaignMails };
       const arr = folderMap[activeFolder] || [];
       const idx = arr.findIndex(m => m.id === openedMailId);
       if (idx === -1) return;
@@ -961,7 +1005,7 @@ function OutlookEmail({ onToast }) {
         const body = replaceCidImages(htmlBody, attachments);
         const convId = data.conversationId || "";
         const updatedMsg = { ...msg, body, attachments, bodyLoaded: true, conversationId: convId };
-        const setters = { Inbox: setInboxEmails, Sent: setSentMails, Deleted: setTrashMails, Drafts: setDraftMails, Junk: setJunkMails, Archive: setArchiveMails };
+        const setters = { Inbox: setInboxEmails, Sent: setSentMails, Deleted: setTrashMails, Drafts: setDraftMails, Junk: setJunkMails, Archive: setArchiveMails, Campaign: setCampaignMails };
         const setter = setters[activeFolder];
         if (setter) setter(prev => { const c = [...prev]; c[idx] = updatedMsg; return c; });
         if (convId) fetchThread(convId, openedMailId);
@@ -1022,7 +1066,7 @@ function OutlookEmail({ onToast }) {
 
   // ─── Computed ─────────────────────────────────────────────────────────────
   const getCurrentMails = () => {
-    const map = { Inbox: inboxEmails, Sent: sentMails, Deleted: trashMails, Drafts: draftMails, Junk: junkMails, Archive: archiveMails };
+    const map = { Inbox: inboxEmails, Sent: sentMails, Deleted: trashMails, Drafts: draftMails, Junk: junkMails, Archive: archiveMails, Campaign: campaignMails };
     return map[activeFolder] || [];
   };
 
@@ -1076,7 +1120,7 @@ function OutlookEmail({ onToast }) {
     }
     const filter = prev => prev.filter(m => !ids.includes(m.id));
     setInboxEmails(filter); setSentMails(filter); setTrashMails(filter);
-    setDraftMails(filter); setJunkMails(filter); setArchiveMails(filter);
+    setDraftMails(filter); setJunkMails(filter); setArchiveMails(filter); setCampaignMails(filter);
     setSelectedMailIds(p => p.filter(id => !ids.includes(id)));
     setOpenedMailId(null);
     setDeleteCandidateIds([]);
@@ -1475,7 +1519,7 @@ function OutlookEmail({ onToast }) {
     { key: "History", label: "Conversation History", icon: MessageSquare },
   ];
 
-  const EMAIL_FOLDERS = ["Inbox", "Sent", "Drafts", "Deleted", "Junk", "Archive", "Outbox", "History"];
+  const EMAIL_FOLDERS = ["Inbox", "Sent", "Drafts", "Deleted", "Junk", "Archive", "Outbox", "History", "Campaign"];
   const isEmailFolder = EMAIL_FOLDERS.includes(activeFolder);
 
   // Open the compose inline in the reading pane. If we're not on a mail folder
@@ -1958,28 +2002,38 @@ function OutlookEmail({ onToast }) {
 
                 <div className={`my-2 border-t ${th.border}`} />
 
-                {/* ── Campaign folder: where tracked-campaign copies + replies are filed ── */}
+                {/* ── Campaign folder: click to view sent copies + replies; pencil to rename ── */}
                 <div className="px-1">
-                  <div className={`flex items-center gap-2 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider ${th.textMuted}`}>
-                    <FolderOpen size={13} className="flex-shrink-0" />
+                  <div className={`flex items-center justify-between px-2 py-1.5 text-xs font-semibold uppercase tracking-wider ${th.textMuted}`}>
                     <span>Campaign folder</span>
+                    <button type="button" onClick={() => { setEditCampaignFolder(v => !v); loadOutlookFolders(); }}
+                      className={`${th.hover} rounded p-0.5`} title="Change campaign folder">
+                      <Pencil size={12} />
+                    </button>
                   </div>
-                  <div className="px-2 pb-1">
-                    <input
-                      list="crm-campaign-folders"
-                      value={campaignFolder}
-                      onChange={(e) => persistCampaignFolder(e.target.value)}
-                      onFocus={loadOutlookFolders}
-                      placeholder="CRM Campaigns"
-                      className={`w-full px-2.5 py-1.5 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-800 border-gray-600 text-gray-100" : "bg-white border-gray-300 text-gray-800"}`}
-                    />
-                    <datalist id="crm-campaign-folders">
-                      {outlookFolders.map((f) => <option key={f} value={f} />)}
-                    </datalist>
-                    <p className={`text-[11px] mt-1 leading-snug ${th.textMuted}`}>
-                      {campaignFolderSaved ? "Saved ✓ — " : ""}Tracked-campaign sends &amp; their replies are filed here (created if new).
-                    </p>
-                  </div>
+                  <FolderRow icon={FolderOpen} label={campaignFolder || "CRM Campaigns"}
+                    active={activeFolder === "Campaign"}
+                    count={campaignMails.length}
+                    onClick={() => { setActiveFolder("Campaign"); setOpenedMailId(null); }}
+                    isDark={isDark} />
+                  {editCampaignFolder && (
+                    <div className="px-2 pt-1 pb-1">
+                      <input
+                        list="crm-campaign-folders"
+                        value={campaignFolder}
+                        onChange={(e) => persistCampaignFolder(e.target.value)}
+                        onFocus={loadOutlookFolders}
+                        placeholder="CRM Campaigns"
+                        className={`w-full px-2.5 py-1.5 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-800 border-gray-600 text-gray-100" : "bg-white border-gray-300 text-gray-800"}`}
+                      />
+                      <datalist id="crm-campaign-folders">
+                        {outlookFolders.map((f) => <option key={f} value={f} />)}
+                      </datalist>
+                      <p className={`text-[11px] mt-1 leading-snug ${th.textMuted}`}>
+                        {campaignFolderSaved ? "Saved ✓ — " : ""}Tracked-campaign sends &amp; their replies are filed here (created if new).
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className={`my-2 border-t ${th.border}`} />
@@ -2037,7 +2091,9 @@ function OutlookEmail({ onToast }) {
                           onChange={selectAll}
                           className="w-4 h-4 rounded border-gray-300 shrink-0" />
                         <h2 className={`flex-1 text-sm font-semibold truncate ${th.text}`}>
-                          {activeFolder === "Deleted" ? "Deleted Items" : activeFolder}
+                          {activeFolder === "Deleted" ? "Deleted Items"
+                            : activeFolder === "Campaign" ? (campaignFolder || "CRM Campaigns")
+                              : activeFolder}
                         </h2>
                         <div className="flex items-center gap-0.5">
                           {selectedMailIds.length > 0 && (
@@ -4510,6 +4566,15 @@ useEffect(() => {
       }
     } catch (e) { console.error("Campaign attachment prep failed:", e); }
 
+    // Helper: pull a readable error message out of a failed Graph response.
+    const readGraphErr = async (r) => {
+      try {
+        const txt = await r.text();
+        const parsed = txt && txt.trim().startsWith("{") ? JSON.parse(txt) : null;
+        return parsed?.error?.message || (txt ? txt.slice(0, 300) : "") || `HTTP ${r.status}`;
+      } catch { return `HTTP ${r.status}`; }
+    };
+
     // 2) Send each recipient their own tracked email, collecting outcomes.
     const results = [];
     for (let i = 0; i < tracked.items.length; i++) {
@@ -4526,30 +4591,49 @@ useEffect(() => {
         isDeliveryReceiptRequested: true,
       };
       try {
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          // If we have a campaign folder, keep Sent Items clean and file a copy there instead.
-          body: JSON.stringify({ message, saveToSentItems: !campaignFolderId }),
-        });
-        const ok = res.ok || res.status === 202;
-        let errMsg = null;
-        if (!ok) {
-          try {
-            const txt = await res.text();
-            const parsed = txt && txt.trim().startsWith("{") ? JSON.parse(txt) : null;
-            errMsg = parsed?.error?.message || (txt ? txt.slice(0, 300) : "") || `HTTP ${res.status}`;
-          } catch { errMsg = `HTTP ${res.status}`; }
-        }
-        // File a copy of the sent email into the campaign folder (non-fatal).
-        if (ok && campaignFolderId) {
-          try {
-            await fetch(`https://graph.microsoft.com/v1.0/me/mailFolders/${campaignFolderId}/messages`, {
+        let ok = false, errMsg = null;
+        if (campaignFolderId) {
+          // Draft → send → move: this produces a REAL sent message we can then file into the
+          // campaign folder. (POSTing to a folder's /messages only ever creates a *draft*, which
+          // is why copies were showing as "This message hasn't been sent".)
+          const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(message),
+          });
+          if (!(draftRes.ok || draftRes.status === 201)) {
+            errMsg = await readGraphErr(draftRes);
+          } else {
+            const draft = await draftRes.json();
+            const mid = draft.id;
+            // Send the draft — Graph delivers it and moves it to Sent Items.
+            const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/send`, {
               method: "POST",
-              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ ...message, isRead: true }),
+              headers: { Authorization: `Bearer ${accessToken}` },
             });
-          } catch { /* copy is best-effort */ }
+            ok = sendRes.ok || sendRes.status === 202;
+            if (!ok) errMsg = await readGraphErr(sendRes);
+            else {
+              // Move the now-sent message from Sent Items into the campaign folder (best-effort;
+              // if it fails the email is still sent and sitting in Sent Items).
+              try {
+                await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ destinationId: campaignFolderId }),
+                });
+              } catch { /* copy is best-effort */ }
+            }
+          }
+        } else {
+          // No campaign folder chosen — plain send, kept in Sent Items.
+          const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ message, saveToSentItems: true }),
+          });
+          ok = res.ok || res.status === 202;
+          if (!ok) errMsg = await readGraphErr(res);
         }
         results.push({ recipientId: item.recipientId, status: ok ? "Sent" : "Failed", error: errMsg });
       } catch (err) {
