@@ -107,34 +107,34 @@ async function findMailFolderId(accessToken, name) {
   } catch { return null; }
 }
 
+// Named extended property (PS_PUBLIC_STRINGS) we stamp on each campaign draft so we can find that
+// EXACT sent copy afterwards. A unique per-send value means it can never match another email.
+const CRM_TAG_PROP = "String {00020329-0000-0000-C000-000000000046} Name CrmCampaignTag";
+function newCrmTag() {
+  return "crm-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e12).toString(36);
+}
+
 // After a draft is sent, its original id is INVALID — the message is recreated in Sent Items with a
-// new id — so you cannot move it by the draft id (that was why sent mail stayed in Sent Items and
-// never reached the campaign folder). Instead, locate ONLY this exact sent message in Sent Items by
-// its conversationId (unique to this send, reliably returned when the draft is created; internet-
-// MessageId as a secondary) and move that one into `folderId`. NO subject fallback — matching by
-// subject wrongly swept older same-subject sent mail into the folder. Returns true if moved.
-async function moveSentMessageToFolder(accessToken, folderId, { conversationId, internetMessageId } = {}) {
+// new id — so you cannot move it by the draft id (that was why sent mail stayed in Sent Items).
+// Locate ONLY this exact sent message in Sent Items by the unique CrmCampaignTag we stamped on the
+// draft (internetMessageId as a backup) and move just that one. There is deliberately NO subject or
+// conversation matching — those wrongly swept other same-subject sent mail into the folder.
+async function moveSentMessageToFolder(accessToken, folderId, { tag, internetMessageId } = {}) {
   if (!accessToken || !folderId) return false;
-  if (!conversationId && !internetMessageId) return false;
+  if (!tag && !internetMessageId) return false;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const pickNewestId = (arr) => {
-    const items = (arr || []).filter((x) => x && x.id);
-    if (!items.length) return null;
-    items.sort((a, b) => new Date(b.sentDateTime || 0) - new Date(a.sentDateTime || 0));
-    return items[0].id;
-  };
   for (let attempt = 0; attempt < 12; attempt++) {
     await wait(700);
     try {
       let foundId = null;
-      // Primary: conversationId — a new email starts its own conversation, so this is exact.
-      if (conversationId) {
-        const filter = encodeURIComponent(`conversationId eq '${String(conversationId).replace(/'/g, "''")}'`);
+      // Primary: the unique per-send tag — cannot collide with any other message.
+      if (tag) {
+        const f = `singleValueExtendedProperties/any(ep:ep/id eq '${CRM_TAG_PROP}' and ep/value eq '${String(tag).replace(/'/g, "''")}')`;
         const q = await window.fetch(
-          `https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$filter=${filter}&$top=10&$select=id,sentDateTime`,
+          `https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$filter=${encodeURIComponent(f)}&$select=id&$top=1`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        if (q.ok) { const d = await q.json(); foundId = pickNewestId(d.value); }
+        if (q.ok) { const d = await q.json(); foundId = d.value?.[0]?.id || null; }
       }
       if (!foundId && internetMessageId) {
         const filter = encodeURIComponent(`internetMessageId eq '${String(internetMessageId).replace(/'/g, "''")}'`);
@@ -3876,11 +3876,12 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [successMessage, setSuccessMessage] = useState("");
   const [sendDropdown, setSendDropdown]           = useState(false);
   // Where the sent copy of THIS email is stored: "campaign" = the CRM Campaign folder (replies get
-  // filed there too), "sent" = the normal Sent Items. Persisted so it stays chosen across sends.
+  // filed there too), "sent" = the normal Sent Items. Default is Sent Items so normal mail is NOT
+  // filed into the campaign folder — the user opts in per email. Choice is persisted.
   const [saveTarget, setSaveTarget] = useState(() => {
-    try { return localStorage.getItem("_crm_send_target") || "campaign"; } catch { return "campaign"; }
+    try { return localStorage.getItem("_crm_store_choice") || "sent"; } catch { return "sent"; }
   });
-  const setSaveTargetPersist = (v) => { setSaveTarget(v); try { localStorage.setItem("_crm_send_target", v); } catch { /* ignore */ } };
+  const setSaveTargetPersist = (v) => { setSaveTarget(v); try { localStorage.setItem("_crm_store_choice", v); } catch { /* ignore */ } };
   const campaignFolderName = (() => { try { return (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { return "CRM Campaigns"; } })();
   const [scheduleModal, setScheduleModal]         = useState(false);
   const [scheduleDateTime, setScheduleDateTime]   = useState("");
@@ -4528,12 +4529,13 @@ useEffect(() => {
 
       let ok = false, errText = "Failed to send email";
       if (campaignFolderId) {
-        // Draft → send → move so a REAL sent message lands in the folder (not a draft). The move
-        // waits until the send has finished (message left Drafts) to avoid "unknown message" items.
+        // Draft → send → move so a REAL sent message lands in the folder (not a draft). Stamp a
+        // unique tag on the draft so we can move back exactly THIS sent copy — nothing else.
+        const tag = newCrmTag();
         const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify(message),
+          body: JSON.stringify({ ...message, singleValueExtendedProperties: [{ id: CRM_TAG_PROP, value: tag }] }),
         });
         if (draftRes.ok || draftRes.status === 201) {
           const draft = await draftRes.json();
@@ -4543,10 +4545,10 @@ useEffect(() => {
           });
           ok = sendRes.ok || sendRes.status === 202;
           if (ok) {
-            // The draft id is dead after /send — find THIS exact sent copy (by conversationId) in
+            // The draft id is dead after /send — find THIS exact sent copy (by its unique tag) in
             // Sent Items and move only that one.
             await moveSentMessageToFolder(accessToken, campaignFolderId, {
-              conversationId: draft.conversationId, internetMessageId: draft.internetMessageId,
+              tag, internetMessageId: draft.internetMessageId,
             });
           } else { try { const ed = await sendRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
         } else { try { const ed = await draftRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
@@ -4761,12 +4763,13 @@ useEffect(() => {
       try {
         let ok = false, errMsg = null;
         if (campaignFolderId) {
-          // Draft → send produces a REAL sent message (POSTing to a folder's /messages only ever
-          // creates a *draft*, which is why copies showed as "This message hasn't been sent").
+          // Draft → send produces a REAL sent message. Stamp a unique tag so we can move back
+          // exactly THIS sent copy afterwards (POSTing to a folder's /messages only makes a draft).
+          const tag = newCrmTag();
           const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
             method: "POST",
             headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-            body: JSON.stringify(message),
+            body: JSON.stringify({ ...message, singleValueExtendedProperties: [{ id: CRM_TAG_PROP, value: tag }] }),
           });
           if (!(draftRes.ok || draftRes.status === 201)) {
             errMsg = await readGraphErr(draftRes);
@@ -4780,9 +4783,9 @@ useEffect(() => {
             });
             ok = sendRes.ok || sendRes.status === 202;
             if (!ok) errMsg = await readGraphErr(sendRes);
-            // Remember this message's conversationId (not the dead draft id) so we can locate THIS
-            // exact sent copy in Sent Items and file it into the folder after the loop.
-            else sentFiles.push({ conversationId: draft.conversationId, internetMessageId: draft.internetMessageId });
+            // Remember this message's unique tag (not the dead draft id) so we can locate THIS exact
+            // sent copy in Sent Items and file it into the folder after the loop.
+            else sentFiles.push({ tag, internetMessageId: draft.internetMessageId });
           }
         } else {
           // No campaign folder chosen — plain send, kept in Sent Items.
@@ -4806,7 +4809,7 @@ useEffect(() => {
     if (campaignFolderId && sentFiles.length) {
       for (const f of sentFiles) {
         await moveSentMessageToFolder(accessToken, campaignFolderId, {
-          conversationId: f.conversationId, internetMessageId: f.internetMessageId,
+          tag: f.tag, internetMessageId: f.internetMessageId,
         });
       }
     }
