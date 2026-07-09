@@ -48,26 +48,30 @@ async function ensureCampaignFolderId(accessToken) {
 // message (read receipt / delivery receipt / genuine reply), record the receipts to the backend,
 // and file ALL of them into the campaign folder so the inbox stays clean. Reused by the per-campaign
 // "Check replies" and the overview "File all campaign mail" sweep. Returns per-type counts.
-async function scanAndFileCampaign(accessToken, messages, recipients, campaignId, canMove, folderId) {
+async function scanAndFileCampaign(accessToken, messages, recipients, campaignId, canMove, folderId, processedIds) {
   const recEmails = (recipients || []).map((r) => (typeof r === "string" ? r : r.email || "").toLowerCase()).filter(Boolean);
   const recSet = new Set(recEmails);
+  // Shared across campaigns in a sweep so a message that matches several campaigns (same recipients)
+  // is only handled once — a message's id changes after /move, so re-touching it would 404.
+  const seen = processedIds || new Set();
   const opens = new Set(), delivered = new Set(), replies = new Set();
   const moveIds = [];
   const replyCandidates = [];
   for (const mm of (messages || [])) {
+    if (!mm.id || seen.has(mm.id)) continue;
     const from = (mm.from?.emailAddress?.address || "").toLowerCase();
     const subj = (mm.subject || "").trim();
     const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
     const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
     if (isRead) {
-      if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }
+      if (recSet.has(from)) { opens.add(from); moveIds.push(mm.id); seen.add(mm.id); }
     } else if (isDelivered) {
       const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
       let hit = false;
       for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }
-      if (hit && mm.id) moveIds.push(mm.id);
-    } else if (recSet.has(from) && mm.id) {
-      replyCandidates.push({ id: mm.id, from });
+      if (hit) { moveIds.push(mm.id); seen.add(mm.id); }
+    } else if (recSet.has(from)) {
+      replyCandidates.push({ id: mm.id, from }); seen.add(mm.id);
     }
   }
   // Disambiguate reply candidates by message class so receipts in any language count correctly.
@@ -424,13 +428,14 @@ export default function EmailTracking() {
       const data = await res.json();
       const messages = data.value || [];
       const folderId = canMove ? await ensureCampaignFolderId(tok.accessToken) : null;
+      const processedIds = new Set();   // shared across campaigns so no message is handled twice
       let totalMoved = 0, hitCampaigns = 0;
       for (const c of campaigns) {
         try {
           const rr = await apiClient.get(`/EmailCampaign/${c.id}/recipients`, { params: { page: 1, pageSize: 1000 } });
           const recips = Array.isArray(rr.data?.items) ? rr.data.items : [];
           if (!recips.length) continue;
-          const { movedCount } = await scanAndFileCampaign(tok.accessToken, messages, recips, c.id, canMove, folderId);
+          const { movedCount } = await scanAndFileCampaign(tok.accessToken, messages, recips, c.id, canMove, folderId, processedIds);
           if (movedCount) { totalMoved += movedCount; hitCampaigns++; }
         } catch { /* skip this campaign */ }
       }
