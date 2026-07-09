@@ -48,7 +48,7 @@ async function ensureCampaignFolderId(accessToken) {
 // message (read receipt / delivery receipt / genuine reply), record the receipts to the backend,
 // and file ALL of them into the campaign folder so the inbox stays clean. Reused by the per-campaign
 // "Check replies" and the overview "File all campaign mail" sweep. Returns per-type counts.
-async function scanAndFileCampaign(accessToken, messages, recipients, campaignId, canMove, folderId, processedIds) {
+async function scanAndFileCampaign(accessToken, messages, recipients, campaignId, campaignSubject, canMove, folderId, processedIds) {
   const recEmails = (recipients || []).map((r) => (typeof r === "string" ? r : r.email || "").toLowerCase()).filter(Boolean);
   const recSet = new Set(recEmails);
   // Shared across campaigns in a sweep so a message that matches several campaigns (same recipients)
@@ -57,12 +57,24 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
   const opens = new Set(), delivered = new Set(), replies = new Set();
   const moveIds = [];
   const replyCandidates = [];
+  // Strict gate: ONLY this campaign's replies and read/delivery receipts get filed — never other
+  // inbox mail. A message qualifies only if its subject references THIS campaign's subject
+  // (replies are "RE: <subject>", read receipts "Read: <subject>", etc.).
+  const strip = (s) => (s || "").toLowerCase().replace(/^((re|fw|fwd|aw|sv|wg|read|delivered|gelesen|zugestellt|automatic reply|out of office)\s*:\s*)+/i, "").trim();
+  const campNorm = strip(campaignSubject);
+  const matchesCampaign = (subj) => {
+    if (!campNorm) return false;               // no subject to match → move nothing (don't touch the inbox)
+    const s = strip(subj);
+    return !!s && (s === campNorm || s.includes(campNorm) || campNorm.includes(s));
+  };
+  const isReplyLike = (subj) => /^(re|fw|fwd|aw|sv|wg|回复|答复|antwort)\s*:/i.test((subj || "").trim());
   for (const mm of (messages || [])) {
     if (!mm.id || seen.has(mm.id)) continue;
     const from = (mm.from?.emailAddress?.address || "").toLowerCase();
     const subj = (mm.subject || "").trim();
     const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
     const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
+    if (!matchesCampaign(subj)) continue;      // not related to this campaign → leave it in the inbox
     if (isRead) {
       if (recSet.has(from)) { opens.add(from); moveIds.push(mm.id); seen.add(mm.id); }
     } else if (isDelivered) {
@@ -70,8 +82,8 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
       let hit = false;
       for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }
       if (hit) { moveIds.push(mm.id); seen.add(mm.id); }
-    } else if (recSet.has(from)) {
-      replyCandidates.push({ id: mm.id, from }); seen.add(mm.id);
+    } else if (recSet.has(from) && isReplyLike(subj)) {
+      replyCandidates.push({ id: mm.id, from }); seen.add(mm.id);   // a genuine reply to this campaign
     }
   }
   // Disambiguate reply candidates by message class so receipts in any language count correctly.
@@ -115,8 +127,12 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
 const fmtNum = (n) => (n == null ? "0" : Number(n).toLocaleString());
 const fmtDate = (v) => {
   if (!v) return "—";
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  // Backend timestamps are UTC. A bare string with no timezone marker is treated as UTC (append Z),
+  // then always displayed in India Standard Time regardless of the viewer's browser timezone.
+  let s = v;
+  if (typeof s === "string" && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s = s + "Z";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 };
 const pctv = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 
@@ -271,7 +287,7 @@ function CampaignDetail({ campaignId, onBack }) {
       const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=id,from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
       const data = await res.json();
       const folderId = canMove ? await ensureCampaignFolderId(tok.accessToken) : null;
-      const { oArr, dArr, rArr, movedCount } = await scanAndFileCampaign(tok.accessToken, data.value || [], recipients, campaignId, canMove, folderId);
+      const { oArr, dArr, rArr, movedCount } = await scanAndFileCampaign(tok.accessToken, data.value || [], recipients, campaignId, detail?.subject, canMove, folderId);
       if (oArr.length || dArr.length || rArr.length) {
         const parts = [];
         if (rArr.length) parts.push(`${rArr.length} repl${rArr.length === 1 ? "y" : "ies"}`);
@@ -291,11 +307,12 @@ function CampaignDetail({ campaignId, onBack }) {
   useEffect(() => { autoFiledRef.current = false; }, [campaignId]);
   useEffect(() => {
     if (autoFiledRef.current) return;
-    if (!recipients.length || !accounts || accounts.length === 0) return;
+    // Wait for the campaign subject (detail) too — the filer matches replies by subject.
+    if (!detail?.subject || !recipients.length || !accounts || accounts.length === 0) return;
     autoFiledRef.current = true;
     checkReplies(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipients, accounts]);
+  }, [recipients, accounts, detail]);
 
   const tiles = detail ? [
     { metric: "sent", label: "Sent", value: fmtNum(detail.sentCount), sub: `of ${fmtNum(detail.totalRecipients)}` },
@@ -435,7 +452,7 @@ export default function EmailTracking() {
           const rr = await apiClient.get(`/EmailCampaign/${c.id}/recipients`, { params: { page: 1, pageSize: 1000 } });
           const recips = Array.isArray(rr.data?.items) ? rr.data.items : [];
           if (!recips.length) continue;
-          const { movedCount } = await scanAndFileCampaign(tok.accessToken, messages, recips, c.id, canMove, folderId, processedIds);
+          const { movedCount } = await scanAndFileCampaign(tok.accessToken, messages, recips, c.id, c.subject, canMove, folderId, processedIds);
           if (movedCount) { totalMoved += movedCount; hitCampaigns++; }
         } catch { /* skip this campaign */ }
       }
