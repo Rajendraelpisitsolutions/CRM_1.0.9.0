@@ -24,16 +24,6 @@ namespace Elpis_CRM.Services
             _db = db;
         }
 
-        /// <summary>True when the address is a well-formed email: exactly one @, a non-empty local
-        /// part and a domain ending in a 2+ letter TLD, with no whitespace. A false result → BOUNCE.</summary>
-        public static bool IsValidEmailFormat(string? email)
-        {
-            if (string.IsNullOrWhiteSpace(email)) return false;
-            var e = email.Trim();
-            if (e.Contains(' ') || e.Contains('\t')) return false;
-            return Regex.IsMatch(e, @"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$");
-        }
-
         // ─── CREATE ──────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -55,9 +45,7 @@ namespace Elpis_CRM.Services
             foreach (var r in recipients ?? Enumerable.Empty<(string, long?)>())
             {
                 var email = (r.Email ?? "").Trim();
-                // Keep invalid addresses too (missing @, bad/absent domain) — they must show up as a
-                // BOUNCE on the dashboard, not be silently discarded. Only truly empty entries are skipped.
-                if (email.Length == 0) continue;
+                if (email.Length == 0 || !email.Contains('@')) continue;
                 if (seen.Add(email)) cleaned.Add((email, r.ContactId));
             }
 
@@ -91,36 +79,17 @@ namespace Elpis_CRM.Services
             _db.EmailCampaigns.Add(campaign);
             await _db.SaveChangesAsync(); // populates campaign.Id
 
-            var now = DateTime.UtcNow;
             var rows = cleaned.Select(c => new EmailRecipientModel
             {
                 CampaignId = campaign.Id,
                 Email = c.Email,
                 ContactId = c.ContactId,
                 TrackingToken = Guid.NewGuid().ToString("N"),
-                // Invalid-format address → mark it Bounced right away (@, domain and TLD required).
-                Status = IsValidEmailFormat(c.Email) ? "Pending" : "Bounced",
-                Error = IsValidEmailFormat(c.Email) ? null : "Invalid email address"
+                Status = "Pending"
             }).ToList();
 
             _db.EmailRecipients.AddRange(rows);
             await _db.SaveChangesAsync();
-
-            // Tally the format-bounces and log a Bounce event for each so the dashboard reflects them.
-            var badRows = rows.Where(r => r.Status == "Bounced").ToList();
-            if (badRows.Count > 0)
-            {
-                campaign.BouncedCount += badRows.Count;
-                foreach (var r in badRows)
-                    _db.EmailEvents.Add(new EmailEventModel
-                    {
-                        RecipientId = r.Id,
-                        CampaignId = campaign.Id,
-                        Type = "Bounce",
-                        OccurredAt = now
-                    });
-                await _db.SaveChangesAsync();
-            }
 
             return campaign;
         }

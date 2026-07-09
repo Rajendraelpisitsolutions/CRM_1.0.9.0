@@ -4855,18 +4855,14 @@ useEffect(() => {
     try { await apiClient.post(`/EmailCampaign/${tracked.campaignId}/status`, { results }); } catch (e) {}
 
     const sent = results.filter((r) => r.status === "Sent").length;
-    const bounced = results.filter((r) => r.status === "Bounced").length;
     setIsSending(false);
     if (sent > 0) {
-      const bounceNote = bounced > 0 ? ` ${bounced} bounced (invalid address${bounced === 1 ? "" : "es"}).` : "";
-      setSuccessMessage(`Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}.${bounceNote} Follow opens & clicks on the Email Tracking page.`);
+      setSuccessMessage(`Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}. Follow opens & clicks on the Email Tracking page.`);
       setErrors({});
       setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
       setSelectedTags([]); setAttachments([]); setImages([]);
       try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
       setTimeout(() => onClose(), 1500);
-    } else if (bounced > 0) {
-      setErrors({ apiError: `${bounced} address${bounced === 1 ? "" : "es"} bounced (invalid) — nothing was sent. See the Bounced count on the Email Tracking page.` });
     } else {
       setErrors({ apiError: `All sends failed — ${results[0]?.error || "check your Outlook sign-in / permissions."}` });
     }
