@@ -2816,7 +2816,7 @@ function OutlookEmail({ onToast }) {
                         <div key={tpl.name + idx}
                           onClick={() => { setOpenedTemplateIdx(idx); setShowAddTemplate(false); }}
                           className={`border-b ${th.border} px-4 py-3 cursor-pointer transition ${th.hover} ${openedTemplateIdx === idx && !showAddTemplate ? isDark ? "bg-slate-700/30 border-l-2 border-l-slate-400" : "bg-slate-50 border-l-2 border-l-slate-700" : ""}`}>
-                          <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || tpl.body || "Untitled template"}</p>
+                          <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || "Untitled template"}</p>
                         </div>
                       ))}
                     </div>
@@ -3030,7 +3030,7 @@ function OutlookEmail({ onToast }) {
                       return tpl ? (
                         <>
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
-                            <h2 className="text-sm font-semibold truncate">{tpl.name || tpl.body || "Untitled template"}</h2>
+                            <h2 className="text-sm font-semibold truncate">{tpl.name || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
                               <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject ?? tpl.Subject ?? "", body: parsed.body, footer: parsed.footer, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo, attachments: parsed.attachments || [] }); }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
@@ -5040,9 +5040,15 @@ useEffect(() => {
                                       <CheckCircle2 size={16} className="text-blue-500 flex-shrink-0 ml-auto" />
                                     )}
                                   </div>
-                                  {(tpl.body ?? tpl.Body) && (
-                                    <p className={`${d.muted} text-xs mt-1 line-clamp-2`}>{tpl.body ?? tpl.Body}</p>
-                                  )}
+                                  {(() => {
+                                    // Show a clean preview — parse out the [[LOGO]]/[[ATTACH]]/[[FOOTER]]
+                                    // sentinels + base64 so raw packed data never renders.
+                                    const p = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
+                                    const preview = stripHtml(p.body || p.footer || "").trim();
+                                    return preview ? (
+                                      <p className={`${d.muted} text-xs mt-1 line-clamp-2`}>{preview}</p>
+                                    ) : null;
+                                  })()}
                                 </div>
                               </div>
                             </button>
