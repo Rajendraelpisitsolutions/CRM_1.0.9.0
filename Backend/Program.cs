@@ -312,6 +312,20 @@ IF COL_LENGTH('dbo.EmailRecipients','Delivered') IS NULL
 IF COL_LENGTH('dbo.EmailRecipients','DeliveredAt') IS NULL
     ALTER TABLE dbo.EmailRecipients ADD DeliveredAt DATETIME2 NULL;
 -- Add bounce tally (invalid / undeliverable addresses; schema is hand-managed).
+-- Self-heal: if BouncedCount exists but is the WRONG type (e.g. hand-added as NVARCHAR), drop it so
+-- it is re-created as INT below — EF maps it to an int and a text column would break every read.
+IF EXISTS (
+    SELECT 1 FROM sys.columns c
+    JOIN sys.types t ON c.user_type_id = t.user_type_id
+    WHERE c.object_id = OBJECT_ID('dbo.EmailCampaigns') AND c.name = 'BouncedCount' AND t.name <> 'int')
+BEGIN
+    DECLARE @df sysname;
+    SELECT @df = dc.name FROM sys.default_constraints dc
+        JOIN sys.columns c ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+        WHERE c.object_id = OBJECT_ID('dbo.EmailCampaigns') AND c.name = 'BouncedCount';
+    IF @df IS NOT NULL EXEC('ALTER TABLE dbo.EmailCampaigns DROP CONSTRAINT ' + @df);
+    ALTER TABLE dbo.EmailCampaigns DROP COLUMN BouncedCount;
+END
 IF COL_LENGTH('dbo.EmailCampaigns','BouncedCount') IS NULL
     ALTER TABLE dbo.EmailCampaigns ADD BouncedCount INT NOT NULL DEFAULT 0;
 IF OBJECT_ID(N'dbo.EmailEvents', N'U') IS NULL
