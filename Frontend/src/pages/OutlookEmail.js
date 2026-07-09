@@ -4389,26 +4389,70 @@ useEffect(() => {
       ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
       : `${userHtml}${footerBlockHtml()}`;
 
-    // Normal send — ONE message to all recipients, no tracking.
+    // Normal send — ONE message to all recipients, no tracking. The sent copy is filed into the
+    // user's CRM Campaign folder (same as tracked campaigns) so sent mail is kept together.
     // (For open/click tracking, use the Send dropdown → "Send tracked campaign".)
     try {
-      const emailPayload = {
-        message: {
-          subject,
-          body: { contentType: "HTML", content: finalHtml },
-          toRecipients: toEmails.map((addr) => ({ emailAddress: { address: addr } })),
-          ccRecipients: ccEmails.length > 0 ? ccEmails.map((addr) => ({ emailAddress: { address: addr } })) : [],
-        },
+      const message = {
+        subject,
+        body: { contentType: "HTML", content: finalHtml },
+        toRecipients: toEmails.map((addr) => ({ emailAddress: { address: addr } })),
+        ccRecipients: ccEmails.length > 0 ? ccEmails.map((addr) => ({ emailAddress: { address: addr } })) : [],
       };
-      if (attachmentsPayload.length > 0) emailPayload.message.attachments = attachmentsPayload;
+      if (attachmentsPayload.length > 0) message.attachments = attachmentsPayload;
 
-      const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(emailPayload),
-      });
+      // Resolve (creating if needed) the campaign folder to file the sent copy into.
+      let campaignFolderName = "CRM Campaigns";
+      try { campaignFolderName = (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { /* default */ }
+      const campaignFolderId = await ensureMailFolderId(accessToken, campaignFolderName);
 
-      if (response.ok || response.status === 202) {
+      let ok = false, errText = "Failed to send email";
+      if (campaignFolderId) {
+        // Draft → send → move so a REAL sent message lands in the folder (not a draft). The move
+        // waits until the send has finished (message left Drafts) to avoid "unknown message" items.
+        const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(message),
+        });
+        if (draftRes.ok || draftRes.status === 201) {
+          const draft = await draftRes.json();
+          const mid = draft.id;
+          const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/send`, {
+            method: "POST", headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          ok = sendRes.ok || sendRes.status === 202;
+          if (ok) {
+            const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+            let ready = false;
+            for (let a = 0; a < 8 && !ready; a++) {
+              const chk = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}?$select=isDraft`, { headers: { Authorization: `Bearer ${accessToken}` } });
+              if (chk.ok) { const j = await chk.json(); if (j.isDraft === false) { ready = true; break; } }
+              await wait(500);
+            }
+            if (ready) {
+              try {
+                await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ destinationId: campaignFolderId }),
+                });
+              } catch { /* filing is best-effort; email is already sent */ }
+            }
+          } else { try { const ed = await sendRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
+        } else { try { const ed = await draftRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
+      } else {
+        // No campaign folder available — plain send, kept in Sent Items.
+        const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ message, saveToSentItems: true }),
+        });
+        ok = response.ok || response.status === 202;
+        if (!ok) { try { const ed = await response.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
+      }
+
+      if (ok) {
         setSuccessMessage("Email sent successfully!");
         setErrors({});
         setToInput(""); setCcInput(""); setSubject(""); setBody("");
@@ -4419,9 +4463,8 @@ useEffect(() => {
         setIsSending(false);
         setTimeout(() => onClose(), 1000);
       } else {
-        const errorData = await response.json();
-        console.error("Graph API error response:", errorData);
-        setErrors({ apiError: errorData.error?.message || "Failed to send email" });
+        console.error("Graph API send error:", errText);
+        setErrors({ apiError: errText });
         setIsSending(false);
       }
     } catch (error) {
