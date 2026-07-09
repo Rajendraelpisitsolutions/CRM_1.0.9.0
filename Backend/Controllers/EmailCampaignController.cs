@@ -35,6 +35,18 @@ namespace Elpis_CRM.Controllers
         private string BaseUrl() =>
             (_config["Tracking:PublicBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}").TrimEnd('/');
 
+        /// <summary>Returns the caller-supplied origin, unless it's empty or a localhost/dev address —
+        /// then it falls back to the configured public URL, so emails never carry unreachable links.</summary>
+        private static string UsableBase(string? candidate, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) return fallback;
+            var c = candidate.Trim();
+            if (c.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
+                c.Contains("127.0.0.1") || c.Contains("0.0.0.0") || c.Contains("[::1]"))
+                return fallback;
+            return c.TrimEnd('/');
+        }
+
         /// <summary>The signed-in user's email — every read/write is scoped to campaigns they created,
         /// so one user never sees another user's tracking.</summary>
         private string? CurrentUserEmail() =>
@@ -92,13 +104,12 @@ namespace Elpis_CRM.Controllers
 
             // Prefer the origin the frontend actually reaches the API at, so tracking links resolve
             // to the backend in production regardless of how PublicBaseUrl is configured.
-            var baseUrl = !string.IsNullOrWhiteSpace(dto.PublicBaseUrl)
-                ? dto.PublicBaseUrl.TrimEnd('/')
-                : BaseUrl();
-            // The (un)subscribe links target the SPA; default to the API origin if not provided.
-            var subBaseUrl = !string.IsNullOrWhiteSpace(dto.SubscribeBaseUrl)
-                ? dto.SubscribeBaseUrl.TrimEnd('/')
-                : baseUrl;
+            // A localhost / 127.0.0.1 origin (dev machine) must never end up in a real email — fall
+            // back to the configured public URL so links are reachable by recipients.
+            var configBase = BaseUrl();
+            var baseUrl = UsableBase(dto.PublicBaseUrl, configBase);
+            // The (un)subscribe links target the SPA; default to the same public origin.
+            var subBaseUrl = UsableBase(dto.SubscribeBaseUrl, baseUrl);
             var recipients = await _db.EmailRecipients.AsNoTracking()
                 .Where(r => r.CampaignId == campaign.Id)
                 .ToListAsync();
