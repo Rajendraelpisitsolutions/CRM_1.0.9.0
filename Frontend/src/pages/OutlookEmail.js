@@ -114,6 +114,35 @@ function newCrmTag() {
   return "crm-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e12).toString(36);
 }
 
+// True when an address is almost certainly undeliverable → count it as a BOUNCE at send time
+// (immediately, instead of being reported as "sent"). Checks, in order:
+//   • exactly one "@"                         • non-empty local part and domain
+//   • no whitespace anywhere                  • no leading/trailing/double dots
+//   • only valid characters                   • a real domain ending in a 2+ letter TLD
+//   • common typo domains (gmial.com, gmail.co/.con, yaho.com, hotmial.com, outlok.com, …)
+function looksBounceableEmail(email) {
+  const e = (email || "").trim().toLowerCase();
+  if (!e) return true;
+  const parts = e.split("@");
+  if (parts.length !== 2) return true;                                    // missing "@" or more than one
+  const [local, domain] = parts;
+  if (!local || !domain) return true;                                     // empty local or domain
+  if (/\s/.test(e)) return true;                                          // any space
+  if (/^\.|\.$|\.\./.test(local) || /^\.|\.$|\.\./.test(domain)) return true; // bad dots
+  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)) return true;        // invalid local characters
+  if (!/^[a-z0-9.-]+$/.test(domain)) return true;                        // invalid domain characters
+  if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(domain)) return true;           // must be name(.name)+.tld
+  const typoDomains = [
+    "gmial.com", "gmai.com", "gmal.com", "gmil.com", "gnail.com", "gmaill.com", "gmails.com",
+    "gmail.co", "gmail.con", "gmail.cm", "gmail.om", "gmail.cim",
+    "yaho.com", "yahooo.com", "yhaoo.com", "yahoo.co", "yahoo.con",
+    "hotmial.com", "hotmil.com", "hotmai.com", "hotmail.co", "hotmail.con",
+    "outlok.com", "outook.com", "outlook.co", "outlook.con", "rediffmail.co",
+  ];
+  if (typoDomains.includes(domain)) return true;
+  return false;
+}
+
 // After a draft is sent, its original id is INVALID — the message is recreated in Sent Items with a
 // new id — so you cannot move it by the draft id (that was why sent mail stayed in Sent Items).
 // Locate ONLY this exact sent message in Sent Items by the unique CrmCampaignTag we stamped on the
@@ -4749,9 +4778,10 @@ useEffect(() => {
     const sentFiles = [];   // {conversationId, internetMessageId} of sent messages to file into the folder
     for (let i = 0; i < tracked.items.length; i++) {
       const item = tracked.items[i];
-      // A malformed / invalid address can't be delivered — count it as a BOUNCE (not sent).
-      if (!validateEmail(item.email)) {
-        results.push({ recipientId: item.recipientId, status: "Bounced", error: "Invalid email address" });
+      // A malformed / clearly-undeliverable address (bad @/domain/TLD or a common typo domain) can't
+      // be delivered — count it as a BOUNCE straight away (not sent).
+      if (looksBounceableEmail(item.email)) {
+        results.push({ recipientId: item.recipientId, status: "Bounced", error: "Invalid or undeliverable email address" });
         continue;
       }
       const message = {
