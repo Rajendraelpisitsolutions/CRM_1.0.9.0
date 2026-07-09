@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useMsal } from "@azure/msal-react";
 import apiClient from "../api/client";
 import {
@@ -42,6 +42,70 @@ async function ensureCampaignFolderId(accessToken) {
     const created = await createRes.json();
     return created.id || null;
   } catch { return null; }
+}
+
+// Given a snapshot of inbox messages and one campaign's recipients, classify each campaign-related
+// message (read receipt / delivery receipt / genuine reply), record the receipts to the backend,
+// and file ALL of them into the campaign folder so the inbox stays clean. Reused by the per-campaign
+// "Check replies" and the overview "File all campaign mail" sweep. Returns per-type counts.
+async function scanAndFileCampaign(accessToken, messages, recipients, campaignId, canMove, folderId) {
+  const recEmails = (recipients || []).map((r) => (typeof r === "string" ? r : r.email || "").toLowerCase()).filter(Boolean);
+  const recSet = new Set(recEmails);
+  const opens = new Set(), delivered = new Set(), replies = new Set();
+  const moveIds = [];
+  const replyCandidates = [];
+  for (const mm of (messages || [])) {
+    const from = (mm.from?.emailAddress?.address || "").toLowerCase();
+    const subj = (mm.subject || "").trim();
+    const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
+    const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
+    if (isRead) {
+      if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }
+    } else if (isDelivered) {
+      const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
+      let hit = false;
+      for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }
+      if (hit && mm.id) moveIds.push(mm.id);
+    } else if (recSet.has(from) && mm.id) {
+      replyCandidates.push({ id: mm.id, from });
+    }
+  }
+  // Disambiguate reply candidates by message class so receipts in any language count correctly.
+  for (const c of replyCandidates) {
+    let msgClass = "";
+    try {
+      const cr = await fetch(
+        `https://graph.microsoft.com/v1.0/me/messages/${c.id}?$select=id&$expand=singleValueExtendedProperties($filter=id eq 'String 0x001A')`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (cr.ok) { const cj = await cr.json(); msgClass = (cj.singleValueExtendedProperties?.[0]?.value || "").toUpperCase(); }
+    } catch { /* class unknown → treat as reply */ }
+    if (msgClass.startsWith("REPORT")) {
+      if (msgClass.includes("IPNRN") || msgClass.includes("IPNNRN")) opens.add(c.from);
+      else delivered.add(c.from);
+    } else {
+      replies.add(c.from);
+    }
+    moveIds.push(c.id);
+  }
+  const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
+  let movedCount = 0;
+  if (canMove && moveIds.length && folderId) {
+    for (const id of moveIds) {
+      try {
+        const mv = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${id}/move`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ destinationId: folderId }),
+        });
+        if (mv.ok) movedCount++;
+      } catch { /* skip */ }
+    }
+  }
+  if (oArr.length || dArr.length || rArr.length) {
+    try { await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr }); } catch { /* best-effort */ }
+  }
+  return { oArr, dArr, rArr, movedCount };
 }
 
 const fmtNum = (n) => (n == null ? "0" : Number(n).toLocaleString());
@@ -187,9 +251,9 @@ function CampaignDetail({ campaignId, onBack }) {
   //     when the tracking pixel was blocked by images-off clients),
   //   • delivery receipts (subject "Delivered: …", sent by the mail system) → DELIVERED,
   //   • any other message from a recipient → genuine REPLY.
-  const checkReplies = async () => {
-    if (!accounts || accounts.length === 0) { setReplyMsg("Sign in to Outlook to check replies."); return; }
-    setCheckingReplies(true); setReplyMsg("");
+  const checkReplies = async (silent = false) => {
+    if (!accounts || accounts.length === 0) { if (!silent) setReplyMsg("Sign in to Outlook to check replies."); return; }
+    setCheckingReplies(true); if (!silent) setReplyMsg("");
     try {
       // Prefer Mail.ReadWrite so matched messages can also be moved into the campaign folder;
       // fall back to read-only (still counts replies/receipts, just can't file them) if not consented.
@@ -202,82 +266,32 @@ function CampaignDetail({ campaignId, onBack }) {
       }
       const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=id,from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
       const data = await res.json();
-      const recEmails = recipients.map((r) => (r.email || "").toLowerCase()).filter(Boolean);
-      const recSet = new Set(recEmails);
-      const opens = new Set(), delivered = new Set(), replies = new Set();
-      // Every campaign-related inbox message (read receipts, delivery receipts, and genuine
-      // replies) is filed into the campaign folder so the inbox stays clean. The message class is
-      // used only to COUNT each one correctly (open vs delivered vs reply) — not to decide whether
-      // to move it.
-      const moveIds = [];
-      const replyCandidates = [];   // {id, from} from a recipient, subject didn't flag it as a receipt
-      for (const mm of (data.value || [])) {
-        const from = (mm.from?.emailAddress?.address || "").toLowerCase();
-        const subj = (mm.subject || "").trim();
-        const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
-        const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
-        if (isRead) {
-          if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }   // read receipt → open
-        } else if (isDelivered) {
-          const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
-          let hit = false;
-          for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }  // delivery receipt
-          if (hit && mm.id) moveIds.push(mm.id);
-        } else if (recSet.has(from) && mm.id) {
-          replyCandidates.push({ id: mm.id, from });        // classify by message class below
-        }
-      }
-
-      // For candidates, use the Outlook message class to count them accurately: read/delivery
-      // receipts and NDRs are REPORT.* (sent from the recipient in any language, so the subject
-      // regex can miss them); everything else is a genuine reply. All of them are still filed.
-      for (const c of replyCandidates) {
-        let msgClass = "";
-        try {
-          const cr = await fetch(
-            `https://graph.microsoft.com/v1.0/me/messages/${c.id}?$select=id&$expand=singleValueExtendedProperties($filter=id eq 'String 0x001A')`,
-            { headers: { Authorization: `Bearer ${tok.accessToken}` } }
-          );
-          if (cr.ok) { const cj = await cr.json(); msgClass = (cj.singleValueExtendedProperties?.[0]?.value || "").toUpperCase(); }
-        } catch { /* class unknown → treat as reply */ }
-        if (msgClass.startsWith("REPORT")) {
-          if (msgClass.includes("IPNRN") || msgClass.includes("IPNNRN")) opens.add(c.from);
-          else delivered.add(c.from);
-        } else {
-          replies.add(c.from);
-        }
-        moveIds.push(c.id);   // file it into the campaign folder either way
-      }
-      const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
-      // File the matched replies / receipts into the campaign folder so the inbox stays clean.
-      let movedCount = 0;
-      if (canMove && moveIds.length) {
-        const folderId = await ensureCampaignFolderId(tok.accessToken);
-        if (folderId) {
-          for (const id of moveIds) {
-            try {
-              const mv = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${id}/move`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${tok.accessToken}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ destinationId: folderId }),
-              });
-              if (mv.ok) movedCount++;
-            } catch { /* skip this message */ }
-          }
-        }
-      }
+      const folderId = canMove ? await ensureCampaignFolderId(tok.accessToken) : null;
+      const { oArr, dArr, rArr, movedCount } = await scanAndFileCampaign(tok.accessToken, data.value || [], recipients, campaignId, canMove, folderId);
       if (oArr.length || dArr.length || rArr.length) {
-        await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr });
         const parts = [];
         if (rArr.length) parts.push(`${rArr.length} repl${rArr.length === 1 ? "y" : "ies"}`);
         if (oArr.length) parts.push(`${oArr.length} read receipt${oArr.length === 1 ? "" : "s"}`);
         if (dArr.length) parts.push(`${dArr.length} delivered`);
         setReplyMsg(`Found ${parts.join(", ")}${movedCount ? ` · moved ${movedCount} to your campaign folder` : ""}.`);
         loadDetail(); loadRecipients();
-      } else setReplyMsg("No replies or receipts from these recipients found in your inbox.");
-    } catch { setReplyMsg("Couldn't check inbox (Outlook sign-in / permission needed)."); }
+      } else if (!silent) setReplyMsg("No replies or receipts from these recipients found in your inbox.");
+    } catch { if (!silent) setReplyMsg("Couldn't check inbox (Outlook sign-in / permission needed)."); }
     finally { setCheckingReplies(false); }
   };
+
+  // Auto-file this campaign's read receipts + replies into the campaign folder (and record them)
+  // as soon as it's opened — so campaign mail leaves the inbox without a manual click. Runs once
+  // per campaign, after its recipients have loaded.
+  const autoFiledRef = useRef(false);
+  useEffect(() => { autoFiledRef.current = false; }, [campaignId]);
+  useEffect(() => {
+    if (autoFiledRef.current) return;
+    if (!recipients.length || !accounts || accounts.length === 0) return;
+    autoFiledRef.current = true;
+    checkReplies(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipients, accounts]);
 
   const tiles = detail ? [
     { metric: "sent", label: "Sent", value: fmtNum(detail.sentCount), sub: `of ${fmtNum(detail.totalRecipients)}` },
@@ -376,10 +390,13 @@ function CampaignDetail({ campaignId, onBack }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function EmailTracking() {
+  const { instance, accounts } = useMsal();
   const [overview, setOverview] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [filingAll, setFilingAll] = useState(false);
+  const [fileAllMsg, setFileAllMsg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -392,6 +409,40 @@ export default function EmailTracking() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sweep the inbox once and file every campaign's read receipts + replies into the campaign
+  // folder — across ALL campaigns — so no campaign mail is left sitting in the inbox.
+  const fileAllCampaignMail = async () => {
+    if (!accounts || accounts.length === 0) { setFileAllMsg("Sign in to Outlook first."); return; }
+    if (!campaigns.length) { setFileAllMsg("No campaigns yet."); return; }
+    setFilingAll(true); setFileAllMsg("");
+    try {
+      let tok, canMove = true;
+      try { tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.ReadWrite"] }); }
+      catch { canMove = false; tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.Read"] }); }
+      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=id,from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+      const data = await res.json();
+      const messages = data.value || [];
+      const folderId = canMove ? await ensureCampaignFolderId(tok.accessToken) : null;
+      let totalMoved = 0, hitCampaigns = 0;
+      for (const c of campaigns) {
+        try {
+          const rr = await apiClient.get(`/EmailCampaign/${c.id}/recipients`, { params: { page: 1, pageSize: 1000 } });
+          const recips = Array.isArray(rr.data?.items) ? rr.data.items : [];
+          if (!recips.length) continue;
+          const { movedCount } = await scanAndFileCampaign(tok.accessToken, messages, recips, c.id, canMove, folderId);
+          if (movedCount) { totalMoved += movedCount; hitCampaigns++; }
+        } catch { /* skip this campaign */ }
+      }
+      setFileAllMsg(
+        !canMove ? "Grant Outlook mail permission to move messages."
+          : totalMoved ? `Filed ${totalMoved} message${totalMoved === 1 ? "" : "s"} from ${hitCampaigns} campaign${hitCampaigns === 1 ? "" : "s"} into your campaign folder.`
+            : "No new campaign mail found in your inbox."
+      );
+      load();
+    } catch { setFileAllMsg("Couldn't file campaign mail (Outlook sign-in / permission needed)."); }
+    finally { setFilingAll(false); }
+  };
 
   const o = overview || {};
   const tiles = [
@@ -411,10 +462,20 @@ export default function EmailTracking() {
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: INK }}>Email Tracking</h1>
             <p className="text-sm mt-0.5" style={{ color: BODY }}>Delivery, opens, clicks, replies and unsubscribes across your campaigns.</p>
           </div>
-          <button onClick={load} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium bg-white hover:bg-[#f7f9fb] transition" style={{ color: PRIMARY, border: `1px solid ${BORDER}` }}>
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {selected == null && (
+              <button onClick={fileAllCampaignMail} disabled={filingAll}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: M.replied.tint, color: M.replied.c }}>
+                <Inbox className="w-4 h-4" /> {filingAll ? "Filing…" : "File campaign mail"}
+              </button>
+            )}
+            <button onClick={load} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium bg-white hover:bg-[#f7f9fb] transition" style={{ color: PRIMARY, border: `1px solid ${BORDER}` }}>
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </button>
+          </div>
         </div>
+        {selected == null && fileAllMsg && <p className="text-xs -mt-2" style={{ color: BODY }}>{fileAllMsg}</p>}
 
         {selected != null ? (
           <CampaignDetail campaignId={selected} onBack={() => { setSelected(null); load(); }} />
