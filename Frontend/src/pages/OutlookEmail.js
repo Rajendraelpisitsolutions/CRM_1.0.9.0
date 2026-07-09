@@ -4857,16 +4857,19 @@ useEffect(() => {
     const sent = results.filter((r) => r.status === "Sent").length;
     const bounced = results.filter((r) => r.status === "Bounced").length;
     setIsSending(false);
-    if (sent > 0) {
+    // An invalid address is a BOUNCE, not a send error — never surface it as an error. It's counted
+    // on the Email Tracking dashboard. Only a genuine send failure (no bounce) shows an error.
+    if (sent > 0 || bounced > 0) {
       const bounceNote = bounced > 0 ? ` ${bounced} bounced (invalid address${bounced === 1 ? "" : "es"}).` : "";
-      setSuccessMessage(`Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}.${bounceNote} Follow opens & clicks on the Email Tracking page.`);
+      const sentNote = sent > 0
+        ? `Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}.`
+        : "No valid addresses to send to.";
+      setSuccessMessage(`${sentNote}${bounceNote} Follow results on the Email Tracking page.`);
       setErrors({});
       setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
       setSelectedTags([]); setAttachments([]); setImages([]);
       try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
       setTimeout(() => onClose(), 1500);
-    } else if (bounced > 0) {
-      setErrors({ apiError: `${bounced} address${bounced === 1 ? "" : "es"} bounced (invalid) — nothing was sent. See the Bounced count on the Email Tracking page.` });
     } else {
       setErrors({ apiError: `All sends failed — ${results[0]?.error || "check your Outlook sign-in / permissions."}` });
     }
