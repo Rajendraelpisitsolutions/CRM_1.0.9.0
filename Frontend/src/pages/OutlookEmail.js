@@ -4452,24 +4452,24 @@ useEffect(() => {
     e.preventDefault();
     setIsSending(true);
 
-    // Parse inputs into arrays (include any address still being typed)
-    const toEmails = allToEmails;
-    const ccEmails = parseEmails(ccInput);
+    // Parse inputs into arrays (include any address still being typed), split on comma/semicolon/space.
+    const toEmailsRaw = allToEmails;
+    const ccEmailsRaw = parseEmails(ccInput);
 
-    // Frontend validation for empty or invalid fields
+    // Validate every address. Invalid ones (bad @/domain/TLD or typo domain) are SKIPPED, not blocked —
+    // the valid ones still send. We only stop if there's no valid recipient / no subject / no body.
+    const toEmails = toEmailsRaw.filter((addr) => !looksBounceableEmail(addr));
+    const ccEmails = ccEmailsRaw.filter((addr) => !looksBounceableEmail(addr));
+    const skipped = [
+      ...toEmailsRaw.filter((addr) => looksBounceableEmail(addr)),
+      ...ccEmailsRaw.filter((addr) => looksBounceableEmail(addr)),
+    ];
+
     let validationErrors = {};
-    if (toEmails.length === 0)
-      validationErrors.to = "At least one recipient is required";
+    if (toEmailsRaw.length === 0) validationErrors.to = "At least one recipient is required";
+    else if (toEmails.length === 0) validationErrors.to = "No valid recipient address — check the @ and domain.";
     if (!subject.trim()) validationErrors.subject = "Subject is required";
     if (!body.trim() && !quoteHtml) validationErrors.body = "Email body is required";
-
-    // Validate email formats
-    const invalidTo = toEmails.filter((addr) => !validateEmail(addr));
-    if (invalidTo.length > 0)
-      validationErrors.to = `Invalid To address(es): ${invalidTo.join(", ")}`;
-    const invalidCc = ccEmails.filter((addr) => !validateEmail(addr));
-    if (invalidCc.length > 0)
-      validationErrors.cc = `Invalid Cc address(es): ${invalidCc.join(", ")}`;
 
     // Update error state and clear success message
     setErrors(validationErrors);
@@ -4595,7 +4595,10 @@ useEffect(() => {
       }
 
       if (ok) {
-        setSuccessMessage("Email sent successfully!");
+        const skipNote = skipped.length > 0
+          ? ` ${skipped.length} invalid address${skipped.length === 1 ? "" : "es"} skipped (${skipped.join(", ")}).`
+          : "";
+        setSuccessMessage(`Email sent successfully!${skipNote}`);
         setErrors({});
         setToInput(""); setCcInput(""); setSubject(""); setBody("");
         setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
