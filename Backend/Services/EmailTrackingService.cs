@@ -116,25 +116,29 @@ namespace Elpis_CRM.Services
             var now = DateTime.UtcNow;
             foreach (var r in recips)
             {
-                if (r.Status == "Sent" || r.Status == "Failed") continue; // already terminal
+                if (r.Status == "Sent" || r.Status == "Failed" || r.Status == "Bounced") continue; // already terminal
                 var res = byId[r.Id];
                 bool sent = string.Equals(res.Status, "Sent", StringComparison.OrdinalIgnoreCase);
-                r.Status = sent ? "Sent" : "Failed";
+                // A bounce = an invalid / undeliverable address. Tracked separately from a generic Failed.
+                bool bounced = string.Equals(res.Status, "Bounced", StringComparison.OrdinalIgnoreCase);
+                r.Status = sent ? "Sent" : (bounced ? "Bounced" : "Failed");
                 r.SentAt = sent ? now : r.SentAt;
                 if (!sent) r.Error = res.Error;
-                if (sent) campaign.SentCount++; else campaign.FailedCount++;
+                if (sent) campaign.SentCount++;
+                else if (bounced) campaign.BouncedCount++;
+                else campaign.FailedCount++;
 
                 _db.EmailEvents.Add(new EmailEventModel
                 {
                     RecipientId = r.Id,
                     CampaignId = campaignId,
-                    Type = sent ? "Sent" : "Failed",
+                    Type = sent ? "Sent" : (bounced ? "Bounce" : "Failed"),
                     OccurredAt = now
                 });
             }
 
             // Completed once every recipient has a terminal outcome.
-            if (campaign.SentCount + campaign.FailedCount >= campaign.TotalRecipients)
+            if (campaign.SentCount + campaign.FailedCount + campaign.BouncedCount >= campaign.TotalRecipients)
             {
                 campaign.Status = "Completed";
                 campaign.CompletedAt = now;

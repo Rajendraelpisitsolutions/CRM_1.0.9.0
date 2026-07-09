@@ -311,6 +311,9 @@ IF COL_LENGTH('dbo.EmailRecipients','Delivered') IS NULL
     ALTER TABLE dbo.EmailRecipients ADD Delivered BIT NOT NULL DEFAULT 0;
 IF COL_LENGTH('dbo.EmailRecipients','DeliveredAt') IS NULL
     ALTER TABLE dbo.EmailRecipients ADD DeliveredAt DATETIME2 NULL;
+-- Add bounce tally (invalid / undeliverable addresses; schema is hand-managed).
+IF COL_LENGTH('dbo.EmailCampaigns','BouncedCount') IS NULL
+    ALTER TABLE dbo.EmailCampaigns ADD BouncedCount INT NOT NULL DEFAULT 0;
 IF OBJECT_ID(N'dbo.EmailEvents', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.EmailEvents (
