@@ -80,15 +80,16 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     const from = (mm.from?.emailAddress?.address || "").toLowerCase();
     const subj = (mm.subject || "").trim();
     const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
-    // Bounce-back / NDR: a message from the mail system (mailer-daemon / postmaster / Exchange) OR a
-    // classic failure subject. The failed recipient's address appears in the report body. These do
-    // NOT carry the campaign subject reliably (e.g. Gmail's "Delivery Status Notification (Failure)")
-    // so they are matched by the recipient email inside the report, NOT by matchesCampaign.
-    const isNdrSender = /mailer-daemon|postmaster|microsoftexchange|maildeliverysystem|mail delivery sub/i.test(from);
-    const isBounceSubj = /^(undeliverable:|undelivered mail|returned mail|mail delivery failed|failure notice|delivery has failed|delivery incomplete)/i.test(subj)
-      || /delivery status notification\s*\(fail/i.test(subj)
-      || (/delivery status notification/i.test(subj) && /fail|undeliver|not.*deliver|rejected/i.test((mm.bodyPreview || "")));
-    if (isNdrSender || isBounceSubj) {
+    // Bounce-back / NDR — only a GENUINE delivery FAILURE counts. Never treat a message as a bounce
+    // just because it's from a system mailbox: Exchange's system address (microsoftexchange…) also
+    // sends the READ & DELIVERY receipts this campaign requested, so a sender-only rule wrongly
+    // bounced valid, delivered recipients. Require an explicit failure subject, or a mailer-daemon /
+    // postmaster message whose text says it failed.
+    const isFailureSubj = /^(undeliverable:|undelivered mail|returned mail|mail delivery (failed|subsystem)|failure notice|delivery has failed)/i.test(subj)
+      || /delivery status notification\s*\(fail/i.test(subj);
+    const isFailureFromDaemon = /mailer-daemon|postmaster/i.test(from)
+      && /(undeliverable|could not be delivered|delivery (has )?failed|delivery to the following|rejected|no such user|does(n't| not) exist|address not found|mailbox (unavailable|not found)|recipient.*not found)/i.test(subj + " " + (mm.bodyPreview || ""));
+    if (isFailureSubj || isFailureFromDaemon) {
       const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
       let hit = false;
       for (const e of recEmails) if (containsAddress(hay, e)) { bounces.add(e); hit = true; }   // this address bounced
