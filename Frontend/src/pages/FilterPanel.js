@@ -26,6 +26,7 @@ function FilterPanel({
   const [tempFilters, setTempFilters] = useState(filters || []);
   const [selectedPipeline, setSelectedPipeline] = useState("all");
   const [selectedCreatedBy, setSelectedCreatedBy] = useState("all");
+  const [selectedPriority, setSelectedPriority] = useState("all");
   const [columnsCollapsed, setColumnsCollapsed] = useState(!defaultColumnsExpanded);
 
   // Multiple tags can be selected; the applied filter value is a comma-joined string
@@ -100,9 +101,13 @@ function FilterPanel({
     const createdByFilter = (filters || []).find(
       (f) => String(f.field || "").toLowerCase().trim() === "createdby"
     );
+    const priorityFilter = (filters || []).find(
+      (f) => String(f.field || "").toLowerCase().trim() === "priority"
+    );
 
     setSelectedPipeline(pipelineFilter?.value || "all");
     setSelectedCreatedBy(createdByFilter?.value || "all");
+    setSelectedPriority(priorityFilter?.value || "all");
   }, [selectedColumns, filters, columns, isOpen]);
 
   const handleColumnToggle = (colKey) => {
@@ -270,6 +275,15 @@ function FilterPanel({
           dataType: "text",
         });
       }
+      if (selectedPriority && selectedPriority !== "all") {
+        outFilters.push({
+          id: Date.now() + 2,
+          field: "priority",
+          operator: "equals",
+          value: selectedPriority,
+          dataType: "select",
+        });
+      }
     } else if (tagOptions && tagOptions.length > 0) {
       if (tempSelectedTags && tempSelectedTags.length > 0) {
         const tagField =
@@ -310,6 +324,7 @@ function FilterPanel({
     setTempFilters([]);
     setSelectedPipeline("all");
     setSelectedCreatedBy("all");
+    setSelectedPriority("all");
     setTempSelectedTags([]);
     if (typeof onClear === "function") onClear();
   };
@@ -444,6 +459,20 @@ function FilterPanel({
                             <option key={creator} value={creator}>{creator}</option>
                           ))
                         ) : null}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Priority</label>
+                      <select
+                        value={selectedPriority}
+                        onChange={(e) => setSelectedPriority(e.target.value)}
+                        className="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white"
+                      >
+                        <option value="all">All</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
                       </select>
                     </div>
                   </div>

@@ -284,6 +284,8 @@ function Deals({
   const [updatedFrom, setUpdatedFrom] = useState("");
   const [updatedTo, setUpdatedTo] = useState("");
   const [createdByFilter, setCreatedByFilter] = useState("all");
+  // Priority filter dropdown (All / High / Medium / Low)
+  const [priorityFilter, setPriorityFilter] = useState("all");
 
   // Local search bar inside the Deals kanban (independent from global header search)
   const [localDealSearch, setLocalDealSearch] = useState("");
@@ -612,12 +614,19 @@ function Deals({
       return fieldName === "createdby";
     });
 
+    const priorityFilterItem = filterArray.find((f) => {
+      const fieldName = String(f?.field || "").toLowerCase().trim();
+      return fieldName === "priority";
+    });
+
     const pipeline = pipelineFilter?.value;
     const createdByValue = createdByFilterItem?.value;
+    const priorityValue = priorityFilterItem?.value;
 
-    console.log("[Deals.useEffect.filters] Filter extraction complete:", { foundPipelineFilter: !!pipelineFilter, pipeline, createdByValue, createdByFilterItem });
+    console.log("[Deals.useEffect.filters] Filter extraction complete:", { foundPipelineFilter: !!pipelineFilter, pipeline, createdByValue, priorityValue });
 
     setCreatedByFilter(createdByValue || "all");
+    setPriorityFilter(priorityValue || "all");
     fetchDeals(pipeline);
 
     try {
@@ -686,6 +695,14 @@ function Deals({
         }
       }
 
+      // Priority filter (High / Medium / Low)
+      if (priorityFilter && priorityFilter !== "all") {
+        const pr = String(deal.Priority ?? deal.priority ?? "").trim().toLowerCase();
+        if (pr !== String(priorityFilter).toLowerCase()) {
+          return false;
+        }
+      }
+
       // localDealSearch is now handled server-side (see fetchDeals + debouncedLocalDealSearch).
       // Only apply the global header search prop client-side as a secondary pass — token-based.
       if (search) {
@@ -727,7 +744,7 @@ function Deals({
 
     setDealsByStage(grouped);
 
-  }, [rawDeals, search, accountsList, createdFrom, createdTo, updatedFrom, updatedTo, createdByFilter]);
+  }, [rawDeals, search, accountsList, createdFrom, createdTo, updatedFrom, updatedTo, createdByFilter, priorityFilter]);
 
   // Listen for date range events dispatched from header/dashboard
   useEffect(() => {
@@ -1115,6 +1132,7 @@ function Deals({
     !!localDealSearch?.trim() ||
     !!search?.trim() ||
     createdByFilter !== "all" ||
+    priorityFilter !== "all" ||
     !!createdFrom ||
     !!createdTo ||
     !!updatedFrom ||
