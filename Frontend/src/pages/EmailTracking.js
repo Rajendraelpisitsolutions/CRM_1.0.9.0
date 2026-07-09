@@ -3,7 +3,7 @@ import { useMsal } from "@azure/msal-react";
 import apiClient from "../api/client";
 import {
   Send, MailOpen, MousePointerClick, UserMinus, AlertTriangle, Megaphone,
-  RefreshCw, ArrowLeft, ChevronRight, ChevronDown, Inbox, Reply, Filter, Gauge, MailX,
+  RefreshCw, ArrowLeft, ChevronRight, ChevronDown, Inbox, Reply, Filter, Gauge,
 } from "lucide-react";
 
 // ── Freshworks "Crayons" palette (their real product colours) ─────────────────
@@ -20,7 +20,6 @@ const M = {
   sent:         { c: "#2c5cc5", l: "#a6c1ee", tint: "#e8f0fd", icon: Send },            // azure
   opened:       { c: "#00a886", l: "#8ed6c5", tint: "#e0f5f1", icon: MailOpen },        // jungle teal
   clicked:      { c: "#6c44b4", l: "#c0aae0", tint: "#f1ecfa", icon: MousePointerClick },// freshworks purple
-  bounced:      { c: "#c2410c", l: "#f0b090", tint: "#fbeae0", icon: MailX },            // burnt-orange — undeliverable
   replied:      { c: "#1288c9", l: "#93c7e6", tint: "#e4f2fb", icon: Reply },           // turquoise family
   unsubscribed: { c: "#e86f25", l: "#f4bd97", tint: "#fdf0e3", icon: UserMinus },       // casablanca orange
   failed:       { c: "#64748b", l: "#b7c0ca", tint: "#eef2f6", icon: AlertTriangle },   // neutral slate (no red)
@@ -155,10 +154,10 @@ const Chip = ({ label, metric }) => {
 
 const RecipientChips = ({ r }) => {
   const chips = [];
-  if (r.status === "Bounced") chips.push(<Chip key="b" label="Bounced" metric="bounced" />);
-  else if (r.status === "Failed") chips.push(<Chip key="f" label="Failed" metric="failed" />);
+  if (r.status === "Failed") chips.push(<Chip key="f" label="Failed" metric="failed" />);
   else if (r.openCount === 0 && !r.replied) chips.push(<Chip key="s" label="Sent" metric="campaigns" />);
   if (r.openCount > 0) chips.push(<Chip key="o" label={`Opened${r.openCount > 1 ? ` ${r.openCount}×` : ""}`} metric="opened" />);
+  if (r.clickCount > 0) chips.push(<Chip key="c" label={`Clicked${r.clickCount > 1 ? ` ${r.clickCount}×` : ""}`} metric="clicked" />);
   if (r.replied) chips.push(<Chip key="r" label="Replied" metric="replied" />);
   if (r.unsubscribed) chips.push(<Chip key="u" label="Unsubscribed" metric="unsubscribed" />);
   return <div className="flex flex-wrap gap-1">{chips}</div>;
@@ -189,7 +188,6 @@ const EVENT_META = {
   Delivered: { metric: "sent", label: "Delivered (confirmed)" },
   Open: { metric: "opened", label: "Opened" },
   Click: { metric: "clicked", label: "Clicked a link" },
-  Bounce: { metric: "bounced", label: "Bounced (invalid address)" },
   Reply: { metric: "replied", label: "Replied" },
   Unsubscribe: { metric: "unsubscribed", label: "Unsubscribed" },
   Subscribe: { metric: "opened", label: "Re-subscribed" },
@@ -224,7 +222,7 @@ function Timeline({ events }) {
 }
 
 const FILTERS = [
-  { key: "", label: "All" }, { key: "opened", label: "Opened" }, { key: "bounced", label: "Bounced" },
+  { key: "", label: "All" }, { key: "opened", label: "Opened" }, { key: "clicked", label: "Clicked" },
   { key: "replied", label: "Replied" }, { key: "unopened", label: "Not opened" },
   { key: "unsubscribed", label: "Unsubscribed" }, { key: "failed", label: "Failed" },
 ];
@@ -319,7 +317,7 @@ function CampaignDetail({ campaignId, onBack }) {
   const tiles = detail ? [
     { metric: "sent", label: "Sent", value: fmtNum(detail.sentCount), sub: `of ${fmtNum(detail.totalRecipients)}` },
     { metric: "opened", label: "Opened", value: fmtNum(detail.openedCount), sub: `${detail.openRate}% open rate` },
-    { metric: "bounced", label: "Bounced", value: fmtNum(detail.bouncedCount), sub: `${detail.bounceRate}% bounce rate` },
+    { metric: "clicked", label: "Clicked", value: fmtNum(detail.clickedCount), sub: `${detail.clickRate}% click rate` },
     { metric: "replied", label: "Replied", value: fmtNum(detail.repliedCount), sub: `${detail.replyRate}% reply rate` },
     { metric: "unsubscribed", label: "Unsubscribed", value: fmtNum(detail.unsubscribedCount), sub: `${detail.unsubscribeRate}%` },
     { metric: "failed", label: "Failed", value: fmtNum(detail.failedCount), sub: detail.failedCount > 0 ? "needs attention" : "none" },
@@ -473,7 +471,7 @@ export default function EmailTracking() {
     { metric: "campaigns", label: "Campaigns", value: fmtNum(o.campaigns), sub: `${fmtNum(o.recipients)} recipients` },
     { metric: "sent", label: "Sent", value: fmtNum(o.sent), sub: o.failed > 0 ? `${fmtNum(o.failed)} failed` : "delivered" },
     { metric: "opened", label: "Opened", value: fmtNum(o.opened), sub: `${o.openRate || 0}% open rate` },
-    { metric: "bounced", label: "Bounced", value: fmtNum(o.bounced), sub: `${o.bounceRate || 0}% bounce rate` },
+    { metric: "clicked", label: "Clicked", value: fmtNum(o.clicked), sub: `${o.clickRate || 0}% click rate` },
     { metric: "replied", label: "Replied", value: fmtNum(o.replied), sub: `${o.replyRate || 0}% reply rate` },
     { metric: "unsubscribed", label: "Unsubscribed", value: fmtNum(o.unsubscribed), sub: `${o.unsubscribeRate || 0}%` },
   ];
@@ -523,7 +521,7 @@ export default function EmailTracking() {
                       {[
                         { metric: "sent", label: "Delivered", count: o.sent },
                         { metric: "opened", label: "Opened", count: o.opened },
-                        { metric: "bounced", label: "Bounced", count: o.bounced },
+                        { metric: "clicked", label: "Clicked", count: o.clicked },
                         { metric: "replied", label: "Replied", count: o.replied },
                         { metric: "unsubscribed", label: "Unsubscribed", count: o.unsubscribed },
                       ].map((s) => {
@@ -590,7 +588,7 @@ export default function EmailTracking() {
                       <th className="text-left font-semibold px-4 py-3">Status</th>
                       <th className="text-right font-semibold px-4 py-3">Sent</th>
                       <th className="text-right font-semibold px-4 py-3">Opened</th>
-                      <th className="text-right font-semibold px-4 py-3">Bounced</th>
+                      <th className="text-right font-semibold px-4 py-3">Clicked</th>
                       <th className="text-right font-semibold px-4 py-3">Replied</th>
                       <th className="text-right font-semibold px-5 py-3">Created</th>
                       <th className="w-8" />
@@ -614,7 +612,7 @@ export default function EmailTracking() {
                         <td className="px-4 py-3.5"><StatusPill status={c.status} /></td>
                         <td className="px-4 py-3.5 text-right tabular-nums" style={{ color: BODY }}>{fmtNum(c.sentCount)}<span style={{ color: MUTED }}>/{fmtNum(c.totalRecipients)}</span></td>
                         <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.opened.c }}>{c.openRate}%</span> <span className="text-xs" style={{ color: MUTED }}>({fmtNum(c.openedCount)})</span></td>
-                        <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.bounced.c }}>{fmtNum(c.bouncedCount)}</span> <span className="text-xs" style={{ color: MUTED }}>({c.bounceRate}%)</span></td>
+                        <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.clicked.c }}>{c.clickRate}%</span> <span className="text-xs" style={{ color: MUTED }}>({fmtNum(c.clickedCount)})</span></td>
                         <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.replied.c }}>{fmtNum(c.repliedCount)}</span></td>
                         <td className="px-5 py-3.5 text-right text-xs whitespace-nowrap" style={{ color: BODY }}>{fmtDate(c.createdAt)}</td>
                         <td className="px-2 py-3.5" style={{ color: "#cfd7df" }}><ChevronRight className="w-4 h-4" /></td>
