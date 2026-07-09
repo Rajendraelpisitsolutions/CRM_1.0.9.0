@@ -38,5 +38,7 @@ namespace Elpis_CRM.Model
         public int UnsubscribedCount { get; set; }
         public int RepliedCount { get; set; }
         public int DeliveredCount { get; set; }
+        /// <summary>Sends that bounced — an invalid / undeliverable address.</summary>
+        public int BouncedCount { get; set; }
     }
 }

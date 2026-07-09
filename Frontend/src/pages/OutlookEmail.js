@@ -4749,6 +4749,11 @@ useEffect(() => {
     const sentFiles = [];   // {conversationId, internetMessageId} of sent messages to file into the folder
     for (let i = 0; i < tracked.items.length; i++) {
       const item = tracked.items[i];
+      // A malformed / invalid address can't be delivered — count it as a BOUNCE (not sent).
+      if (!validateEmail(item.email)) {
+        results.push({ recipientId: item.recipientId, status: "Bounced", error: "Invalid email address" });
+        continue;
+      }
       const message = {
         subject,
         body: { contentType: "HTML", content: item.html },

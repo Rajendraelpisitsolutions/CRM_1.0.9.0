@@ -149,6 +149,7 @@ namespace Elpis_CRM.Controllers
             int recipients = c.Sum(x => x.TotalRecipients);
             int replied = c.Sum(x => x.RepliedCount);
             int delivered = c.Sum(x => x.DeliveredCount);
+            int bounced = c.Sum(x => x.BouncedCount);
 
             return Ok(new
             {
@@ -158,11 +159,13 @@ namespace Elpis_CRM.Controllers
                 failed,
                 opened,
                 clicked,
+                bounced,
                 unsubscribed = unsub,
                 replied,
                 delivered,
                 openRate = Rate(opened, sent),
                 clickRate = Rate(clicked, sent),
+                bounceRate = Rate(bounced, sent + bounced),
                 replyRate = Rate(replied, sent),
                 deliveryRate = Rate(delivered, sent),
                 unsubscribeRate = Rate(unsub, sent)
@@ -196,8 +199,10 @@ namespace Elpis_CRM.Controllers
                 x.UnsubscribedCount,
                 x.RepliedCount,
                 x.DeliveredCount,
+                x.BouncedCount,
                 openRate = Rate(x.OpenedCount, x.SentCount),
                 clickRate = Rate(x.ClickedCount, x.SentCount),
+                bounceRate = Rate(x.BouncedCount, x.SentCount + x.BouncedCount),
                 replyRate = Rate(x.RepliedCount, x.SentCount)
             });
 
@@ -230,8 +235,10 @@ namespace Elpis_CRM.Controllers
                 x.UnsubscribedCount,
                 x.RepliedCount,
                 x.DeliveredCount,
+                x.BouncedCount,
                 openRate = Rate(x.OpenedCount, x.SentCount),
                 clickRate = Rate(x.ClickedCount, x.SentCount),
+                bounceRate = Rate(x.BouncedCount, x.SentCount + x.BouncedCount),
                 replyRate = Rate(x.RepliedCount, x.SentCount),
                 unsubscribeRate = Rate(x.UnsubscribedCount, x.SentCount)
             });
@@ -258,6 +265,7 @@ namespace Elpis_CRM.Controllers
                 "unsubscribed" => q.Where(r => r.Unsubscribed),
                 "unopened" => q.Where(r => r.Status == "Sent" && r.FirstOpenedAt == null),
                 "failed" => q.Where(r => r.Status == "Failed"),
+                "bounced" => q.Where(r => r.Status == "Bounced"),
                 _ => q
             };
 
