@@ -899,15 +899,18 @@ function OutlookEmail({ onToast }) {
         if (!res.ok) { setCampaignMails([]); return; }
         const data = await res.json();
         const myEmail = (accounts?.[0]?.username || sessionStorage.getItem("userEmail") || "").toLowerCase();
+        const myName = accounts?.[0]?.name || accounts?.[0]?.username || "Me";
         setCampaignMails((data.value || []).map(msg => {
           const fromAddr = (msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "").toLowerCase();
           const senderName = msg.from?.emailAddress?.name || msg.sender?.emailAddress?.name || msg.from?.emailAddress?.address || "";
           const toEmail = msg.toRecipients?.map(r => r.emailAddress.address).join(", ") || "";
-          // These are mostly *sent* copies (from = me, or blank on a moved draft) — show who the
-          // mail went TO rather than a blank "Unknown" (the reading pane already has its own "To:"
-          // line, so no prefix here). Genuine replies (from someone else) keep the sender's name.
+          // These are mostly *sent* copies (from = me, or blank on a moved draft). For those the
+          // sender IS the logged-in user, so show me as "From" (with the recipient only on the
+          // "To:" line below). Genuine replies (from someone else) keep the real sender.
           const outgoing = !fromAddr || fromAddr === myEmail;
-          const display = outgoing ? (toEmail || senderName || "Me") : (senderName || fromAddr || toEmail);
+          const display = outgoing ? myName : (senderName || fromAddr || toEmail);
+          const displayEmail = outgoing ? (msg.from?.emailAddress?.address || accounts?.[0]?.username || "")
+            : (msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "");
           return {
             id: msg.id, subject: msg.subject,
             body: "", bodyPreview: msg.bodyPreview || "", attachments: [],
@@ -916,7 +919,7 @@ function OutlookEmail({ onToast }) {
             ccEmail: msg.ccRecipients?.map(r => r.emailAddress.address).join(", ") || "",
             receivedDateTime: msg.receivedDateTime || msg.sentDateTime, sentDateTime: msg.sentDateTime,
             sender: display, from: display,
-            senderEmail: msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "",
+            senderEmail: displayEmail,
             isRead: msg.isRead, isDraft: msg.isDraft,
           };
         }));
