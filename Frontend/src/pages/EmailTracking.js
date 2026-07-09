@@ -207,21 +207,44 @@ function CampaignDetail({ campaignId, onBack }) {
       const opens = new Set(), delivered = new Set(), replies = new Set();
       // Only genuine replies get filed into the campaign folder. Read/delivery receipts are
       // report-type messages that Outlook renders as "unknown message" in a normal folder, so we
-      // count them for tracking but leave them where they are.
+      // count them for tracking but never move them.
       const moveIds = [];
+      const replyCandidates = [];   // {id, from} messages from a recipient not flagged as receipts by subject
       for (const mm of (data.value || [])) {
         const from = (mm.from?.emailAddress?.address || "").toLowerCase();
         const subj = (mm.subject || "").trim();
-        const isRead = /^(read:|read receipt)/i.test(subj);
-        const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:)/i.test(subj);
+        const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
+        const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
         if (isRead) {
           if (recSet.has(from)) opens.add(from);            // read receipt → open (not moved)
         } else if (isDelivered) {
           const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
           for (const e of recEmails) if (hay.includes(e)) delivered.add(e);  // delivery receipt → delivered (not moved)
-        } else if (recSet.has(from)) {
-          replies.add(from);                                // real reply → file into the folder
-          if (mm.id) moveIds.push(mm.id);
+        } else if (recSet.has(from) && mm.id) {
+          replyCandidates.push({ id: mm.id, from });        // verify it's real mail (not a receipt) below
+        }
+      }
+
+      // Disambiguate each candidate by its Outlook message class. Read/delivery receipts and NDRs
+      // are REPORT.* classes (from the recipient's own address, in any language) — they must NOT be
+      // moved, or Outlook shows them in the campaign folder as "unknown message". Only true mail
+      // (IPM.Note) counts as a reply and gets filed.
+      for (const c of replyCandidates) {
+        let msgClass = "";
+        try {
+          const cr = await fetch(
+            `https://graph.microsoft.com/v1.0/me/messages/${c.id}?$select=id&$expand=singleValueExtendedProperties($filter=id eq 'String 0x001A')`,
+            { headers: { Authorization: `Bearer ${tok.accessToken}` } }
+          );
+          if (cr.ok) { const cj = await cr.json(); msgClass = (cj.singleValueExtendedProperties?.[0]?.value || "").toUpperCase(); }
+        } catch { /* fall through: treat as reply if class unknown */ }
+        if (msgClass.startsWith("REPORT")) {
+          // A receipt/NDR that slipped past the subject check — count for tracking, don't move.
+          if (msgClass.includes("IPNRN") || msgClass.includes("IPNNRN")) opens.add(c.from);
+          else delivered.add(c.from);
+        } else {
+          replies.add(c.from);
+          moveIds.push(c.id);
         }
       }
       const oArr = [...opens], dArr = [...delivered], rArr = [...replies];

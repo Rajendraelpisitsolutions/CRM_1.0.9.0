@@ -267,7 +267,7 @@ function EmailBodyFrame({ html, isDark }) {
     '<meta charset="UTF-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     "<style>",
-    "html,body{margin:0;padding:8px;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;word-wrap:break-word;overflow-x:hidden;}",
+    "html,body{margin:0;padding:8px;font-size:15px;line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;word-wrap:break-word;overflow-x:hidden;}",
     "img{max-width:100%;height:auto;display:inline-block;}",
     "table{border-collapse:collapse;max-width:100%;}",
     "a{color:inherit;word-break:break-all;}",
@@ -5163,7 +5163,7 @@ useEffect(() => {
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… or drop files"}
-                className={`flex-1 w-full resize-none text-sm bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
+                className={`flex-1 w-full resize-none text-base leading-relaxed bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
               />
               {(footerText || footerLogo) && (
                 <div className={`flex gap-3 items-center p-3 border-t ${d.border}`}>
