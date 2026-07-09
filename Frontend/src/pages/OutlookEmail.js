@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Inbox, Send, Trash2, Edit2, Reply, ReplyAll, Forward, ArrowLeft,
   Mail, MailOpen, Paperclip, Plus, Pencil, FileText, Archive,
@@ -367,6 +367,27 @@ function OutlookEmail({ onToast }) {
   const [activeFolder, setActiveFolder] = useState("Inbox");
   const [expandedSections, setExpandedSections] = useState({ favorites: true, folders: true, groups: false });
   const [pinnedFolders, setPinnedFolders] = useState(["Inbox", "Sent Items"]);
+
+  // ── Campaign folder (shared with the composer via localStorage) ─────────────
+  // The Outlook folder tracked-campaign copies (and their replies) are filed into.
+  const [campaignFolder, setCampaignFolder] = useState(() => {
+    try { return localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns"; } catch { return "CRM Campaigns"; }
+  });
+  const [outlookFolders, setOutlookFolders] = useState([]);
+  const [campaignFolderSaved, setCampaignFolderSaved] = useState(false);
+  const persistCampaignFolder = (name) => {
+    setCampaignFolder(name);
+    try { localStorage.setItem("_crm_campaign_folder", (name || "").trim() || "CRM Campaigns"); } catch { /* ignore */ }
+    setCampaignFolderSaved(true);
+  };
+  // Pull the user's existing Outlook folder names on demand (for the picker's suggestions).
+  const loadOutlookFolders = useCallback(() => {
+    if (!accessToken || outlookFolders.length) return;
+    window.fetch("https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=displayName", { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((d) => setOutlookFolders((d.value || []).map((f) => f.displayName).filter(Boolean)))
+      .catch(() => {});
+  }, [accessToken, outlookFolders.length]);
 
   // ── Email Data ────────────────────────────────────────────────────────────
   const [inboxEmails, setInboxEmails] = useState([]);
@@ -1934,6 +1955,32 @@ function OutlookEmail({ onToast }) {
                 <FolderRow icon={FileText} label="Templates" active={activeFolder === "Templates"}
                   onClick={() => { setActiveFolder("Templates"); setOpenedMailId(null); }}
                   isDark={isDark} />
+
+                <div className={`my-2 border-t ${th.border}`} />
+
+                {/* ── Campaign folder: where tracked-campaign copies + replies are filed ── */}
+                <div className="px-1">
+                  <div className={`flex items-center gap-2 px-2 py-1.5 text-xs font-semibold uppercase tracking-wider ${th.textMuted}`}>
+                    <FolderOpen size={13} className="flex-shrink-0" />
+                    <span>Campaign folder</span>
+                  </div>
+                  <div className="px-2 pb-1">
+                    <input
+                      list="crm-campaign-folders"
+                      value={campaignFolder}
+                      onChange={(e) => persistCampaignFolder(e.target.value)}
+                      onFocus={loadOutlookFolders}
+                      placeholder="CRM Campaigns"
+                      className={`w-full px-2.5 py-1.5 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-800 border-gray-600 text-gray-100" : "bg-white border-gray-300 text-gray-800"}`}
+                    />
+                    <datalist id="crm-campaign-folders">
+                      {outlookFolders.map((f) => <option key={f} value={f} />)}
+                    </datalist>
+                    <p className={`text-[11px] mt-1 leading-snug ${th.textMuted}`}>
+                      {campaignFolderSaved ? "Saved ✓ — " : ""}Tracked-campaign sends &amp; their replies are filed here (created if new).
+                    </p>
+                  </div>
+                </div>
 
                 <div className={`my-2 border-t ${th.border}`} />
 
@@ -3649,23 +3696,6 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [errors, setErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [sendDropdown, setSendDropdown]           = useState(false);
-  // The Outlook folder tracked-campaign copies (and later replies) are filed into.
-  const [campaignFolder, setCampaignFolder] = useState(() => {
-    try { return localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns"; } catch { return "CRM Campaigns"; }
-  });
-  const [outlookFolders, setOutlookFolders] = useState([]);
-  const persistCampaignFolder = (name) => {
-    setCampaignFolder(name);
-    try { localStorage.setItem("_crm_campaign_folder", name || "CRM Campaigns"); } catch {}
-  };
-  // Load the user's existing Outlook folders the first time the Send menu opens (for the picker).
-  useEffect(() => {
-    if (!sendDropdown || !accessToken || outlookFolders.length) return;
-    window.fetch("https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=displayName", { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then((r) => r.json())
-      .then((d) => setOutlookFolders((d.value || []).map((f) => f.displayName).filter(Boolean)))
-      .catch(() => {});
-  }, [sendDropdown, accessToken, outlookFolders.length]);
   const [scheduleModal, setScheduleModal]         = useState(false);
   const [scheduleDateTime, setScheduleDateTime]   = useState("");
   const [schedulingInProgress, setSchedulingInProgress] = useState(false);
@@ -4458,7 +4488,9 @@ useEffect(() => {
 
     // Get (or create) a dedicated Outlook folder to file campaign copies into, so a large
     // send doesn't pile up in Sent Items / the mailbox. Falls back to Sent Items if unavailable.
-    const campaignFolderId = await ensureMailFolderId(accessToken, (campaignFolder || "CRM Campaigns").trim());
+    let campaignFolderName = "CRM Campaigns";
+    try { campaignFolderName = (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { /* default */ }
+    const campaignFolderId = await ensureMailFolderId(accessToken, campaignFolderName);
 
     // Build the attachment payload once (shared by every recipient). Handles both freshly-picked
     // File objects and pre-encoded template attachments ({name, contentBytes}).
@@ -5195,7 +5227,7 @@ useEffect(() => {
                 </div>
 
                 {sendDropdown && (
-                  <div className={`absolute left-0 bottom-full mb-1 w-72 ${d.bg} border ${d.border} rounded-xl shadow-xl z-[60] overflow-visible`}
+                  <div className={`absolute left-0 bottom-full mb-1 w-48 ${d.bg} border ${d.border} rounded-xl shadow-xl z-[60] overflow-visible`}
                     onMouseLeave={() => setSendDropdown(false)}>
                     <button type="submit" onClick={() => setSendDropdown(false)}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
@@ -5213,21 +5245,6 @@ useEffect(() => {
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
                       <Send size={14} className="text-emerald-500 flex-shrink-0" />Send tracked campaign
                     </button>
-                    {/* Pick / create the Outlook folder campaign copies (and replies) are filed into */}
-                    <div className={`border-t ${d.border} px-4 py-2.5`}>
-                      <label className={`block text-[11px] font-semibold uppercase tracking-wide ${d.muted} mb-1`}>Campaign folder</label>
-                      <input
-                        list="crm-campaign-folders"
-                        value={campaignFolder}
-                        onChange={(e) => persistCampaignFolder(e.target.value)}
-                        placeholder="CRM Campaigns"
-                        className={`w-full px-2.5 py-1.5 text-xs border ${d.border} rounded-lg ${d.bg} ${d.text} outline-none focus:ring-2 focus:ring-blue-500`}
-                      />
-                      <datalist id="crm-campaign-folders">
-                        {outlookFolders.map((f) => <option key={f} value={f} />)}
-                      </datalist>
-                      <p className={`text-[10px] ${d.muted} mt-1 leading-snug`}>Tracked-campaign copies (and replies) go here — pick an existing folder or type a new name to create it.</p>
-                    </div>
                   </div>
                 )}
               </div>
