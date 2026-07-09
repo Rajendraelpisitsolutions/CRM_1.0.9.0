@@ -25,6 +25,25 @@ const M = {
   failed:       { c: "#64748b", l: "#b7c0ca", tint: "#eef2f6", icon: AlertTriangle },   // neutral slate (no red)
 };
 
+// Get (or create) the Outlook folder campaign mail is filed into, matching the name the
+// user picked in the composer (persisted in localStorage). Returns the folder id, or null.
+async function ensureCampaignFolderId(accessToken) {
+  let name = "CRM Campaigns";
+  try { name = (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { /* default */ }
+  const H = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+  try {
+    const listRes = await fetch("https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=id,displayName", { headers: H });
+    const list = await listRes.json();
+    const found = (list.value || []).find((f) => (f.displayName || "").toLowerCase() === name.toLowerCase());
+    if (found) return found.id;
+    const createRes = await fetch("https://graph.microsoft.com/v1.0/me/mailFolders", {
+      method: "POST", headers: H, body: JSON.stringify({ displayName: name }),
+    });
+    const created = await createRes.json();
+    return created.id || null;
+  } catch { return null; }
+}
+
 const fmtNum = (n) => (n == null ? "0" : Number(n).toLocaleString());
 const fmtDate = (v) => {
   if (!v) return "—";
@@ -172,34 +191,63 @@ function CampaignDetail({ campaignId, onBack }) {
     if (!accounts || accounts.length === 0) { setReplyMsg("Sign in to Outlook to check replies."); return; }
     setCheckingReplies(true); setReplyMsg("");
     try {
-      const tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.Read"] });
-      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
+      // Prefer Mail.ReadWrite so matched messages can also be moved into the campaign folder;
+      // fall back to read-only (still counts replies/receipts, just can't file them) if not consented.
+      let tok, canMove = true;
+      try {
+        tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.ReadWrite"] });
+      } catch {
+        canMove = false;
+        tok = await instance.acquireTokenSilent({ account: accounts[0], scopes: ["https://graph.microsoft.com/Mail.Read"] });
+      }
+      const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=id,from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
       const data = await res.json();
       const recEmails = recipients.map((r) => (r.email || "").toLowerCase()).filter(Boolean);
       const recSet = new Set(recEmails);
       const opens = new Set(), delivered = new Set(), replies = new Set();
+      const moveIds = [];   // inbox messages tied to this campaign → filed into the campaign folder
       for (const mm of (data.value || [])) {
         const from = (mm.from?.emailAddress?.address || "").toLowerCase();
         const subj = (mm.subject || "").trim();
         const isRead = /^(read:|read receipt)/i.test(subj);
         const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:)/i.test(subj);
         if (isRead) {
-          if (recSet.has(from)) opens.add(from);           // read receipt → open
+          if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }   // read receipt → open
         } else if (isDelivered) {
           const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
-          for (const e of recEmails) if (hay.includes(e)) delivered.add(e);  // delivery receipt → delivered
+          let hit = false;
+          for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }  // delivery receipt → delivered
+          if (hit && mm.id) moveIds.push(mm.id);
         } else if (recSet.has(from)) {
           replies.add(from);                                // real reply
+          if (mm.id) moveIds.push(mm.id);
         }
       }
       const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
+      // File the matched replies / receipts into the campaign folder so the inbox stays clean.
+      let movedCount = 0;
+      if (canMove && moveIds.length) {
+        const folderId = await ensureCampaignFolderId(tok.accessToken);
+        if (folderId) {
+          for (const id of moveIds) {
+            try {
+              const mv = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${id}/move`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${tok.accessToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ destinationId: folderId }),
+              });
+              if (mv.ok) movedCount++;
+            } catch { /* skip this message */ }
+          }
+        }
+      }
       if (oArr.length || dArr.length || rArr.length) {
         await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr });
         const parts = [];
         if (rArr.length) parts.push(`${rArr.length} repl${rArr.length === 1 ? "y" : "ies"}`);
         if (oArr.length) parts.push(`${oArr.length} read receipt${oArr.length === 1 ? "" : "s"}`);
         if (dArr.length) parts.push(`${dArr.length} delivered`);
-        setReplyMsg(`Found ${parts.join(", ")}.`);
+        setReplyMsg(`Found ${parts.join(", ")}${movedCount ? ` · moved ${movedCount} to your campaign folder` : ""}.`);
         loadDetail(); loadRecipients();
       } else setReplyMsg("No replies or receipts from these recipients found in your inbox.");
     } catch { setReplyMsg("Couldn't check inbox (Outlook sign-in / permission needed)."); }

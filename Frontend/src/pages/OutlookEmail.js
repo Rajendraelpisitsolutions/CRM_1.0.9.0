@@ -3649,6 +3649,23 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [errors, setErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [sendDropdown, setSendDropdown]           = useState(false);
+  // The Outlook folder tracked-campaign copies (and later replies) are filed into.
+  const [campaignFolder, setCampaignFolder] = useState(() => {
+    try { return localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns"; } catch { return "CRM Campaigns"; }
+  });
+  const [outlookFolders, setOutlookFolders] = useState([]);
+  const persistCampaignFolder = (name) => {
+    setCampaignFolder(name);
+    try { localStorage.setItem("_crm_campaign_folder", name || "CRM Campaigns"); } catch {}
+  };
+  // Load the user's existing Outlook folders the first time the Send menu opens (for the picker).
+  useEffect(() => {
+    if (!sendDropdown || !accessToken || outlookFolders.length) return;
+    window.fetch("https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=displayName", { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((d) => setOutlookFolders((d.value || []).map((f) => f.displayName).filter(Boolean)))
+      .catch(() => {});
+  }, [sendDropdown, accessToken, outlookFolders.length]);
   const [scheduleModal, setScheduleModal]         = useState(false);
   const [scheduleDateTime, setScheduleDateTime]   = useState("");
   const [schedulingInProgress, setSchedulingInProgress] = useState(false);
@@ -4441,7 +4458,7 @@ useEffect(() => {
 
     // Get (or create) a dedicated Outlook folder to file campaign copies into, so a large
     // send doesn't pile up in Sent Items / the mailbox. Falls back to Sent Items if unavailable.
-    const campaignFolderId = await ensureMailFolderId(accessToken, "CRM Campaigns");
+    const campaignFolderId = await ensureMailFolderId(accessToken, (campaignFolder || "CRM Campaigns").trim());
 
     // Build the attachment payload once (shared by every recipient). Handles both freshly-picked
     // File objects and pre-encoded template attachments ({name, contentBytes}).
@@ -5178,7 +5195,7 @@ useEffect(() => {
                 </div>
 
                 {sendDropdown && (
-                  <div className={`absolute left-0 bottom-full mb-1 w-48 ${d.bg} border ${d.border} rounded-xl shadow-xl z-[60] overflow-visible`}
+                  <div className={`absolute left-0 bottom-full mb-1 w-72 ${d.bg} border ${d.border} rounded-xl shadow-xl z-[60] overflow-visible`}
                     onMouseLeave={() => setSendDropdown(false)}>
                     <button type="submit" onClick={() => setSendDropdown(false)}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
@@ -5196,6 +5213,21 @@ useEffect(() => {
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm ${d.text} ${d.hover} transition`}>
                       <Send size={14} className="text-emerald-500 flex-shrink-0" />Send tracked campaign
                     </button>
+                    {/* Pick / create the Outlook folder campaign copies (and replies) are filed into */}
+                    <div className={`border-t ${d.border} px-4 py-2.5`}>
+                      <label className={`block text-[11px] font-semibold uppercase tracking-wide ${d.muted} mb-1`}>Campaign folder</label>
+                      <input
+                        list="crm-campaign-folders"
+                        value={campaignFolder}
+                        onChange={(e) => persistCampaignFolder(e.target.value)}
+                        placeholder="CRM Campaigns"
+                        className={`w-full px-2.5 py-1.5 text-xs border ${d.border} rounded-lg ${d.bg} ${d.text} outline-none focus:ring-2 focus:ring-blue-500`}
+                      />
+                      <datalist id="crm-campaign-folders">
+                        {outlookFolders.map((f) => <option key={f} value={f} />)}
+                      </datalist>
+                      <p className={`text-[10px] ${d.muted} mt-1 leading-snug`}>Tracked-campaign copies (and replies) go here — pick an existing folder or type a new name to create it.</p>
+                    </div>
                   </div>
                 )}
               </div>
