@@ -205,21 +205,22 @@ function CampaignDetail({ campaignId, onBack }) {
       const recEmails = recipients.map((r) => (r.email || "").toLowerCase()).filter(Boolean);
       const recSet = new Set(recEmails);
       const opens = new Set(), delivered = new Set(), replies = new Set();
-      const moveIds = [];   // inbox messages tied to this campaign → filed into the campaign folder
+      // Only genuine replies get filed into the campaign folder. Read/delivery receipts are
+      // report-type messages that Outlook renders as "unknown message" in a normal folder, so we
+      // count them for tracking but leave them where they are.
+      const moveIds = [];
       for (const mm of (data.value || [])) {
         const from = (mm.from?.emailAddress?.address || "").toLowerCase();
         const subj = (mm.subject || "").trim();
         const isRead = /^(read:|read receipt)/i.test(subj);
         const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:)/i.test(subj);
         if (isRead) {
-          if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }   // read receipt → open
+          if (recSet.has(from)) opens.add(from);            // read receipt → open (not moved)
         } else if (isDelivered) {
           const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
-          let hit = false;
-          for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }  // delivery receipt → delivered
-          if (hit && mm.id) moveIds.push(mm.id);
+          for (const e of recEmails) if (hay.includes(e)) delivered.add(e);  // delivery receipt → delivered (not moved)
         } else if (recSet.has(from)) {
-          replies.add(from);                                // real reply
+          replies.add(from);                                // real reply → file into the folder
           if (mm.id) moveIds.push(mm.id);
         }
       }

@@ -4576,7 +4576,12 @@ useEffect(() => {
     };
 
     // 2) Send each recipient their own tracked email, collecting outcomes.
+    // When a campaign folder is chosen we send via draft → send, and remember the message id so
+    // we can FILE it into the folder *afterwards* (step 2b). Filing has to wait until the send has
+    // actually finished — POST /send returns 202 (async), so moving the message immediately can
+    // grab it while it's still a draft mid-send, which Outlook then shows as an "unknown message".
     const results = [];
+    const sentIds = [];   // ids of successfully sent messages to file into the campaign folder
     for (let i = 0; i < tracked.items.length; i++) {
       const item = tracked.items[i];
       const message = {
@@ -4593,9 +4598,8 @@ useEffect(() => {
       try {
         let ok = false, errMsg = null;
         if (campaignFolderId) {
-          // Draft → send → move: this produces a REAL sent message we can then file into the
-          // campaign folder. (POSTing to a folder's /messages only ever creates a *draft*, which
-          // is why copies were showing as "This message hasn't been sent".)
+          // Draft → send produces a REAL sent message (POSTing to a folder's /messages only ever
+          // creates a *draft*, which is why copies showed as "This message hasn't been sent").
           const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
             method: "POST",
             headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -4613,17 +4617,7 @@ useEffect(() => {
             });
             ok = sendRes.ok || sendRes.status === 202;
             if (!ok) errMsg = await readGraphErr(sendRes);
-            else {
-              // Move the now-sent message from Sent Items into the campaign folder (best-effort;
-              // if it fails the email is still sent and sitting in Sent Items).
-              try {
-                await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ destinationId: campaignFolderId }),
-                });
-              } catch { /* copy is best-effort */ }
-            }
+            else if (mid) sentIds.push(mid);   // file it into the campaign folder after the loop
           }
         } else {
           // No campaign folder chosen — plain send, kept in Sent Items.
@@ -4638,6 +4632,36 @@ useEffect(() => {
         results.push({ recipientId: item.recipientId, status: ok ? "Sent" : "Failed", error: errMsg });
       } catch (err) {
         results.push({ recipientId: item.recipientId, status: "Failed", error: err.message });
+      }
+    }
+
+    // 2b) File the sent copies into the campaign folder — only once each send has finished, i.e.
+    // the message is no longer a draft (isDraft === false) and has landed in Sent Items. Moving a
+    // message still mid-send is what produced the "unknown message" items. Best-effort per message:
+    // if it never settles, the email is still sent and just stays in Sent Items.
+    if (campaignFolderId && sentIds.length) {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (const mid of sentIds) {
+        try {
+          let ready = false;
+          for (let a = 0; a < 8 && !ready; a++) {
+            const chk = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}?$select=isDraft`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (chk.ok) {
+              const j = await chk.json();
+              if (j.isDraft === false) { ready = true; break; }
+            }
+            await wait(500);
+          }
+          if (ready) {
+            await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ destinationId: campaignFolderId }),
+            });
+          }
+        } catch { /* filing is best-effort */ }
       }
     }
 
