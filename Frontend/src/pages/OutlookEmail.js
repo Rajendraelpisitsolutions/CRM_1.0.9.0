@@ -107,6 +107,56 @@ async function findMailFolderId(accessToken, name) {
   } catch { return null; }
 }
 
+// After a draft is sent, its original id is INVALID — the message is recreated in Sent Items with a
+// new id — so you cannot move it by the draft id (that was why sent mail stayed in Sent Items and
+// never reached the campaign folder). Instead, locate the just-sent message in Sent Items by its
+// stable internetMessageId (preferred) or by subject + recipient (fallback), then move it into
+// `folderId`. Polls briefly because the message takes a moment to appear in Sent Items. Returns true
+// if the message was moved.
+async function moveSentMessageToFolder(accessToken, folderId, { internetMessageId, subject, toAddress } = {}) {
+  if (!accessToken || !folderId) return false;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const to = (toAddress || "").toLowerCase();
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await wait(700);
+    try {
+      let foundId = null;
+      if (internetMessageId) {
+        const filter = encodeURIComponent(`internetMessageId eq '${String(internetMessageId).replace(/'/g, "''")}'`);
+        const q = await window.fetch(
+          `https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$filter=${filter}&$select=id&$top=1`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (q.ok) { const d = await q.json(); foundId = d.value?.[0]?.id || null; }
+      }
+      if (!foundId && subject) {
+        // Fallback: newest Sent Items message with the same subject (and recipient, if known).
+        const q2 = await window.fetch(
+          "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$top=15&$orderby=sentDateTime desc&$select=id,subject,toRecipients",
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (q2.ok) {
+          const d2 = await q2.json();
+          const m = (d2.value || []).find((x) =>
+            (x.subject || "") === subject &&
+            (!to || (x.toRecipients || []).some((r) => (r.emailAddress?.address || "").toLowerCase() === to))
+          );
+          foundId = m?.id || null;
+        }
+      }
+      if (foundId) {
+        const mv = await window.fetch(`https://graph.microsoft.com/v1.0/me/messages/${foundId}/move`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ destinationId: folderId }),
+        });
+        if (mv.ok) return true;
+      }
+    } catch { /* retry */ }
+  }
+  return false;
+}
+
 // Reconcile replies: move any INBOX message that belongs to a conversation already present in
 // `folderId` (i.e. a reply to mail filed there) INTO that folder. This is what keeps a reply from
 // appearing in BOTH the inbox and the campaign folder — the /move removes it from the inbox. Match
@@ -4493,22 +4543,10 @@ useEffect(() => {
           });
           ok = sendRes.ok || sendRes.status === 202;
           if (ok) {
-            const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-            let ready = false;
-            for (let a = 0; a < 8 && !ready; a++) {
-              const chk = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}?$select=isDraft`, { headers: { Authorization: `Bearer ${accessToken}` } });
-              if (chk.ok) { const j = await chk.json(); if (j.isDraft === false) { ready = true; break; } }
-              await wait(500);
-            }
-            if (ready) {
-              try {
-                await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({ destinationId: campaignFolderId }),
-                });
-              } catch { /* filing is best-effort; email is already sent */ }
-            }
+            // The draft id is dead after /send — find the sent copy in Sent Items and move THAT.
+            await moveSentMessageToFolder(accessToken, campaignFolderId, {
+              internetMessageId: draft.internetMessageId, subject, toAddress: toEmails[0],
+            });
           } else { try { const ed = await sendRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
         } else { try { const ed = await draftRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
       } else {
@@ -4705,7 +4743,7 @@ useEffect(() => {
     // actually finished — POST /send returns 202 (async), so moving the message immediately can
     // grab it while it's still a draft mid-send, which Outlook then shows as an "unknown message".
     const results = [];
-    const sentIds = [];   // ids of successfully sent messages to file into the campaign folder
+    const sentFiles = [];   // {internetMessageId, toAddress} of sent messages to file into the folder
     for (let i = 0; i < tracked.items.length; i++) {
       const item = tracked.items[i];
       const message = {
@@ -4734,14 +4772,16 @@ useEffect(() => {
           } else {
             const draft = await draftRes.json();
             const mid = draft.id;
-            // Send the draft — Graph delivers it and moves it to Sent Items.
+            // Send the draft — Graph delivers it and moves it to Sent Items (with a NEW id).
             const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/send`, {
               method: "POST",
               headers: { Authorization: `Bearer ${accessToken}` },
             });
             ok = sendRes.ok || sendRes.status === 202;
             if (!ok) errMsg = await readGraphErr(sendRes);
-            else if (mid) sentIds.push(mid);   // file it into the campaign folder after the loop
+            // Remember the stable internetMessageId (not the dead draft id) so we can locate the
+            // sent copy in Sent Items and file it into the folder after the loop.
+            else sentFiles.push({ internetMessageId: draft.internetMessageId, toAddress: item.email });
           }
         } else {
           // No campaign folder chosen — plain send, kept in Sent Items.
@@ -4759,33 +4799,14 @@ useEffect(() => {
       }
     }
 
-    // 2b) File the sent copies into the campaign folder — only once each send has finished, i.e.
-    // the message is no longer a draft (isDraft === false) and has landed in Sent Items. Moving a
-    // message still mid-send is what produced the "unknown message" items. Best-effort per message:
-    // if it never settles, the email is still sent and just stays in Sent Items.
-    if (campaignFolderId && sentIds.length) {
-      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-      for (const mid of sentIds) {
-        try {
-          let ready = false;
-          for (let a = 0; a < 8 && !ready; a++) {
-            const chk = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}?$select=isDraft`, {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            if (chk.ok) {
-              const j = await chk.json();
-              if (j.isDraft === false) { ready = true; break; }
-            }
-            await wait(500);
-          }
-          if (ready) {
-            await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/move`, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ destinationId: campaignFolderId }),
-            });
-          }
-        } catch { /* filing is best-effort */ }
+    // 2b) File the sent copies into the campaign folder. The draft id is dead after /send, so we
+    // locate each sent message in Sent Items (by internetMessageId, or subject + recipient) and move
+    // it. Best-effort: if a message can't be located it just stays in Sent Items.
+    if (campaignFolderId && sentFiles.length) {
+      for (const f of sentFiles) {
+        await moveSentMessageToFolder(accessToken, campaignFolderId, {
+          internetMessageId: f.internetMessageId, subject, toAddress: f.toAddress,
+        });
       }
     }
 
