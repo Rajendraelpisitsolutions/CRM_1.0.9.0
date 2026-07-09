@@ -93,6 +93,55 @@ async function ensureMailFolderId(accessToken, name) {
   }
 }
 
+// Find an existing mail folder id by display name WITHOUT creating it. Returns id or null.
+async function findMailFolderId(accessToken, name) {
+  if (!accessToken || !name) return null;
+  try {
+    const res = await window.fetch(
+      "https://graph.microsoft.com/v1.0/me/mailFolders?$top=100&$select=id,displayName",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await res.json();
+    const f = (data.value || []).find((x) => (x.displayName || "").toLowerCase() === name.toLowerCase());
+    return f ? f.id : null;
+  } catch { return null; }
+}
+
+// Reconcile replies: move any INBOX message that belongs to a conversation already present in
+// `folderId` (i.e. a reply to mail filed there) INTO that folder. This is what keeps a reply from
+// appearing in BOTH the inbox and the campaign folder — the /move removes it from the inbox. Match
+// is by conversationId, so it is exact (no subject guessing). Returns the Set of moved message ids.
+async function reconcileFolderReplies(accessToken, folderId) {
+  const movedIds = new Set();
+  if (!accessToken || !folderId) return movedIds;
+  try {
+    const fRes = await window.fetch(
+      `https://graph.microsoft.com/v1.0/me/mailFolders/${folderId}/messages?$top=250&$select=conversationId`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const fData = await fRes.json();
+    const convSet = new Set((fData.value || []).map((m) => m.conversationId).filter(Boolean));
+    if (!convSet.size) return movedIds;
+    const iRes = await window.fetch(
+      "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=250&$select=id,conversationId",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const iData = await iRes.json();
+    const toMove = (iData.value || []).filter((m) => m.conversationId && convSet.has(m.conversationId));
+    for (const m of toMove) {
+      try {
+        const mv = await window.fetch(`https://graph.microsoft.com/v1.0/me/messages/${m.id}/move`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ destinationId: folderId }),
+        });
+        if (mv.ok) movedIds.add(m.id);
+      } catch { /* skip this one */ }
+    }
+  } catch { /* best-effort */ }
+  return movedIds;
+}
+
 function replaceCidImages(html, attachments = []) {
   if (!html) return html;
   let result = html;
@@ -710,8 +759,10 @@ function OutlookEmail({ onToast }) {
     const load = async () => {
       if (!accessToken || activeFolder !== "Inbox") return;
       try {
+        // Scope to the INBOX folder only — NOT /me/messages, which spans the whole mailbox and
+        // would surface Sent Items + the campaign folder here (that was the duplication).
         const res = await fetch(
-          "https://graph.microsoft.com/v1.0/me/messages?" +
+          "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?" +
           "$top=50&$orderby=receivedDateTime desc" +
           "&$select=id,subject,bodyPreview,from,sender,toRecipients,ccRecipients,receivedDateTime,hasAttachments,isRead,importance",
           { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -731,10 +782,18 @@ function OutlookEmail({ onToast }) {
             isRead: msg.isRead, importance: msg.importance,
           };
         }));
+        // In the background, move any replies that belong to a campaign-folder conversation OUT of
+        // the inbox and into that folder, then drop them from the list — so they're never in both.
+        const campName = (campaignFolder || "").trim() || "CRM Campaigns";
+        const campId = await findMailFolderId(accessToken, campName);
+        if (campId) {
+          const movedOut = await reconcileFolderReplies(accessToken, campId);
+          if (movedOut.size) setInboxEmails(prev => prev.filter(m => !movedOut.has(m.id)));
+        }
       } catch (e) { console.error("Inbox fetch error:", e); setInboxEmails([]); }
     };
     load();
-  }, [accessToken, activeFolder]);
+  }, [accessToken, activeFolder, campaignFolder]);
 
   // ─── Sent fetch ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -890,6 +949,9 @@ function OutlookEmail({ onToast }) {
         const fData = await fRes.json();
         const folder = (fData.value || []).find(f => (f.displayName || "").toLowerCase() === name.toLowerCase());
         if (!folder) { setCampaignMails([]); return; }
+        // Pull any replies to this folder's conversations out of the inbox and into the folder first,
+        // so opening the folder shows sent mail + its replies together (and clears the inbox).
+        await reconcileFolderReplies(accessToken, folder.id);
         const res = await fetch(
           `https://graph.microsoft.com/v1.0/me/mailFolders/${folder.id}/messages?` +
           "$top=50&$orderby=receivedDateTime desc" +
@@ -3763,6 +3825,13 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [errors, setErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [sendDropdown, setSendDropdown]           = useState(false);
+  // Where the sent copy of THIS email is stored: "campaign" = the CRM Campaign folder (replies get
+  // filed there too), "sent" = the normal Sent Items. Persisted so it stays chosen across sends.
+  const [saveTarget, setSaveTarget] = useState(() => {
+    try { return localStorage.getItem("_crm_send_target") || "campaign"; } catch { return "campaign"; }
+  });
+  const setSaveTargetPersist = (v) => { setSaveTarget(v); try { localStorage.setItem("_crm_send_target", v); } catch { /* ignore */ } };
+  const campaignFolderName = (() => { try { return (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { return "CRM Campaigns"; } })();
   const [scheduleModal, setScheduleModal]         = useState(false);
   const [scheduleDateTime, setScheduleDateTime]   = useState("");
   const [schedulingInProgress, setSchedulingInProgress] = useState(false);
@@ -4401,10 +4470,11 @@ useEffect(() => {
       };
       if (attachmentsPayload.length > 0) message.attachments = attachmentsPayload;
 
-      // Resolve (creating if needed) the campaign folder to file the sent copy into.
-      let campaignFolderName = "CRM Campaigns";
-      try { campaignFolderName = (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { /* default */ }
-      const campaignFolderId = await ensureMailFolderId(accessToken, campaignFolderName);
+      // Only when the user chose to store this email in the campaign folder do we resolve/create it.
+      // When "Sent Items" is chosen, campaignFolderId stays null → a plain send to Sent Items.
+      const campaignFolderId = saveTarget === "campaign"
+        ? await ensureMailFolderId(accessToken, campaignFolderName)
+        : null;
 
       let ok = false, errText = "Failed to send email";
       if (campaignFolderId) {
@@ -5409,6 +5479,19 @@ useEffect(() => {
                     </button>
                   </div>
                 )}
+              </div>
+
+              {/* Where the sent copy of this email is stored */}
+              <div className="flex items-center gap-1.5 flex-shrink-0 ml-1" title="Choose where this sent email is stored">
+                <FolderOpen size={15} className={d.muted} />
+                <select
+                  value={saveTarget}
+                  onChange={(e) => setSaveTargetPersist(e.target.value)}
+                  className={`text-xs sm:text-sm rounded-lg border ${d.border} ${d.bg} ${d.text} px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer h-10 sm:h-auto max-w-[190px]`}
+                >
+                  <option value="campaign">Store in {campaignFolderName}</option>
+                  <option value="sent">Store in Sent Items</option>
+                </select>
               </div>
 
               <button
