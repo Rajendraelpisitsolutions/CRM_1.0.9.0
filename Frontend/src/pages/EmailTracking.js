@@ -69,6 +69,12 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     return !!s && (s === campNorm || s.includes(campNorm) || campNorm.includes(s));
   };
   const isReplyLike = (subj) => /^(re|fw|fwd|aw|sv|wg|回复|答复|antwort)\s*:/i.test((subj || "").trim());
+  // Match a full address as a whole token so one recipient's address isn't found INSIDE another's
+  // (e.g. "a@x.com" must not match inside "ba@x.com") — that mis-flagged the wrong recipient.
+  const containsAddress = (hay, email) => {
+    const esc = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9._%+\\-@])${esc}($|[^a-z0-9._%+\\-@])`, "i").test(hay);
+  };
   for (const mm of (messages || [])) {
     if (!mm.id || seen.has(mm.id)) continue;
     const from = (mm.from?.emailAddress?.address || "").toLowerCase();
@@ -85,7 +91,7 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     if (isNdrSender || isBounceSubj) {
       const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
       let hit = false;
-      for (const e of recEmails) if (hay.includes(e)) { bounces.add(e); hit = true; }   // this address bounced
+      for (const e of recEmails) if (containsAddress(hay, e)) { bounces.add(e); hit = true; }   // this address bounced
       if (hit) { moveIds.push(mm.id); seen.add(mm.id); }
       continue;
     }
@@ -97,7 +103,7 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     } else if (isDelivered) {
       const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
       let hit = false;
-      for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }
+      for (const e of recEmails) if (containsAddress(hay, e)) { delivered.add(e); hit = true; }
       if (hit) { moveIds.push(mm.id); seen.add(mm.id); }
     } else if (recSet.has(from) && isReplyLike(subj)) {
       replyCandidates.push({ id: mm.id, from }); seen.add(mm.id);   // a genuine reply to this campaign
