@@ -390,7 +390,8 @@ namespace Elpis_CRM.Services
             long campaignId,
             IEnumerable<string>? opens,
             IEnumerable<string>? delivered,
-            IEnumerable<string>? replies)
+            IEnumerable<string>? replies,
+            IEnumerable<string>? bounces = null)
         {
             HashSet<string> ToSet(IEnumerable<string>? e) => new(
                 (e ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
@@ -399,7 +400,8 @@ namespace Elpis_CRM.Services
             var openSet = ToSet(opens);
             var delivSet = ToSet(delivered);
             var replySet = ToSet(replies);
-            if (openSet.Count == 0 && delivSet.Count == 0 && replySet.Count == 0) return;
+            var bounceSet = ToSet(bounces);
+            if (openSet.Count == 0 && delivSet.Count == 0 && replySet.Count == 0 && bounceSet.Count == 0) return;
 
             var campaign = await _db.EmailCampaigns.FindAsync(campaignId);
             if (campaign == null) return;
@@ -454,6 +456,25 @@ namespace Elpis_CRM.Services
                         RecipientId = r.Id,
                         CampaignId = campaignId,
                         Type = "Reply",
+                        OccurredAt = now
+                    });
+                }
+
+                // Bounce-back (NDR / "Undeliverable") → the address was undeliverable (once). This
+                // catches valid-looking addresses that don't actually exist. If it had been counted
+                // as Sent, undo that — it never really got delivered.
+                if (bounceSet.Contains(r.Email) && r.Status != "Bounced")
+                {
+                    if (string.Equals(r.Status, "Sent", StringComparison.OrdinalIgnoreCase) && campaign.SentCount > 0)
+                        campaign.SentCount--;
+                    r.Status = "Bounced";
+                    if (string.IsNullOrEmpty(r.Error)) r.Error = "Undeliverable (bounced back)";
+                    campaign.BouncedCount++;
+                    _db.EmailEvents.Add(new EmailEventModel
+                    {
+                        RecipientId = r.Id,
+                        CampaignId = campaignId,
+                        Type = "Bounce",
                         OccurredAt = now
                     });
                 }

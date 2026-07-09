@@ -55,13 +55,13 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
   // Shared across campaigns in a sweep so a message that matches several campaigns (same recipients)
   // is only handled once — a message's id changes after /move, so re-touching it would 404.
   const seen = processedIds || new Set();
-  const opens = new Set(), delivered = new Set(), replies = new Set();
+  const opens = new Set(), delivered = new Set(), replies = new Set(), bounces = new Set();
   const moveIds = [];
   const replyCandidates = [];
   // Strict gate: ONLY this campaign's replies and read/delivery receipts get filed — never other
   // inbox mail. A message qualifies only if its subject references THIS campaign's subject
   // (replies are "RE: <subject>", read receipts "Read: <subject>", etc.).
-  const strip = (s) => (s || "").toLowerCase().replace(/^((re|fw|fwd|aw|sv|wg|read|delivered|gelesen|zugestellt|automatic reply|out of office)\s*:\s*)+/i, "").trim();
+  const strip = (s) => (s || "").toLowerCase().replace(/^((re|fw|fwd|aw|sv|wg|read|delivered|undeliverable|gelesen|zugestellt|automatic reply|out of office)\s*:\s*)+/i, "").trim();
   const campNorm = strip(campaignSubject);
   const matchesCampaign = (subj) => {
     if (!campNorm) return false;               // no subject to match → move nothing (don't touch the inbox)
@@ -74,7 +74,23 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     const from = (mm.from?.emailAddress?.address || "").toLowerCase();
     const subj = (mm.subject || "").trim();
     const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
-    const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
+    // Bounce-back / NDR: a message from the mail system (mailer-daemon / postmaster / Exchange) OR a
+    // classic failure subject. The failed recipient's address appears in the report body. These do
+    // NOT carry the campaign subject reliably (e.g. Gmail's "Delivery Status Notification (Failure)")
+    // so they are matched by the recipient email inside the report, NOT by matchesCampaign.
+    const isNdrSender = /mailer-daemon|postmaster|microsoftexchange|maildeliverysystem|mail delivery sub/i.test(from);
+    const isBounceSubj = /^(undeliverable:|undelivered mail|returned mail|mail delivery failed|failure notice|delivery has failed|delivery incomplete)/i.test(subj)
+      || /delivery status notification\s*\(fail/i.test(subj)
+      || (/delivery status notification/i.test(subj) && /fail|undeliver|not.*deliver|rejected/i.test((mm.bodyPreview || "")));
+    if (isNdrSender || isBounceSubj) {
+      const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
+      let hit = false;
+      for (const e of recEmails) if (hay.includes(e)) { bounces.add(e); hit = true; }   // this address bounced
+      if (hit) { moveIds.push(mm.id); seen.add(mm.id); }
+      continue;
+    }
+    // A genuine delivery RECEIPT (not an NDR) confirms delivery.
+    const isDelivered = /^(delivered:|delivery receipt|zugestellt:|remis:)/i.test(subj);
     if (!matchesCampaign(subj)) continue;      // not related to this campaign → leave it in the inbox
     if (isRead) {
       if (recSet.has(from)) { opens.add(from); moveIds.push(mm.id); seen.add(mm.id); }
@@ -105,7 +121,7 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
     }
     moveIds.push(c.id);
   }
-  const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
+  const oArr = [...opens], dArr = [...delivered], rArr = [...replies], bArr = [...bounces];
   let movedCount = 0;
   if (canMove && moveIds.length && folderId) {
     for (const id of moveIds) {
@@ -119,10 +135,10 @@ async function scanAndFileCampaign(accessToken, messages, recipients, campaignId
       } catch { /* skip */ }
     }
   }
-  if (oArr.length || dArr.length || rArr.length) {
-    try { await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr }); } catch { /* best-effort */ }
+  if (oArr.length || dArr.length || rArr.length || bArr.length) {
+    try { await apiClient.post(`/EmailCampaign/${campaignId}/receipts`, { opens: oArr, delivered: dArr, replies: rArr, bounces: bArr }); } catch { /* best-effort */ }
   }
-  return { oArr, dArr, rArr, movedCount };
+  return { oArr, dArr, rArr, bArr, movedCount };
 }
 
 const fmtNum = (n) => (n == null ? "0" : Number(n).toLocaleString());
@@ -289,10 +305,11 @@ function CampaignDetail({ campaignId, onBack }) {
       const res = await fetch("https://graph.microsoft.com/v1.0/me/messages?$top=250&$select=id,from,subject,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", { headers: { Authorization: `Bearer ${tok.accessToken}` } });
       const data = await res.json();
       const folderId = canMove ? await ensureCampaignFolderId(tok.accessToken) : null;
-      const { oArr, dArr, rArr, movedCount } = await scanAndFileCampaign(tok.accessToken, data.value || [], recipients, campaignId, detail?.subject, canMove, folderId);
-      if (oArr.length || dArr.length || rArr.length) {
+      const { oArr, dArr, rArr, bArr, movedCount } = await scanAndFileCampaign(tok.accessToken, data.value || [], recipients, campaignId, detail?.subject, canMove, folderId);
+      if (oArr.length || dArr.length || rArr.length || bArr.length) {
         const parts = [];
         if (rArr.length) parts.push(`${rArr.length} repl${rArr.length === 1 ? "y" : "ies"}`);
+        if (bArr.length) parts.push(`${bArr.length} bounced`);
         if (oArr.length) parts.push(`${oArr.length} read receipt${oArr.length === 1 ? "" : "s"}`);
         if (dArr.length) parts.push(`${dArr.length} delivered`);
         setReplyMsg(`Found ${parts.join(", ")}${movedCount ? ` · moved ${movedCount} to your campaign folder` : ""}.`);
