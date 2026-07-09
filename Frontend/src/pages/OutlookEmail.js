@@ -898,16 +898,24 @@ function OutlookEmail({ onToast }) {
         );
         if (!res.ok) { setCampaignMails([]); return; }
         const data = await res.json();
+        const myEmail = (accounts?.[0]?.username || sessionStorage.getItem("userEmail") || "").toLowerCase();
         setCampaignMails((data.value || []).map(msg => {
+          const fromAddr = (msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "").toLowerCase();
           const senderName = msg.from?.emailAddress?.name || msg.sender?.emailAddress?.name || msg.from?.emailAddress?.address || "";
+          const toEmail = msg.toRecipients?.map(r => r.emailAddress.address).join(", ") || "";
+          // These are mostly *sent* copies (from = me, or blank on a moved draft) — show who the
+          // mail went TO rather than a blank "Unknown" (the reading pane already has its own "To:"
+          // line, so no prefix here). Genuine replies (from someone else) keep the sender's name.
+          const outgoing = !fromAddr || fromAddr === myEmail;
+          const display = outgoing ? (toEmail || senderName || "Me") : (senderName || fromAddr || toEmail);
           return {
             id: msg.id, subject: msg.subject,
             body: "", bodyPreview: msg.bodyPreview || "", attachments: [],
             hasAttachments: msg.hasAttachments, bodyLoaded: false,
-            toEmail: msg.toRecipients?.map(r => r.emailAddress.address).join(", ") || "",
+            toEmail,
             ccEmail: msg.ccRecipients?.map(r => r.emailAddress.address).join(", ") || "",
             receivedDateTime: msg.receivedDateTime || msg.sentDateTime, sentDateTime: msg.sentDateTime,
-            sender: senderName, from: senderName,
+            sender: display, from: display,
             senderEmail: msg.from?.emailAddress?.address || msg.sender?.emailAddress?.address || "",
             isRead: msg.isRead, isDraft: msg.isDraft,
           };

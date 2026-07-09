@@ -205,30 +205,32 @@ function CampaignDetail({ campaignId, onBack }) {
       const recEmails = recipients.map((r) => (r.email || "").toLowerCase()).filter(Boolean);
       const recSet = new Set(recEmails);
       const opens = new Set(), delivered = new Set(), replies = new Set();
-      // Only genuine replies get filed into the campaign folder. Read/delivery receipts are
-      // report-type messages that Outlook renders as "unknown message" in a normal folder, so we
-      // count them for tracking but never move them.
+      // Every campaign-related inbox message (read receipts, delivery receipts, and genuine
+      // replies) is filed into the campaign folder so the inbox stays clean. The message class is
+      // used only to COUNT each one correctly (open vs delivered vs reply) — not to decide whether
+      // to move it.
       const moveIds = [];
-      const replyCandidates = [];   // {id, from} messages from a recipient not flagged as receipts by subject
+      const replyCandidates = [];   // {id, from} from a recipient, subject didn't flag it as a receipt
       for (const mm of (data.value || [])) {
         const from = (mm.from?.emailAddress?.address || "").toLowerCase();
         const subj = (mm.subject || "").trim();
         const isRead = /^(read:|read receipt|gelesen:|lu:|leído:|已读)/i.test(subj);
         const isDelivered = /^(delivered:|delivery receipt|delivery status notification|undeliverable:|zugestellt:|remis:)/i.test(subj);
         if (isRead) {
-          if (recSet.has(from)) opens.add(from);            // read receipt → open (not moved)
+          if (recSet.has(from)) { opens.add(from); if (mm.id) moveIds.push(mm.id); }   // read receipt → open
         } else if (isDelivered) {
           const hay = (subj + " " + (mm.bodyPreview || "")).toLowerCase();
-          for (const e of recEmails) if (hay.includes(e)) delivered.add(e);  // delivery receipt → delivered (not moved)
+          let hit = false;
+          for (const e of recEmails) if (hay.includes(e)) { delivered.add(e); hit = true; }  // delivery receipt
+          if (hit && mm.id) moveIds.push(mm.id);
         } else if (recSet.has(from) && mm.id) {
-          replyCandidates.push({ id: mm.id, from });        // verify it's real mail (not a receipt) below
+          replyCandidates.push({ id: mm.id, from });        // classify by message class below
         }
       }
 
-      // Disambiguate each candidate by its Outlook message class. Read/delivery receipts and NDRs
-      // are REPORT.* classes (from the recipient's own address, in any language) — they must NOT be
-      // moved, or Outlook shows them in the campaign folder as "unknown message". Only true mail
-      // (IPM.Note) counts as a reply and gets filed.
+      // For candidates, use the Outlook message class to count them accurately: read/delivery
+      // receipts and NDRs are REPORT.* (sent from the recipient in any language, so the subject
+      // regex can miss them); everything else is a genuine reply. All of them are still filed.
       for (const c of replyCandidates) {
         let msgClass = "";
         try {
@@ -237,15 +239,14 @@ function CampaignDetail({ campaignId, onBack }) {
             { headers: { Authorization: `Bearer ${tok.accessToken}` } }
           );
           if (cr.ok) { const cj = await cr.json(); msgClass = (cj.singleValueExtendedProperties?.[0]?.value || "").toUpperCase(); }
-        } catch { /* fall through: treat as reply if class unknown */ }
+        } catch { /* class unknown → treat as reply */ }
         if (msgClass.startsWith("REPORT")) {
-          // A receipt/NDR that slipped past the subject check — count for tracking, don't move.
           if (msgClass.includes("IPNRN") || msgClass.includes("IPNNRN")) opens.add(c.from);
           else delivered.add(c.from);
         } else {
           replies.add(c.from);
-          moveIds.push(c.id);
         }
+        moveIds.push(c.id);   // file it into the campaign folder either way
       }
       const oArr = [...opens], dArr = [...delivered], rArr = [...replies];
       // File the matched replies / receipts into the campaign folder so the inbox stays clean.
