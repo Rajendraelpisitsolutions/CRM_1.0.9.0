@@ -1,4 +1,5 @@
 using Elpis_CRM.Data;
+using Elpis_CRM.Dtos;
 using Elpis_CRM.Model;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -413,6 +414,51 @@ namespace Elpis_CRM.Services
         }
 
         /// <summary>
+        /// Returns one row per (contact, email address) for every contact carrying at least one of the
+        /// requested tags, each keeping the contact's display name. Mirrors <see cref="GetEmailsByTagsAsync"/>
+        /// but retains the identity that one discards, which a per-recipient greeting needs.
+        /// </summary>
+        /// <param name="tags">Comma-separated tags to match; a contact qualifies if any of its tags is in this set.</param>
+        /// <returns>The matching recipients, de-duplicated by address (case-insensitive); empty when nothing matches.</returns>
+        public async Task<List<ContactRecipientDto>> GetRecipientsByTagsAsync(string tags)
+        {
+            var selectedTags = SplitTags(tags).Where(t => t.Length > 0).ToList();
+            if (selectedTags.Count == 0) return new List<ContactRecipientDto>();
+
+            // Pre-filter in the DB and project to only what's needed (never the image blobs).
+            var rows = await _contactContext.Contacts.AsNoTracking()
+                .Where(TagsContainAny(selectedTags))
+                .Where(c => c.WorkEmail != null || c.Emails != null)
+                .Select(c => new { c.ContactId, c.FirstName, c.LastName, c.Tags, c.WorkEmail, c.Emails })
+                .ToListAsync();
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var recipients = new List<ContactRecipientDto>();
+            foreach (var c in rows)
+            {
+                // Exact-match refine (a substring pre-filter can over-match, e.g. "VIP" vs "VIPer").
+                if (!SplitTags(c.Tags).Any(tag => selectedTags.Contains(tag))) continue;
+
+                var name = $"{c.FirstName} {c.LastName}".Trim();
+
+                var addresses = new List<string>();
+                if (!string.IsNullOrWhiteSpace(c.WorkEmail)) addresses.Add(c.WorkEmail.Trim());
+                if (!string.IsNullOrWhiteSpace(c.Emails))
+                    addresses.AddRange(c.Emails.Split(TagSeparators, StringSplitOptions.RemoveEmptyEntries).Select(e => e.Trim()));
+
+                foreach (var email in addresses)
+                {
+                    // An address shared by two contacts is only emailed once — first contact wins,
+                    // matching the de-duplication GetEmailsByTagsAsync already does.
+                    if (string.IsNullOrWhiteSpace(email) || !seen.Add(email)) continue;
+                    recipients.Add(new ContactRecipientDto { ContactId = c.ContactId, Name = name, Email = email });
+                }
+            }
+
+            return recipients;
+        }
+
+        /// <summary>
         /// Returns the contacts that carry at least one of the requested tags. Narrows in the DB by
         /// substring, then refines for an exact tag match in memory; image blobs are stripped from the
         /// result so the payload stays small.
@@ -721,7 +767,10 @@ namespace Elpis_CRM.Services
             }
 
             // EstimatedQuote is entered manually — save the value the user typed (only when
-            // provided, so editing other fields never blanks an existing quote).
+            // provided, so editing other fields never blanks an existing quote). Editing an
+            // existing quote goes through here; CLEARING one does not — a blank here is treated
+            // as "not supplied", so removal has its own Admin-only endpoint
+            // (see ClearEstimatedQuoteAsync).
             if (!string.IsNullOrWhiteSpace(contact.EstimatedQuote))
             {
                 existing.EstimatedQuote = contact.EstimatedQuote;
@@ -729,6 +778,23 @@ namespace Elpis_CRM.Services
 
             await _contactContext.SaveChangesAsync();
             return existing;
+        }
+
+        /// <summary>
+        /// Removes a contact's EstimatedQuote. Separate from <see cref="UpdateAsync"/> because that
+        /// method treats a blank quote as "field not supplied" and so can never clear one — and
+        /// because deleting a quote is Admin-only, which the controller enforces.
+        /// </summary>
+        /// <param name="contactId">Primary key of the contact whose quote is being removed.</param>
+        /// <returns>True when the contact existed and its quote was cleared; false when no such contact.</returns>
+        public async Task<bool> ClearEstimatedQuoteAsync(long contactId)
+        {
+            var existing = await _contactContext.Contacts.FindAsync(contactId);
+            if (existing == null) return false;
+
+            existing.EstimatedQuote = null;
+            await _contactContext.SaveChangesAsync();
+            return true;
         }
 
         /// <summary>
@@ -779,6 +845,7 @@ namespace Elpis_CRM.Services
             await _contactContext.SaveChangesAsync();
             return true;
         }
+        
         /// <summary>
         /// Returns all contacts created within the calendar day of <paramref name="createdAt"/>; the time
         /// component is dropped and matching spans from midnight up to (but not including) the next midnight.

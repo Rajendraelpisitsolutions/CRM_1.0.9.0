@@ -10,6 +10,7 @@ import { LAZY_LOADING_CONFIG } from "../config/lazyLoadingConfig";
 import SearchBar from "../utils/SearchBar";
 import { searchAccounts } from "../api/entitySearch";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import PersonalizeRecipientsModal from "../components/modals/PersonalizeRecipientsModal";
 
 // Compatibility wrapper: route same-origin fetch calls through axios client
 async function fetchApi(url, options) {
@@ -261,11 +262,10 @@ function Contacts({
   // State for selected rows
   const [selected, setSelected] = useState(() => new Set());
   const [isExportingAll, setIsExportingAll] = useState(false);
-  // When true, the selection means "every contact across all pages" (Gmail-style),
-  // not just the rows currently loaded on the visible page.
-  const [selectAllAcrossPages, setSelectAllAcrossPages] = useState(false);
   // True while we page through the backend to gather every contact's email for a bulk send.
   const [emailPreparing, setEmailPreparing] = useState(false);
+  // Non-null while the "who gets this, and as Mr. or Miss.?" popup is open; holds [{name, email}].
+  const [personalizeRecipients, setPersonalizeRecipients] = useState(null);
 
   // Server-side pagination hook - fetch contacts in pages
   const fetchContactsPage = React.useCallback(async (page, pageSize) => {
@@ -527,6 +527,24 @@ function Contacts({
     }
   }, []);
 
+  // Clearing the EST Quote field and saving deletes it — Admin only. A blank quote in the normal
+  // update is ignored by the backend (it means "not supplied"), so removal needs this dedicated
+  // call, which the server also restricts to Admins: a non-Admin clearing the field simply leaves
+  // the quote untouched rather than silently wiping it.
+  const deleteEstimatedQuoteIfCleared = async () => {
+    if (!isAdminOnly || !selectedContactDetails) return;
+    const current =
+      selectedContactDetails.EstimatedQuote || selectedContactDetails.estimatedQuote || "";
+    if (!current || slideEstimatedQuote.trim()) return; // nothing to remove, or still filled in
+    const id =
+      getField(selectedContactDetails, "ContactId") ?? getField(selectedContactDetails, "contactId");
+    try {
+      await fetch(`/Contact/${encodeURIComponent(id)}/estimated-quote`, { method: "DELETE" });
+    } catch (err) {
+      onToast?.("Contact saved, but the Estimated Quote could not be removed", "error");
+    }
+  };
+
   const handleCloseContactDetails = () => {
     setSelectedContactDetails(null);
     setDetailsError(null);
@@ -543,7 +561,11 @@ function Contacts({
     if (selectedContactDetails) {
       setSlideGenerateEnquiryNo(false);
       setSlideGenerateEstimatedQuote(false);
-    setSlideEstimatedQuote("");
+      // Seed the field with the contact's existing quote so it can be edited in place. Without
+      // this the input would start blank and saving would look like it had wiped the quote.
+      setSlideEstimatedQuote(
+        selectedContactDetails.EstimatedQuote || selectedContactDetails.estimatedQuote || ""
+      );
     }
   }, [selectedContactDetails?.ContactId, selectedContactDetails?.contactId]);
 
@@ -593,9 +615,8 @@ function Contacts({
   useEffect(() => {
     clearCache();
     goToPage(1);
-    // A new result set invalidates any "all across pages" selection.
+    // A new result set invalidates the selection (row indexes point at different contacts).
     setSelected(new Set());
-    setSelectAllAcrossPages(false);
   }, [filters, debouncedSearch, goToPage, clearCache]);
 
   // Refetch when an import completes for Contacts
@@ -620,16 +641,13 @@ function Contacts({
     return () => window.removeEventListener("contactAdded", handler);
   }, [clearCache, goToPage]);
 
-  // Select or deselect all rows.
-  // Checking the header checkbox selects EVERY contact (across all pages), not just
-  // the rows currently loaded, so the counter reflects the full total. When there is
-  // only a single page, the in-memory selection already is "all", so no across-pages
-  // fetch is needed.
+  // Select or deselect every row ON THIS PAGE — at most one page (150). The header checkbox
+  // deliberately does NOT reach across pages: a selection is always something you can see, and
+  // everything acting on it (email, delete) is bounded to one page's worth. Work through a
+  // large list a page at a time.
   const toggleAll = () => {
     const next = selected.size === (sortedData?.length || 0) ? new Set() : new Set((sortedData || []).map((_, idx) => idx));
     setSelected(next);
-    const isSelectingAll = next.size > 0;
-    setSelectAllAcrossPages(isSelectingAll && totalItems > (sortedData?.length || 0));
     // persist selected emails and tags to localStorage
     const emails = Array.from(next)
       .map((i) => getField(sortedData[i], "WorkEmail"))
@@ -651,8 +669,6 @@ function Contacts({
 
   // Toggle a single row selection
   const toggleRow = (idx) => {
-    // Changing an individual row breaks the "all contacts across pages" meaning.
-    setSelectAllAcrossPages(false);
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(idx) ? next.delete(idx) : next.add(idx);
@@ -752,69 +768,50 @@ function Contacts({
     }
   };
 
-  // Gather emails from an array of contact rows (WorkEmail + the multi-value fields).
-  const emailsFromRows = React.useCallback(
-    (rows) =>
-      extractUniqueEmails(
-        ...rows.map((row) => [
-          getField(row, "WorkEmail"),
-          getField(row, "Email"),
-          getField(row, "Emails"),
-          getField(row, "EmailIds"),
-        ])
-      ),
-    []
-  );
-
-  // Fetch EVERY contact's email across all pages, honoring the active tag filter /
-  // search so "all" matches what the table is currently showing.
-  const fetchAllContactEmails = React.useCallback(async () => {
-    const normalizedSearch = debouncedSearch.trim();
-    const tagFilter = (filters || []).find((f) => String(f.field).toLowerCase().includes("tag"));
-
-    // A tag filter has a dedicated endpoint that returns the emails directly.
-    if (tagFilter && tagFilter.value) {
-      const tagValue = Array.isArray(tagFilter.value) ? tagFilter.value.join(",") : String(tagFilter.value);
-      const res = await fetch(`/Contact/tags/emails?tags=${encodeURIComponent(tagValue)}`);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const joined = await res.json(); // comma-joined string of addresses
-      return extractUniqueEmails(joined);
-    }
-
-    // General case: one fast, projected call for ALL emails (no paging through full contact
-    // rows / image blobs), honoring the active search.
-    const searchParam = normalizedSearch ? `?search=${encodeURIComponent(normalizedSearch)}` : "";
-    const res = await fetch(`/Contact/emails/all${searchParam}`);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    const joined = await res.json(); // comma-joined string of addresses
-    return extractUniqueEmails(joined);
-  }, [debouncedSearch, filters]);
+  // Gather the addresses of an array of contact rows (WorkEmail + the multi-value fields), each
+  // one keeping the name of the contact it came from so the composer can greet them by name. A
+  // contact with several addresses yields one entry per address; an address shared by two
+  // contacts is kept once (first wins).
+  const recipientsFromRows = React.useCallback((rows) => {
+    const seen = new Set();
+    const recipients = [];
+    (rows || []).forEach((row) => {
+      if (!row) return;
+      const name = [getField(row, "FirstName"), getField(row, "LastName")]
+        .map((p) => String(p || "").trim())
+        .filter(Boolean)
+        .join(" ");
+      const addresses = extractUniqueEmails(
+        getField(row, "WorkEmail"),
+        getField(row, "Email"),
+        getField(row, "Emails"),
+        getField(row, "EmailIds")
+      );
+      addresses.forEach((email) => {
+        if (seen.has(email)) return;
+        seen.add(email);
+        recipients.push({ name, email, contactId: getField(row, "ContactId") ?? null });
+      });
+    });
+    return recipients;
+  }, []);
 
   // Send email to selected contacts: gather all their emails FIRST (showing a brief
   // "Preparing…" state while paging the backend for "all across pages"), then open the
   // Outlook composer with the recipients already filled into the To field.
+  // Email is deliberately page-scoped: it takes the rows selected on THIS page only — at most
+  // one page (150) — rather than every contact matching the filter. One page is one shot. Note
+  // this does NOT change what "all across pages" means for delete, which still spans everything.
   const handleSendEmailToSelected = async () => {
     if (emailPreparing) return;
     try {
-      let emails;
-      if (selectAllAcrossPages) {
-        setEmailPreparing(true);
-        emails = await fetchAllContactEmails();
-      } else {
-        emails = emailsFromRows(Array.from(selected).map((i) => sortedData[i]));
-      }
-      if (!emails || emails.length === 0) {
+      const recipients = recipientsFromRows(Array.from(selected).map((i) => sortedData[i]));
+      if (!recipients || recipients.length === 0) {
         onToast?.("No email addresses found for the selected contacts", "error");
         return;
       }
-      localStorage.setItem("selectedContactEmails", JSON.stringify(emails));
-      // Open the composer straight away with these recipients already loaded.
-      localStorage.setItem("openComposeOnLoad", "1");
-      onToast?.(
-        `Composing email to ${emails.length} recipient${emails.length > 1 ? "s" : ""}`,
-        "success"
-      );
-      navigate("/dashboard/OutlookEmail");
+      // Confirm how each person is addressed (and who's left out) before the composer opens.
+      setPersonalizeRecipients(recipients);
     } catch (err) {
       console.error("Failed to gather emails for bulk send:", err);
       onToast?.("Failed to gather contact emails", "error");
@@ -823,50 +820,25 @@ function Contacts({
     }
   };
 
-  // Fetch EVERY matching contact's id across all pages, honoring the active tag filter /
-  // search — used when "all contacts" is selected so bulk delete covers every row.
-  const fetchAllContactIds = React.useCallback(async () => {
-    const normalizedSearch = debouncedSearch.trim();
-    const tagFilter = (filters || []).find((f) => String(f.field).toLowerCase().includes("tag"));
-    let rows = [];
-    if (tagFilter && tagFilter.value) {
-      const tagValue = Array.isArray(tagFilter.value) ? tagFilter.value.join(",") : String(tagFilter.value);
-      const res = await fetch(`/Contact/tags/contacts?tags=${encodeURIComponent(tagValue)}`);
-      if (res.ok) {
-        const json = await res.json();
-        rows = Array.isArray(json) ? json : [];
-      }
-    } else {
-      const pageSize = 500;
-      const searchParam = normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : "";
-      const first = await fetch(`/Contact?page=1&pageSize=${pageSize}${searchParam}`);
-      if (first.ok) {
-        const firstJson = await first.json();
-        rows = Array.isArray(firstJson.items) ? [...firstJson.items] : [];
-        const totalPages = Math.max(1, Math.ceil((firstJson.totalCount || 0) / pageSize));
-        for (let p = 2; p <= totalPages; p++) {
-          const res = await fetch(`/Contact?page=${p}&pageSize=${pageSize}${searchParam}`);
-          if (!res.ok) break;
-          const json = await res.json();
-          if (Array.isArray(json.items)) rows = rows.concat(json.items);
-        }
-      }
-    }
-    return rows.map((r) => getField(r, "ContactId")).filter((v) => v !== undefined && v !== null);
-  }, [debouncedSearch, filters]);
+  // Confirmed in the personalize popup: hand the chosen recipients (each with their prefix) to
+  // the composer. The legacy address-only key is still written so anything else reading it keeps
+  // working; the composer prefers the richer key when present.
+  const handlePersonalizeConfirm = (chosen) => {
+    setPersonalizeRecipients(null);
+    if (!chosen.length) return;
+    localStorage.setItem("selectedContactRecipients", JSON.stringify(chosen));
+    localStorage.setItem("selectedContactEmails", JSON.stringify(chosen.map((r) => r.email)));
+    localStorage.setItem("openComposeOnLoad", "1");
+    onToast?.(
+      `Composing email to ${chosen.length} recipient${chosen.length > 1 ? "s" : ""}`,
+      "success"
+    );
+    navigate("/dashboard/OutlookEmail");
+  };
 
-  // Delete selected rows (or every contact when "all across pages" is selected)
+  // Delete the rows selected on this page. Bounded to the page, like every other bulk action —
+  // there is no longer an "all contacts across pages" selection to delete.
   const handleDeleteClick = () => {
-    if (selectAllAcrossPages) {
-      if (!totalItems) {
-        onToast?.("No contacts selected to delete", "error");
-        return;
-      }
-      setDeleteCount(totalItems);
-      setDeleteContactName(`all ${totalItems} contacts`);
-      setShowDeleteModal(true);
-      return;
-    }
     const indexes = Array.from(selected);
     const ids = indexes.map((i) => getField(sortedData[i], "ContactId")).filter((v) => v !== undefined && v !== null);
     if (ids.length === 0) {
@@ -881,15 +853,9 @@ function Contacts({
   const confirmDelete = async () => {
     setShowDeleteModal(false);
     try {
-      let ids;
-      if (selectAllAcrossPages) {
-        onToast?.("Preparing to delete all contacts...", "info");
-        ids = await fetchAllContactIds();
-      } else {
-        ids = Array.from(selected)
-          .map((i) => getField(sortedData[i], "ContactId"))
-          .filter(Boolean);
-      }
+      const ids = Array.from(selected)
+        .map((i) => getField(sortedData[i], "ContactId"))
+        .filter(Boolean);
       if (!ids || ids.length === 0) return;
 
       onToast?.(`Deleting ${ids.length} contact(s)...`, "info");
@@ -913,7 +879,6 @@ function Contacts({
       clearCache();
       await refetch();
       setSelected(new Set());
-      setSelectAllAcrossPages(false);
       // notify parent to refresh its list (Dashboard)
       try { onRefetch?.(); } catch (_) { }
       onToast?.(`Deleted ${ids.length} contacts`, "success");
@@ -1175,10 +1140,17 @@ function Contacts({
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-4 sm:px-6 py-3 sm:py-3.5 shadow-sm border border-gray-200 w-full">
               <div className="flex items-center gap-2">
                 <div className="min-w-8 h-8 px-2 bg-blue-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
-                  {selectAllAcrossPages ? totalItems : selected.size}
+                  {selected.size}
                 </div>
                 <span className="text-sm sm:text-base text-gray-700">selected</span>
               </div>
+              {/* Selection is page-bounded, so a full page is the most that can be acted on at
+                  once — make that obvious rather than leaving the user to wonder about the rest. */}
+              {allSelected && totalItems > selected.size && (
+                <span className="text-xs text-gray-500">
+                  This page only · {totalItems.toLocaleString()} total — use Next page for the rest
+                </span>
+              )}
               <div className="hidden sm:flex flex-1" />
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 {/* Send Email — always available for any selection (one, some, or all) */}
@@ -1228,6 +1200,15 @@ function Contacts({
             </div>
           </div>
         )}
+        {/* Personalize recipients — confirms the Mr./Miss. greeting and who's included,
+            then hands off to the Outlook composer. */}
+        <PersonalizeRecipientsModal
+          isOpen={!!personalizeRecipients}
+          recipients={personalizeRecipients || []}
+          onCancel={() => setPersonalizeRecipients(null)}
+          onConfirm={handlePersonalizeConfirm}
+          confirmLabel="Compose email"
+        />
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
@@ -2243,6 +2224,9 @@ function Contacts({
                         }
                       );
                       if (res.ok) {
+                        // An Admin who blanked the quote means to remove it; the PUT above ignores
+                        // a blank, so that removal is a separate, Admin-only call.
+                        await deleteEstimatedQuoteIfCleared();
                         await refetch();
                         onToast &&
                           onToast("Contact updated successfully", "success");
@@ -2671,41 +2655,58 @@ function Contacts({
                                   : "Not generated"}
                           </p>
 
-                          <label className={`flex items-center gap-2 mt-4 ${hasEstimatedQuote ? "opacity-50 cursor-not-allowed" : "cursor-pointer select-none"}`}>
-                            <input
-                              type="checkbox"
-                              checked={slideGenerateEstimatedQuote}
-                              disabled={hasEstimatedQuote}
-                              onChange={(e) => {
-                                setSlideGenerateEstimatedQuote(e.target.checked);
-                                setSlideEstimatedQuote(
-                                  e.target.checked
-                                    ? (selectedContactDetails?.EstimatedQuote || selectedContactDetails?.estimatedQuote || "EST-")
-                                    : ""
-                                );
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-blue-500"
-                            />
-                            <span className="font-normal text-gray-700 text-sm">
-                              Add Estimated Quote
-                            </span>
-                          </label>
+                          {/* An existing EST Quote is editable in place by anyone who can edit the
+                              contact; only an Admin may remove it. When there's no quote yet, the
+                              checkbox reveals the field to add one. */}
                           {hasEstimatedQuote ? (
-                            <p className="text-xs text-gray-500 mt-1.5 ml-6">
-                              Already added: {selectedContactDetails?.EstimatedQuote || selectedContactDetails?.estimatedQuote}
-                            </p>
-                          ) : slideGenerateEstimatedQuote ? (
-                            <input
-                              type="text"
-                              value={slideEstimatedQuote}
-                              onChange={(e) => setSlideEstimatedQuote(e.target.value)}
-                              placeholder="EST-0019"
-                              className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="mt-4">
+                              <span className="font-normal text-gray-700 text-sm">Estimated Quote</span>
+                              <input
+                                type="text"
+                                value={slideEstimatedQuote}
+                                onChange={(e) => setSlideEstimatedQuote(e.target.value)}
+                                disabled={!canEditContact(selectedContactDetails)}
+                                placeholder="EST-0019"
+                                className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                              />
+                              <p className="text-xs text-gray-500 mt-1.5">
+                                {!canEditContact(selectedContactDetails)
+                                  ? "You can only edit contacts you created."
+                                  : isAdminOnly
+                                    ? "Edit and Save to update. Clear the field and Save to delete it."
+                                    : "Edit and Save to update. Only an Admin can delete it."}
+                              </p>
+                            </div>
                           ) : (
-                            <p className="text-xs text-gray-500 mt-1.5 ml-6">
-                              Not added
-                            </p>
+                            <>
+                              <label className="flex items-center gap-2 mt-4 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={slideGenerateEstimatedQuote}
+                                  onChange={(e) => {
+                                    setSlideGenerateEstimatedQuote(e.target.checked);
+                                    setSlideEstimatedQuote(e.target.checked ? "EST-" : "");
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-slate-800 focus:ring-2 focus:ring-blue-500"
+                                />
+                                <span className="font-normal text-gray-700 text-sm">
+                                  Add Estimated Quote
+                                </span>
+                              </label>
+                              {slideGenerateEstimatedQuote ? (
+                                <input
+                                  type="text"
+                                  value={slideEstimatedQuote}
+                                  onChange={(e) => setSlideEstimatedQuote(e.target.value)}
+                                  placeholder="EST-0019"
+                                  className="w-full mt-2 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                />
+                              ) : (
+                                <p className="text-xs text-gray-500 mt-1.5 ml-6">
+                                  Not added
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>

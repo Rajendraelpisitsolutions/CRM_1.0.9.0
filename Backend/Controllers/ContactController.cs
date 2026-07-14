@@ -1,3 +1,4 @@
+using Elpis_CRM.Dtos;
 using Elpis_CRM.Model;
 using Elpis_CRM.Service;
 using Microsoft.AspNetCore.Authorization;
@@ -144,6 +145,28 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
+        /// Returns the email addresses of every contact carrying at least one of the requested tags,
+        /// each paired with the contact's id and display name. Unlike tags/emails (which returns bare
+        /// addresses), this keeps the identity needed to address each recipient personally.
+        /// </summary>
+        /// <param name="tags">Comma-separated tags; a contact matches if any of its tags is in this set.</param>
+        /// <returns>One entry per distinct address: { contactId, name, email }.</returns>
+        /// <response code="200">Recipients returned (possibly an empty list).</response>
+        /// <response code="400">The tags parameter was missing or blank.</response>
+        [HttpGet("tags/recipients")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin,Manager,User")]
+        public async Task<ActionResult<List<ContactRecipientDto>>> GetRecipientsByTagsAsync([FromQuery] string tags)
+        {
+            if (string.IsNullOrWhiteSpace(tags))
+            {
+                return BadRequest("Tags parameter is required.");
+            }
+
+            var recipients = await _contactService.GetRecipientsByTagsAsync(tags);
+            return Ok(recipients);
+        }
+
+        /// <summary>
         /// Returns every contact's email addresses (WorkEmail + the multi-value Emails field) as a
         /// de-duplicated comma-joined string, optionally narrowed by a search token. Fast projection
         /// (no image blobs, single query) so "email all selected contacts" doesn't have to page.
@@ -157,6 +180,7 @@ namespace Elpis_CRM.Controllers
             var emails = await _contactService.GetAllEmailsAsync(search);
             return Ok(emails);
         }
+
 
         /// <summary>
         /// Returns the full contacts that carry at least one of the requested tags. Despite the route name,
@@ -319,6 +343,30 @@ namespace Elpis_CRM.Controllers
                 Message = "Contact updated successfully",
                 Contact = updated
             });
+        }
+
+        /// <summary>
+        /// Removes a contact's Estimated Quote (EST). Restricted to the Admin role: any user may add
+        /// or edit a quote via the normal update, but only an Admin may delete one. The role is
+        /// enforced here rather than only in the UI, so hiding the button is not the control.
+        /// </summary>
+        /// <param name="contactId">Primary key of the contact whose quote is being removed.</param>
+        /// <returns>A confirmation message.</returns>
+        /// <response code="200">Quote removed (or the contact had none).</response>
+        /// <response code="403">Caller is not an Admin.</response>
+        /// <response code="404">No contact has that ID.</response>
+        [HttpDelete("{contactId:long}/estimated-quote")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]
+        public async Task<ActionResult> DeleteEstimatedQuoteAsync(long contactId)
+        {
+            var cleared = await _contactService.ClearEstimatedQuoteAsync(contactId);
+
+            if (!cleared)
+            {
+                return NotFound($"Contact with ID '{contactId}' not found.");
+            }
+
+            return Ok(new { Message = "Estimated Quote removed" });
         }
 
         /// <summary>

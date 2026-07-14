@@ -16,13 +16,22 @@ import { FiTrash2 } from "react-icons/fi";
 import apiClient from "../api/client";
 import { useMsal } from "@azure/msal-react";
 import DOMPurify from "dompurify";
+import PersonalizeRecipientsModal, {
+  SEND_BATCH_SIZE,
+  greetingFor,
+} from "../components/modals/PersonalizeRecipientsModal";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const TRANSPARENT_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-// A template packs a body, a footer and an optional company logo (a data URL) into the
-// single Template.Body column using sentinels, so no schema change is needed. It splits
-// back into { body, footer, logo } on load (the subject lives in Template.Subject).
+// A template packs a body, a footer, an optional company logo (a data URL), file
+// attachments and a meta block (disclaimer, per-block font sizes, and whether the body is
+// HTML) into the single Template.Body column using sentinels, so no schema change is
+// needed. It splits back apart on load (the subject lives in Template.Subject).
+// Wire format:
+//   [[LOGO]]…[[/LOGO]][[ATTACH]]…[[/ATTACH]][[META]]…[[/META]][[FOOTER]]footer[[/FOOTER]]body
+// Every section is optional and older templates (which have no [[META]]) still parse —
+// they just fall back to the defaults below.
 // `text` is kept as an alias of `footer` for older callers.
 const LOGO_OPEN = "[[LOGO]]";
 const LOGO_CLOSE = "[[/LOGO]]";
@@ -30,17 +39,44 @@ const FOOTER_OPEN = "[[FOOTER]]";
 const FOOTER_CLOSE = "[[/FOOTER]]";
 const ATTACH_OPEN = "[[ATTACH]]";
 const ATTACH_CLOSE = "[[/ATTACH]]";
-function buildTemplateBody(body, footer, logo, attachments) {
+const META_OPEN = "[[META]]";
+const META_CLOSE = "[[/META]]";
+
+// The footer IS the signature block (name, company info, logo); the disclaimer is the legal
+// small print under it. Each is sized on its own.
+const DEFAULT_SIZES = { footer: 15, disclaimer: 11 };
+const FONT_SIZES = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24];
+
+function emptyTemplate() {
+  return {
+    name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [],
+    bodyHtml: true, disclaimer: "",
+    footerSize: DEFAULT_SIZES.footer,
+    disclaimerSize: DEFAULT_SIZES.disclaimer,
+  };
+}
+
+function buildTemplateBody(t) {
+  const meta = {
+    html: !!t.bodyHtml,
+    disclaimer: t.disclaimer || "",
+    sizes: {
+      footer: Number(t.footerSize) || DEFAULT_SIZES.footer,
+      disclaimer: Number(t.disclaimerSize) || DEFAULT_SIZES.disclaimer,
+    },
+  };
   let out = "";
-  if (logo) out += `${LOGO_OPEN}${logo}${LOGO_CLOSE}`;
-  if (attachments && attachments.length) out += `${ATTACH_OPEN}${JSON.stringify(attachments)}${ATTACH_CLOSE}`;
-  out += `${FOOTER_OPEN}${footer || ""}${FOOTER_CLOSE}`;
-  out += (body || "");
+  if (t.logo) out += `${LOGO_OPEN}${t.logo}${LOGO_CLOSE}`;
+  if (t.attachments && t.attachments.length) out += `${ATTACH_OPEN}${JSON.stringify(t.attachments)}${ATTACH_CLOSE}`;
+  out += `${META_OPEN}${JSON.stringify(meta)}${META_CLOSE}`;
+  out += `${FOOTER_OPEN}${t.footer || ""}${FOOTER_CLOSE}`;
+  out += (t.body || "");
   return out;
 }
+
 function parseTemplateBody(raw) {
   let b = raw || "";
-  let logo = "", attachments = [];
+  let logo = "", attachments = [], meta = null;
   if (b.startsWith(LOGO_OPEN)) {
     const end = b.indexOf(LOGO_CLOSE);
     if (end !== -1) { logo = b.slice(LOGO_OPEN.length, end); b = b.slice(end + LOGO_CLOSE.length); }
@@ -52,19 +88,293 @@ function parseTemplateBody(raw) {
       b = b.slice(end + ATTACH_CLOSE.length);
     }
   }
+  if (b.startsWith(META_OPEN)) {
+    const end = b.indexOf(META_CLOSE);
+    if (end !== -1) {
+      try { meta = JSON.parse(b.slice(META_OPEN.length, end)); } catch { meta = null; }
+      b = b.slice(end + META_CLOSE.length);
+    }
+  }
+  const sizes = (meta && meta.sizes) || {};
+  // A separate signature block existed briefly, but it's the same thing as the footer, so
+  // anything saved there is folded back into the footer rather than dropped.
+  const strandedSignature = (meta && meta.signature) || "";
+  const result = (footer, body) => ({
+    body,
+    footer: strandedSignature ? `${strandedSignature}\n${footer}`.trim() : footer,
+    text: strandedSignature ? `${strandedSignature}\n${footer}`.trim() : footer,
+    logo, attachments,
+    // No meta means a template saved before rich bodies existed — its body is plain text.
+    bodyHtml: !!(meta && meta.html),
+    disclaimer: (meta && meta.disclaimer) || "",
+    footerSize: Number(sizes.footer) || DEFAULT_SIZES.footer,
+    disclaimerSize: Number(sizes.disclaimer) || DEFAULT_SIZES.disclaimer,
+  });
   if (b.startsWith("\n")) b = b.slice(1);
   if (b.startsWith(FOOTER_OPEN)) {
-    // New format: [[FOOTER]]footer[[/FOOTER]]body
     const end = b.indexOf(FOOTER_CLOSE);
     if (end !== -1) {
       const footer = b.slice(FOOTER_OPEN.length, end);
       let body = b.slice(end + FOOTER_CLOSE.length);
       if (body.startsWith("\n")) body = body.slice(1);
-      return { body, footer, logo, attachments, text: footer };
+      return result(footer, body);
     }
   }
   // Legacy format: the remaining text was the footer (no separate body).
-  return { body: "", footer: b, logo, attachments, text: b };
+  return result(b, "");
+}
+
+// ─── Rich body (inline images) ───────────────────────────────────────────────
+const BODY_ALLOWED_TAGS = [
+  "p", "div", "span", "br", "b", "strong", "i", "em", "u", "s", "a", "ul", "ol", "li",
+  "img", "table", "thead", "tbody", "tr", "td", "th", "h1", "h2", "h3", "h4",
+  "blockquote", "pre", "code", "font", "hr",
+];
+const BODY_ALLOWED_ATTR = [
+  "href", "target", "rel", "src", "alt", "title", "width", "height", "style", "align",
+  "valign", "colspan", "rowspan", "color", "face", "size", "cellpadding", "cellspacing", "border",
+];
+// Pasted markup comes from anywhere (Word, a website, another mail), so it's scrubbed to a
+// mail-safe subset before it ever reaches the editor. DOMPurify keeps `data:` image srcs.
+function sanitizeBodyHtml(html) {
+  return DOMPurify.sanitize(String(html || ""), {
+    ALLOWED_TAGS: BODY_ALLOWED_TAGS,
+    ALLOWED_ATTR: BODY_ALLOWED_ATTR,
+    FORBID_TAGS: ["script", "style", "meta", "link"],
+  });
+}
+function escapeHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function stripHtml(html) {
+  const text = String(html || "").replace(/<br\s*\/?>/gi, " ").replace(/<[^>]*>/g, " ");
+  return text.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+}
+// Plain-text bodies (legacy templates, forwards) rendered into the rich editor.
+function plainTextToHtml(text) {
+  return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+// A pasted screenshot is easily several MB, which would blow the template size cap and the
+// server upload limit, so inline images are downscaled before being embedded.
+async function compressImageToDataUrl(file, maxWidth = 900) {
+  const raw = await readFileAsDataUrl(file);
+  if (!raw) return "";
+  if (file.type === "image/gif") return raw; // re-encoding would drop the animation
+  const img = await loadImage(raw);
+  if (!img || !img.naturalWidth) return raw;
+  const scale = Math.min(1, maxWidth / img.naturalWidth);
+  if (scale >= 1 && raw.length < 400 * 1024) return raw;
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return raw;
+  ctx.drawImage(img, 0, 0, w, h);
+  let out = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
+  if (out.length > 600 * 1024) out = canvas.toDataURL("image/jpeg", 0.8);
+  return out.length < raw.length ? out : raw;
+}
+
+// Gmail and Outlook strip `data:` image srcs, so on send every inline image is pulled out
+// into a real CID attachment and its <img> is repointed at it. Returns the rewritten HTML
+// plus the Graph attachment payloads to merge into the message.
+function extractInlineImages(html) {
+  const attachments = [];
+  let n = 0;
+  const out = String(html || "").replace(/<img\b[^>]*>/gi, (tag) => {
+    const m = tag.match(/\ssrc\s*=\s*["']data:([^;"']+);base64,([^"']+)["']/i);
+    if (!m) return tag;
+    n += 1;
+    const contentType = m[1];
+    const ext = (contentType.split("/")[1] || "png").split("+")[0];
+    const cid = `crminline${n}`;
+    attachments.push({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: `image${n}.${ext}`,
+      contentType,
+      contentBytes: m[2],
+      isInline: true,
+      contentId: cid,
+    });
+    return tag.replace(m[0], ` src="cid:${cid}"`);
+  });
+  return { html: out, attachments };
+}
+
+// A contenteditable body: images can be pasted or dropped straight in, alongside text.
+// The value is HTML; it's only written back into the DOM when it changes from the outside,
+// otherwise React would reset the caret to the start on every keystroke.
+function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassName, onError, onDropHandled, minHeight = 200 }) {
+  const ref = useRef(null);
+  // null (not "") so the first run always writes: the editor is mounted with the template
+  // already loaded, and React renders no children into a contenteditable.
+  const lastHtml = useRef(null);
+  const [isEmpty, setIsEmpty] = useState(!value);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if ((value || "") !== lastHtml.current) {
+      lastHtml.current = value || "";
+      el.innerHTML = value || "";
+      setIsEmpty(!el.textContent.trim() && !el.querySelector("img"));
+    }
+  }, [value]);
+
+  const emit = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    lastHtml.current = el.innerHTML;
+    setIsEmpty(!el.textContent.trim() && !el.querySelector("img"));
+    onChange(el.innerHTML);
+  }, [onChange]);
+
+  const insertHtmlAtCaret = useCallback((html) => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !el.contains(sel.anchorNode)) {
+      el.insertAdjacentHTML("beforeend", html);
+    } else {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const frag = range.createContextualFragment(html);
+      const last = frag.lastChild;
+      range.insertNode(frag);
+      if (last) {
+        range.setStartAfter(last);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }
+    emit();
+  }, [emit]);
+
+  const insertImageFiles = useCallback(async (files) => {
+    for (const f of files) {
+      const dataUrl = await compressImageToDataUrl(f);
+      if (!dataUrl) { onError && onError(`Could not read "${f.name || "image"}"`); continue; }
+      insertHtmlAtCaret(`<img src="${dataUrl}" alt="" style="max-width:100%;height:auto;" />`);
+    }
+  }, [insertHtmlAtCaret, onError]);
+
+  const imagesFrom = (dt) => {
+    const files = Array.from(dt.files || []).filter((f) => f.type.startsWith("image/"));
+    if (files.length) return files;
+    // Screenshots arrive as items rather than files in some browsers.
+    return Array.from(dt.items || [])
+      .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+      .map((it) => it.getAsFile())
+      .filter(Boolean);
+  };
+
+  const handlePaste = (e) => {
+    const dt = e.clipboardData;
+    if (!dt) return;
+    const imgs = imagesFrom(dt);
+    if (imgs.length) { e.preventDefault(); insertImageFiles(imgs); return; }
+    const html = dt.getData("text/html");
+    if (html) { e.preventDefault(); insertHtmlAtCaret(sanitizeBodyHtml(html)); return; }
+    const text = dt.getData("text/plain");
+    if (text) { e.preventDefault(); insertHtmlAtCaret(plainTextToHtml(text)); }
+  };
+
+  // An image dropped ON the body goes inline; anything else is left to bubble up to the
+  // attachment drop zone around us. onDropHandled lets that zone drop its drag highlight,
+  // since stopPropagation means its own drop handler never runs.
+  const handleDrop = (e) => {
+    const imgs = imagesFrom(e.dataTransfer || {});
+    if (!imgs.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onDropHandled && onDropHandled();
+    insertImageFiles(imgs);
+  };
+
+  return (
+    <div className={`relative flex flex-col ${wrapperClassName || ""}`}>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        onInput={emit}
+        onBlur={emit}
+        onPaste={handlePaste}
+        onDrop={handleDrop}
+        style={{ minHeight }}
+        // No overflow of its own: the editor grows with its content and the surrounding
+        // pane scrolls, so the body and footer scroll together as one page.
+        className={`${className || ""} break-words [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded`}
+      />
+      {isEmpty && placeholder && (
+        <span className="pointer-events-none absolute left-4 top-3 text-sm text-gray-400 select-none">
+          {placeholder}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// A textarea that grows to fit its text, so the footer/disclaimer never scroll inside
+// themselves — the compose pane does all the scrolling. Re-measures when the font size
+// changes, since that reflows the content.
+function AutoGrowTextarea({ value, onChange, className, style, placeholder }) {
+  const ref = useRef(null);
+  const fontSize = style && style.fontSize;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value, fontSize]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={1}
+      style={style}
+      className={`${className || ""} resize-none overflow-hidden`}
+    />
+  );
+}
+
+// Per-block font size picker (footer/signature and disclaimer).
+function FontSizeSelect({ value, onChange, className }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className={className}
+      aria-label="Font size"
+    >
+      {FONT_SIZES.map((s) => <option key={s} value={s}>{s} px</option>)}
+    </select>
+  );
 }
 
 // Ensures an Outlook mail folder with the given name exists (creating it once if not) and
@@ -243,11 +553,6 @@ function replaceCidImages(html, attachments = []) {
   });
   result = result.replace(/src\s*=\s*["']cid:[^"']*["']/gi, `src="${TRANSPARENT_GIF}"`);
   return result;
-}
-
-function stripHtml(html) {
-  if (!html) return "";
-  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
 }
 
 function splitEmailBody(html) {
@@ -597,10 +902,10 @@ function OutlookEmail({ onToast }) {
   // A template is "assigned" to an email (stored in CreatedBy). That email is the
   // key used to auto-load a user's template on compose.
   const loggedInEmail = (typeof window !== "undefined" ? sessionStorage.getItem("userEmail") : "") || "";
-  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
+  const [newTemplate, setNewTemplate] = useState(emptyTemplate);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editTemplateIdx, setEditTemplateIdx] = useState(null);
-  const [editTemplate, setEditTemplate] = useState({ subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
+  const [editTemplate, setEditTemplate] = useState(emptyTemplate);
 
   // A user only sees / manages templates assigned to them (CreatedBy == their email);
   // legacy templates with no assignment are owned if their footer carries the email.
@@ -1503,19 +1808,20 @@ function OutlookEmail({ onToast }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const name = (newTemplate.subject || newTemplate.body || newTemplate.footer || "")
+      // The body is HTML, so tags are stripped before it can stand in as the name.
+      const name = (newTemplate.subject || stripHtml(newTemplate.body) || newTemplate.footer || "")
         .trim().slice(0, 40) || "Template";
       // CreatedBy = the logged-in user's email: each user owns only their own templates.
-      // Subject is stored on its own; body + footer + logo are packed into Body.
+      // Subject is stored on its own; body + footer + logo + meta are packed into Body.
       const r = await apiClient.post("/Template", {
         name,
         subject: newTemplate.subject || "",
-        body: buildTemplateBody(newTemplate.body, newTemplate.footer, newTemplate.logo, newTemplate.attachments),
+        body: buildTemplateBody(newTemplate),
         createdBy: loggedInEmail,
       });
       if (r.status >= 200 && r.status < 300) {
         setShowAddTemplate(false);
-        setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: "", logo: "", attachments: [] });
+        setNewTemplate(emptyTemplate());
         apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
         showPopup("Template created");
       }
@@ -2882,11 +3188,14 @@ function OutlookEmail({ onToast }) {
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
-                              <textarea value={newTemplate.body}
-                                onChange={e => setNewTemplate(p => ({ ...p, body: e.target.value }))}
-                                rows={6}
-                                placeholder="Email body..."
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              <RichBodyEditor
+                                value={newTemplate.body}
+                                onChange={html => setNewTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
+                                onError={msg => showPopup(msg, "error")}
+                                placeholder="Email body… paste or drop images right here"
+                                minHeight={200}
+                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Paste (Ctrl+V) or drop an image to place it inside the body. Files added below are sent as separate attachments instead.</p>
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
@@ -2907,12 +3216,18 @@ function OutlookEmail({ onToast }) {
                               <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
                             </div>
                             <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                              <div className="flex items-center justify-between gap-3 mb-1.5">
+                                <label className={`block text-sm font-medium ${th.textMuted}`}>Footer / Signature</label>
+                                <FontSizeSelect value={newTemplate.footerSize}
+                                  onChange={v => setNewTemplate(p => ({ ...p, footerSize: v }))}
+                                  className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
+                              </div>
                               <textarea value={newTemplate.footer}
                                 onChange={e => setNewTemplate(p => ({ ...p, footer: e.target.value }))}
                                 rows={4}
-                                placeholder="Footer content (signature, company info)..."
-                                className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                placeholder="Your name, role, company info..."
+                                style={{ fontSize: `${newTemplate.footerSize}px` }}
+                                className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -2939,6 +3254,21 @@ function OutlookEmail({ onToast }) {
                               )}
                               <p className={`text-xs ${th.textMuted} mt-1`}>Appears in the email footer when this template is used.</p>
                             </div>
+                            <div>
+                              <div className="flex items-center justify-between gap-3 mb-1.5">
+                                <label className={`block text-sm font-medium ${th.textMuted}`}>Disclaimer</label>
+                                <FontSizeSelect value={newTemplate.disclaimerSize}
+                                  onChange={v => setNewTemplate(p => ({ ...p, disclaimerSize: v }))}
+                                  className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
+                              </div>
+                              <textarea value={newTemplate.disclaimer}
+                                onChange={e => setNewTemplate(p => ({ ...p, disclaimer: e.target.value }))}
+                                rows={3}
+                                placeholder="Confidentiality notice, legal text..."
+                                style={{ fontSize: `${newTemplate.disclaimerSize}px`, fontStyle: "italic" }}
+                                className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Sent as the last block, below the footer.</p>
+                            </div>
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
                                 className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
@@ -2961,7 +3291,7 @@ function OutlookEmail({ onToast }) {
                             <form onSubmit={async e => {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
-                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || editTemplate.body || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate.body, editTemplate.footer, editTemplate.logo, editTemplate.attachments), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
+                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || stripHtml(editTemplate.body) || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
@@ -2990,10 +3320,14 @@ function OutlookEmail({ onToast }) {
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
-                                <textarea value={editTemplate.body}
-                                  onChange={e => setEditTemplate(p => ({ ...p, body: e.target.value }))} rows={6}
-                                  placeholder="Email body..."
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                <RichBodyEditor
+                                  value={editTemplate.body}
+                                  onChange={html => setEditTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
+                                  onError={msg => showPopup(msg, "error")}
+                                  placeholder="Email body… paste or drop images right here"
+                                  minHeight={200}
+                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                <p className={`text-xs ${th.textMuted} mt-1`}>Paste (Ctrl+V) or drop an image to place it inside the body. Files added below are sent as separate attachments instead.</p>
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
@@ -3014,11 +3348,17 @@ function OutlookEmail({ onToast }) {
                                 <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
                               </div>
                               <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Footer</label>
+                                <div className="flex items-center justify-between gap-3 mb-1.5">
+                                  <label className={`block text-sm font-medium ${th.textMuted}`}>Footer / Signature</label>
+                                  <FontSizeSelect value={editTemplate.footerSize}
+                                    onChange={v => setEditTemplate(p => ({ ...p, footerSize: v }))}
+                                    className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
+                                </div>
                                 <textarea value={editTemplate.footer}
                                   onChange={e => setEditTemplate(p => ({ ...p, footer: e.target.value }))} rows={4}
-                                  placeholder="Footer content (signature, company info)..."
-                                  className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                  placeholder="Your name, role, company info..."
+                                  style={{ fontSize: `${editTemplate.footerSize}px` }}
+                                  className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                               </div>
                               <div>
                                 <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
@@ -3044,6 +3384,20 @@ function OutlookEmail({ onToast }) {
                                   </label>
                                 )}
                               </div>
+                              <div>
+                                <div className="flex items-center justify-between gap-3 mb-1.5">
+                                  <label className={`block text-sm font-medium ${th.textMuted}`}>Disclaimer</label>
+                                  <FontSizeSelect value={editTemplate.disclaimerSize}
+                                    onChange={v => setEditTemplate(p => ({ ...p, disclaimerSize: v }))}
+                                    className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
+                                </div>
+                                <textarea value={editTemplate.disclaimer}
+                                  onChange={e => setEditTemplate(p => ({ ...p, disclaimer: e.target.value }))} rows={3}
+                                  placeholder="Confidentiality notice, legal text..."
+                                  style={{ fontSize: `${editTemplate.disclaimerSize}px`, fontStyle: "italic" }}
+                                  className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+                                <p className={`text-xs ${th.textMuted} mt-1`}>Sent as the last block, below the footer.</p>
+                              </div>
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
                                   className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
@@ -3061,7 +3415,25 @@ function OutlookEmail({ onToast }) {
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
                             <h2 className="text-sm font-semibold truncate">{tpl.name || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
-                              <button onClick={() => { const parsed = parseTemplateBody(tpl.body); setEditTemplateIdx(openedTemplateIdx); setEditTemplate({ subject: tpl.subject ?? tpl.Subject ?? "", body: parsed.body, footer: parsed.footer, assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "", logo: parsed.logo, attachments: parsed.attachments || [] }); }}
+                              <button onClick={() => {
+                                const parsed = parseTemplateBody(tpl.body);
+                                setEditTemplateIdx(openedTemplateIdx);
+                                setEditTemplate({
+                                  ...emptyTemplate(),
+                                  subject: tpl.subject ?? tpl.Subject ?? "",
+                                  // A pre-rich template holds plain text — convert it so the editor
+                                  // shows line breaks instead of one run-on paragraph.
+                                  body: parsed.bodyHtml ? parsed.body : plainTextToHtml(parsed.body),
+                                  bodyHtml: true,
+                                  footer: parsed.footer,
+                                  assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "",
+                                  logo: parsed.logo,
+                                  attachments: parsed.attachments || [],
+                                  disclaimer: parsed.disclaimer,
+                                  footerSize: parsed.footerSize,
+                                  disclaimerSize: parsed.disclaimerSize,
+                                });
+                              }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
                               <button onClick={() => setTemplateToDelete(tpl)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
@@ -3075,7 +3447,11 @@ function OutlookEmail({ onToast }) {
                                 <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Assigned Email</label>
                                 <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{(tpl.createdBy ?? tpl.CreatedBy) || "— not assigned —"}</div>
                               </div>
-                              {(() => { const { body, footer, logo } = parseTemplateBody(tpl.body); const subj = tpl.subject ?? tpl.Subject ?? ""; return (
+                              {(() => {
+                                const { body, bodyHtml, footer, logo, disclaimer, footerSize, disclaimerSize } = parseTemplateBody(tpl.body);
+                                const subj = tpl.subject ?? tpl.Subject ?? "";
+                                const panel = `px-4 py-4 border ${th.border} rounded-xl ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`;
+                                return (
                               <>
                               {subj && (
                                 <div>
@@ -3086,16 +3462,29 @@ function OutlookEmail({ onToast }) {
                               {body && (
                                 <div>
                                   <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Body</label>
-                                  <div className={`px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} whitespace-pre-wrap min-h-24 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{body}</div>
+                                  {bodyHtml ? (
+                                    <div className={`${panel} text-sm min-h-24 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded`}
+                                      dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(body) }} />
+                                  ) : (
+                                    <div className={`${panel} text-sm whitespace-pre-wrap min-h-24`}>{body}</div>
+                                  )}
                                 </div>
                               )}
                               <div>
-                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Footer</label>
-                                  <div className={`flex gap-4 items-start px-4 py-4 border ${th.border} rounded-xl text-sm ${th.text} min-h-32 ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
+                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Footer / Signature · {footerSize}px</label>
+                                  {/* Logo centred against the text, matching the compose box and the
+                                      sent mail (valign="middle") — all three must agree. */}
+                                  <div className={`flex gap-4 items-center ${panel} min-h-32`}>
                                     {logo && <img src={logo} alt="Company logo" className="h-16 max-w-[160px] object-contain shrink-0" />}
-                                    <div className="whitespace-pre-wrap flex-1 min-w-0">{footer}</div>
+                                    <div className="whitespace-pre-wrap flex-1 min-w-0" style={{ fontSize: `${footerSize}px` }}>{footer}</div>
                                   </div>
                               </div>
+                              {disclaimer && (
+                                <div>
+                                  <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Disclaimer · {disclaimerSize}px</label>
+                                  <div className={`${panel} whitespace-pre-wrap ${th.textMuted}`} style={{ fontSize: `${disclaimerSize}px`, fontStyle: "italic" }}>{disclaimer}</div>
+                                </div>
+                              )}
                               </>
                               ); })()}
                               <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: tpl.body }); }}
@@ -3895,10 +4284,26 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [ccInput, setCcInput] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  // The footer is one unit: a signature text + an optional company logo, kept
-  // separate from the message body so they move/send together as a single block.
+  // Set once a rich template is loaded: `body` then holds HTML (with inline images) rather
+  // than plain text, so it must not be newline-escaped again on send.
+  const [bodyIsHtml, setBodyIsHtml] = useState(false);
+  // Per-recipient greeting data: [{ name, email, prefix }] confirmed in the personalize popup
+  // (from the Contacts hand-off or a tag selection). When set, each recipient gets their own
+  // copy opening with "Dear Mr. <name>,". Empty means a plain, identical send to everyone.
+  const [personalized, setPersonalized] = useState([]);
+  // Non-null while the popup is open for a freshly resolved tag selection.
+  const [tagRecipients, setTagRecipients] = useState(null);
+  // True while the chosen tags are being resolved to contacts (between Apply and the popup).
+  const [tagResolving, setTagResolving] = useState(false);
+  // {done, total} while a batched personalized send is in flight.
+  const [sendProgress, setSendProgress] = useState(null);
+  // The two blocks below the body, each sent at its own font size (a template carries both):
+  // the footer/signature — logo + name + company info — and the disclaimer under it.
   const [footerText, setFooterText] = useState("");
   const [footerLogo, setFooterLogo] = useState("");
+  const [footerSize, setFooterSize] = useState(DEFAULT_SIZES.footer);
+  const [disclaimerText, setDisclaimerText] = useState("");
+  const [disclaimerSize, setDisclaimerSize] = useState(DEFAULT_SIZES.disclaimer);
   const [showCc, setShowCc] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [errors, setErrors] = useState({});
@@ -4013,8 +4418,9 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
     tag.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Handler functions for modal — selecting reflects immediately (template footer
-  // into the message box, tag emails into the To field), not only on "Apply".
+  // Handler functions for the modal. Picking a template reflects immediately; tags do NOT —
+  // they only resolve to recipients on "Apply", so the whole set can be chosen first and
+  // confirmed in one personalize popup (see handleApply).
   const handleTemplateSelect = (templateName) => {
     setModalSelectedTemplate(templateName);
     setSelectedTemplate(templateName);
@@ -4028,10 +4434,13 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
     setSelectedTags(next);
   };
 
+  // Apply is the gate for tags, the way "Send Email" is on the Contacts page: the chosen tags
+  // resolve to their contacts and the personalize popup opens to confirm them.
   const handleApply = () => {
     setSelectedTemplate(modalSelectedTemplate);
     setSelectedTags(modalSelectedTags);
     setShowTemplatesModal(false);
+    if (modalSelectedTags.length) loadTagRecipients(modalSelectedTags);
   };
 
   const handleClearAll = () => {
@@ -4224,26 +4633,54 @@ useEffect(() => {
     fetchContactEmails();
   }, []);
 
-  // When a template is selected, reflect its footer (body) and subject into the
-  // message box. The templates list from GET /Template already carries full data,
-  // so we resolve it locally instead of re-fetching by name — `/Template/{name}`
-  // isn't a valid route (the API only exposes /Template/{id} and /Template/name/{name}).
+  // A template body is HTML once it has been saved by the rich editor; older ones are plain
+  // text and get converted, so the compose box can always edit it as HTML.
+  const applyTemplateBody = useCallback((parsed) => {
+    setBody(parsed.bodyHtml ? sanitizeBodyHtml(parsed.body) : plainTextToHtml(parsed.body));
+    setBodyIsHtml(true);
+  }, []);
+
+  // The footer/signature and disclaimer blocks and their font sizes, as saved on the template.
+  const applyTemplateBlocks = useCallback((parsed) => {
+    setFooterText(parsed.footer);
+    setFooterLogo(parsed.logo);
+    setFooterSize(parsed.footerSize);
+    setDisclaimerText(parsed.disclaimer);
+    setDisclaimerSize(parsed.disclaimerSize);
+  }, []);
+
+  // When a template is selected, reflect its blocks and subject into the message box. The
+  // templates list from GET /Template already carries full data, so we resolve it locally
+  // instead of re-fetching by name — `/Template/{name}` isn't a valid route (the API only
+  // exposes /Template/{id} and /Template/name/{name}).
   useEffect(() => {
     if (!selectedTemplate) return;
     const tpl = templates.find((t) => (t.name ?? t.Name) === selectedTemplate);
     if (tpl) {
-      const { body, footer, logo, attachments } = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
+      const parsed = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
       setSubject(tpl.subject ?? tpl.Subject ?? "");
-      if (body) setBody(body);
-      setFooterText(footer);
-      setFooterLogo(logo);
-      if (Array.isArray(attachments) && attachments.length) setAttachments(attachments);
+      if (parsed.body) applyTemplateBody(parsed);
+      applyTemplateBlocks(parsed);
+      if (Array.isArray(parsed.attachments) && parsed.attachments.length) setAttachments(parsed.attachments);
     }
   }, [selectedTemplate, templates]);
 
-  // On mount, check for selectedContactEmails in localStorage to prefill To field (one-shot, clear after read)
+  // On mount, pick up the recipients handed over by the Contacts page (one-shot, cleared after
+  // read). The richer key carries each contact's name + Mr./Miss. prefix from the personalize
+  // popup; the address-only key is the older fallback for anything that still writes just emails.
   useEffect(() => {
     try {
+      const rich = localStorage.getItem("selectedContactRecipients");
+      if (rich) {
+        localStorage.removeItem("selectedContactRecipients");
+        localStorage.removeItem("selectedContactEmails");
+        const list = JSON.parse(rich);
+        if (Array.isArray(list) && list.length > 0) {
+          setPersonalized(list);
+          setToInput(list.map((r) => r.email).join(", "));
+          return;
+        }
+      }
       const raw = localStorage.getItem("selectedContactEmails");
       if (raw) {
         localStorage.removeItem("selectedContactEmails");
@@ -4286,12 +4723,11 @@ useEffect(() => {
       setSubject(replyData.subject || "");
 
       if (replyData.type === "new" && replyData.body) {
-        // "Use Template" passed a packed template body (body + footer + optional logo + attachments).
-        const { body, footer, logo, attachments } = parseTemplateBody(replyData.body);
-        if (body) setBody(body);
-        setFooterText(footer);
-        setFooterLogo(logo);
-        if (Array.isArray(attachments) && attachments.length) setAttachments(attachments);
+        // "Use Template" passed a packed template body (body + blocks + optional logo + attachments).
+        const parsed = parseTemplateBody(replyData.body);
+        if (parsed.body) applyTemplateBody(parsed);
+        applyTemplateBlocks(parsed);
+        if (Array.isArray(parsed.attachments) && parsed.attachments.length) setAttachments(parsed.attachments);
         setQuoteHtml("");
       } else if (replyData.type === "reply" || replyData.type === "replyAll") {
         // Body starts empty — user types reply above the quoted original
@@ -4434,18 +4870,55 @@ useEffect(() => {
     });
   };
 
-  // The footer as one block: company logo on the LEFT, signature text on the right.
-  const footerBlockHtml = () => {
-    if (!footerText && !footerLogo) return "";
-    const textHtml = (footerText || "").replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
-    if (footerLogo) {
-      return `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
-        + `<td valign="middle" style="padding-right:14px;"><img src="${footerLogo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
-        + `<td valign="middle" style="font-size:15px;color:#374151;line-height:1.6;">${textHtml}</td>`
-        + `</tr></table>`;
+  // Everything under the body, in send order: the footer/signature (logo on the LEFT, vertically
+  // centred against the text on the right) then the disclaimer. Each block carries its own font
+  // size from the template. Both the valign attribute AND vertical-align are set: Outlook
+  // desktop honours one and not always the other, and the logo must sit centred in both.
+  const trailingBlocksHtml = () => {
+    const asHtml = (s) => (s || "").replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+    let out = "";
+    if (footerText || footerLogo) {
+      const textHtml = asHtml(footerText);
+      out += footerLogo
+        ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
+          + `<td valign="middle" style="vertical-align:middle;padding-right:14px;"><img src="${footerLogo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
+          + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
+          + `</tr></table>`
+        : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
     }
-    return `<div style="margin-top:18px;font-size:15px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+    if (disclaimerText) {
+      out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${asHtml(disclaimerText)}</div>`;
+    }
+    return out;
   };
+
+  // The body as HTML: a rich body is already HTML, a plain one needs its newlines converted.
+  const bodyHtmlForSend = () =>
+    bodyIsHtml ? sanitizeBodyHtml(body) : body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+
+  // Who each address belongs to and how they're addressed, keyed by address.
+  const personalizedByEmail = useMemo(() => {
+    const map = new Map();
+    personalized.forEach((r) => map.set(String(r.email || "").toLowerCase(), r));
+    return map;
+  }, [personalized]);
+
+  // One recipient's copy: their greeting line, then the shared body. Recipients that weren't
+  // personalized (a hand-typed address, say) just get the body as-is.
+  const htmlForRecipient = (address, sharedHtml) => {
+    const who = personalizedByEmail.get(String(address || "").toLowerCase());
+    const greeting = who ? greetingFor(who) : "";
+    if (!greeting) return sharedHtml;
+    return `<div style="margin-bottom:12px;">${escapeHtml(greeting)}</div>${sharedHtml}`;
+  };
+
+  // True when at least one recipient needs their own copy, which forces the per-person send
+  // path instead of a single shared message.
+  const needsPersonalizedSend = (addresses) =>
+    addresses.some((a) => {
+      const who = personalizedByEmail.get(String(a || "").toLowerCase());
+      return !!(who && greetingFor(who));
+    });
 
   // Handle Form Submission
   const handleSubmit = async (e) => {
@@ -4469,7 +4942,9 @@ useEffect(() => {
     if (toEmailsRaw.length === 0) validationErrors.to = "At least one recipient is required";
     else if (toEmails.length === 0) validationErrors.to = "No valid recipient address — check the @ and domain.";
     if (!subject.trim()) validationErrors.subject = "Subject is required";
-    if (!body.trim() && !quoteHtml) validationErrors.body = "Email body is required";
+    // A rich body is markup: "<div><br></div>" is blank, while an image-only body is not.
+    const bodyIsBlank = bodyIsHtml ? (!stripHtml(body) && !/<img\b/i.test(body)) : !body.trim();
+    if (bodyIsBlank && !quoteHtml) validationErrors.body = "Email body is required";
 
     // Update error state and clear success message
     setErrors(validationErrors);
@@ -4534,11 +5009,67 @@ useEffect(() => {
       return;
     }
 
-    // Build the final HTML.
-    const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
-    const finalHtml = quoteHtml
-      ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
-      : `${userHtml}${footerBlockHtml()}`;
+    // Build the final HTML, then lift any inline (pasted) images out into CID attachments.
+    const userHtml = bodyHtmlForSend();
+    const composedHtml = quoteHtml
+      ? `${userHtml}${trailingBlocksHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+      : `${userHtml}${trailingBlocksHtml()}`;
+    const { html: finalHtml, attachments: inlineAttachments } = extractInlineImages(composedHtml);
+    attachmentsPayload = attachmentsPayload.concat(inlineAttachments);
+
+    // Personalized send — each recipient's copy opens with their own "Dear Mr. <name>," so one
+    // shared message isn't possible; every person needs their own. Sent in batches of
+    // SEND_BATCH_SIZE rather than firing the whole list at Graph back to back.
+    if (needsPersonalizedSend(toEmails)) {
+      let sent = 0, failed = 0;
+      setSendProgress({ done: 0, total: toEmails.length });
+      for (let start = 0; start < toEmails.length; start += SEND_BATCH_SIZE) {
+        const batch = toEmails.slice(start, start + SEND_BATCH_SIZE);
+        for (const addr of batch) {
+          const perRecipient = {
+            subject,
+            body: { contentType: "HTML", content: htmlForRecipient(addr, finalHtml) },
+            toRecipients: [{ emailAddress: { address: addr } }],
+            // CC rides on the first copy only — on every copy it would mail the CC'd person
+            // once per recipient.
+            ccRecipients: (sent + failed === 0 && ccEmails.length > 0)
+              ? ccEmails.map((a) => ({ emailAddress: { address: a } }))
+              : [],
+          };
+          if (attachmentsPayload.length > 0) perRecipient.attachments = attachmentsPayload;
+          try {
+            const r = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ message: perRecipient, saveToSentItems: true }),
+            });
+            if (r.ok || r.status === 202) sent++; else failed++;
+          } catch { failed++; }
+          setSendProgress({ done: sent + failed, total: toEmails.length });
+        }
+      }
+      setSendProgress(null);
+      setIsSending(false);
+      if (sent === 0) {
+        setErrors({ apiError: "Could not send to any recipient. Check your Outlook connection and try again." });
+        return;
+      }
+      const skipNote = skipped.length > 0
+        ? ` ${skipped.length} invalid address${skipped.length === 1 ? "" : "es"} skipped.`
+        : "";
+      const failNote = failed > 0 ? ` ${failed} failed.` : "";
+      const ccNote = ccEmails.length > 0 ? " CC was included on the first copy only." : "";
+      setSuccessMessage(`Sent ${sent} personalized email${sent === 1 ? "" : "s"}.${failNote}${skipNote}${ccNote}`);
+      setErrors({});
+      setToInput(""); setCcInput(""); setSubject(""); setBody(""); setBodyIsHtml(false);
+      setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
+      setAttachments([]); setImages([]); setPersonalized([]);
+      setFooterText(""); setFooterLogo(""); setDisclaimerText("");
+      try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
+      if (typeof onMailSent === "function") onMailSent({ subject, body, to: toEmails, cc: ccEmails });
+      setTimeout(() => onClose(), 1200);
+      return;
+    }
 
     // Normal send — ONE message to all recipients, no tracking. The sent copy is filed into the
     // user's CRM Campaign folder (same as tracked campaigns) so sent mail is kept together.
@@ -4600,9 +5131,10 @@ useEffect(() => {
           : "";
         setSuccessMessage(`Email sent successfully!${skipNote}`);
         setErrors({});
-        setToInput(""); setCcInput(""); setSubject(""); setBody("");
+        setToInput(""); setCcInput(""); setSubject(""); setBody(""); setBodyIsHtml(false);
         setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
         setAttachments([]); setImages([]);
+        setFooterText(""); setFooterLogo(""); setDisclaimerText("");
         try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
         if (typeof onMailSent === "function") onMailSent({ subject, body, to: toEmails, cc: ccEmails });
         setIsSending(false);
@@ -4623,11 +5155,12 @@ useEffect(() => {
   const buildPayload = () => {
     const toEmails = allToEmails;
     const ccEmails = parseEmails(ccInput);
-    const userHtml = body.replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
-    const finalHtml = quoteHtml
-      ? `${userHtml}${footerBlockHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
-      : `${userHtml}${footerBlockHtml()}`;
-    return { toEmails, ccEmails, html: finalHtml };
+    const userHtml = bodyHtmlForSend();
+    const composedHtml = quoteHtml
+      ? `${userHtml}${trailingBlocksHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+      : `${userHtml}${trailingBlocksHtml()}`;
+    const { html, attachments: inlineAttachments } = extractInlineImages(composedHtml);
+    return { toEmails, ccEmails, html, inlineAttachments };
   };
 
   const handleScheduleSend = async () => {
@@ -4635,8 +5168,14 @@ useEffect(() => {
     const scheduledAt = new Date(scheduleDateTime);
     const delay = scheduledAt.getTime() - Date.now();
     if (delay <= 0) { setErrors({ apiError: "Please select a future date and time." }); return; }
-    const { toEmails, ccEmails, html } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
+    // Scheduling parks ONE draft addressed to everyone, so there's no per-person copy to put a
+    // "Dear Mr. <name>," on. Say so rather than quietly scheduling an ungreeted mail.
+    if (needsPersonalizedSend(toEmails)) {
+      setErrors({ apiError: "A personalized send can't be scheduled — it needs one copy per person. Use Send now, or turn off personalization in the blue bar above the message." });
+      return;
+    }
     setSchedulingInProgress(true);
     try {
       const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
@@ -4647,6 +5186,8 @@ useEffect(() => {
           body: { contentType: "HTML", content: html },
           toRecipients: toEmails.map(a => ({ emailAddress: { address: a } })),
           ccRecipients: ccEmails.map(a => ({ emailAddress: { address: a } })),
+          // Inline body images ride along as CID attachments or the <img>s resolve to nothing.
+          ...(inlineAttachments.length ? { attachments: inlineAttachments } : {}),
         }),
       });
       if (draftRes.ok) {
@@ -4671,26 +5212,34 @@ useEffect(() => {
   };
 
   const handleMailMerge = async () => {
-    const { toEmails, ccEmails, html } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
     setIsSending(true); setErrors({});
     let sent = 0;
-    for (const addr of toEmails) {
-      try {
-        const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ message: {
-            subject,
-            body: { contentType: "HTML", content: html },
-            toRecipients: [{ emailAddress: { address: addr } }],
-            ccRecipients: ccEmails.map(a => ({ emailAddress: { address: a } })),
-          }}),
-        });
-        if (res.ok || res.status === 202) sent++;
-      } catch {}
+    setSendProgress({ done: 0, total: toEmails.length });
+    // Already one message per person — batched so a long list doesn't hit Graph flat out.
+    for (let start = 0; start < toEmails.length; start += SEND_BATCH_SIZE) {
+      for (const addr of toEmails.slice(start, start + SEND_BATCH_SIZE)) {
+        try {
+          const res = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ message: {
+              subject,
+              // Bind this address back to its contact so the copy opens "Dear Mr. <name>,".
+              body: { contentType: "HTML", content: htmlForRecipient(addr, html) },
+              toRecipients: [{ emailAddress: { address: addr } }],
+              ccRecipients: ccEmails.map(a => ({ emailAddress: { address: a } })),
+              ...(inlineAttachments.length ? { attachments: inlineAttachments } : {}),
+            }}),
+          });
+          if (res.ok || res.status === 202) sent++;
+        } catch {}
+        setSendProgress((p) => ({ done: (p?.done || 0) + 1, total: toEmails.length }));
+      }
     }
+    setSendProgress(null);
     setIsSending(false);
     setSuccessMessage(`Mail merge sent to ${sent} of ${toEmails.length} recipient${toEmails.length !== 1 ? "s" : ""}.`);
     setTimeout(() => onClose(), 1200);
@@ -4701,7 +5250,7 @@ useEffect(() => {
   // Sending is browser-driven (uses your Outlook token), and each outcome is reported back so the
   // tracking page shows real delivery. The plain Send button (above) does NOT track.
   const handleTrackedCampaign = async () => {
-    const { toEmails, ccEmails, html } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
     if (!accessToken) {
@@ -4716,6 +5265,8 @@ useEffect(() => {
 
     // 1) Register the campaign + get each recipient's tracked HTML (open pixel + links woven in).
     let tracked = null;
+    let prepareErr = null;      // the real failure, when the request itself threw
+    let allSuppressed = false;  // request was fine, but every recipient had unsubscribed
     try {
       // Tell the backend the exact origin we reach the API at, so the tracking / unsubscribe
       // links in the email resolve to the backend in production (not the SPA host).
@@ -4728,15 +5279,34 @@ useEffect(() => {
         // The Subscribe/Unsubscribe buttons land on this app's /email/* pages (always reachable),
         // which record via the working /api path.
         subscribeBaseUrl: window.location.origin,
-        recipients: toEmails.map((e) => ({ email: e })),
+        // Pass the contact behind each address when we know it, so the campaign's recipients are
+        // tied to real contacts instead of loose strings (EmailRecipients.ContactId).
+        recipients: toEmails.map((e) => {
+          const who = personalizedByEmail.get(String(e).toLowerCase());
+          return who?.contactId ? { email: e, contactId: who.contactId } : { email: e };
+        }),
       });
-      const items = Array.isArray(prep.data?.items) ? prep.data.items : null;
-      if (items && items.length) tracked = { campaignId: prep.data.campaignId, items };
+      const items = Array.isArray(prep.data?.items) ? prep.data.items : [];
+      if (items.length) tracked = { campaignId: prep.data.campaignId, items };
+      // The call SUCCEEDED but came back with nobody: the backend drops opted-out addresses when
+      // building a campaign, so an all-unsubscribed list yields zero recipients. That is not a
+      // backend outage and must not be reported as one.
+      else allSuppressed = true;
     } catch (e) {
       console.error("Tracking prepare failed:", e);
+      prepareErr = e;
     }
     if (!tracked) {
-      setErrors({ apiError: "Couldn't start the tracked campaign. Is the backend running?" });
+      const detail = prepareErr?.title || prepareErr?.message
+        || (typeof prepareErr === "string" ? prepareErr : "")
+        || "the backend may not be running";
+      setErrors({
+        apiError: allSuppressed
+          ? `A tracked campaign skips anyone who has unsubscribed, and ${toEmails.length === 1
+              ? "that recipient has"
+              : `all ${toEmails.length} of these recipients have`} opted out — so there's nobody left to send to. Use the plain Send button (it doesn't track and doesn't filter), or resubscribe them first.`
+          : `Couldn't start the tracked campaign: ${detail}`,
+      });
       setIsSending(false);
       return;
     }
@@ -4763,6 +5333,9 @@ useEffect(() => {
         const base64 = await fileToBase64(file);
         campaignAttachments.push({ "@odata.type": "#microsoft.graph.fileAttachment", name: file.name, contentBytes: base64 });
       }
+      // The tracked HTML the backend returns still carries the cid: refs from buildPayload,
+      // so every recipient's copy needs the matching inline images attached.
+      campaignAttachments = campaignAttachments.concat(inlineAttachments);
     } catch (e) { console.error("Campaign attachment prep failed:", e); }
 
     // Helper: pull a readable error message out of a failed Graph response.
@@ -4781,8 +5354,12 @@ useEffect(() => {
     // grab it while it's still a draft mid-send, which Outlook then shows as an "unknown message".
     const results = [];
     const sentFiles = [];   // {conversationId, internetMessageId} of sent messages to file into the folder
+    // Progress is reported per recipient: with a campaign folder this is 2-3 Graph round-trips
+    // EACH, so a few hundred recipients runs for minutes. Without a counter it looks hung.
+    setSendProgress({ done: 0, total: tracked.items.length });
     for (let i = 0; i < tracked.items.length; i++) {
       const item = tracked.items[i];
+      setSendProgress({ done: i, total: tracked.items.length });
       // A malformed / clearly-undeliverable address (bad @/domain/TLD or a common typo domain) can't
       // be delivered — count it as a BOUNCE straight away (not sent).
       if (looksBounceableEmail(item.email)) {
@@ -4791,7 +5368,9 @@ useEffect(() => {
       }
       const message = {
         subject,
-        body: { contentType: "HTML", content: item.html },
+        // item.html is this recipient's tracked copy (pixel + rewritten links); the greeting is
+        // bound from their address back to their contact and sits above it.
+        body: { contentType: "HTML", content: htmlForRecipient(item.email, item.html) },
         toRecipients: [{ emailAddress: { address: item.email } }],
         ccRecipients: i === 0 ? ccEmails.map((a) => ({ emailAddress: { address: a } })) : [],
         ...(campaignAttachments.length ? { attachments: campaignAttachments } : {}),
@@ -4847,10 +5426,13 @@ useEffect(() => {
     // locate each sent message in Sent Items (by internetMessageId, or subject + recipient) and move
     // it. Best-effort: if a message can't be located it just stays in Sent Items.
     if (campaignFolderId && sentFiles.length) {
+      let filed = 0;
+      setSendProgress({ done: 0, total: sentFiles.length, label: "Filing" });
       for (const f of sentFiles) {
         await moveSentMessageToFolder(accessToken, campaignFolderId, {
           tag: f.tag, internetMessageId: f.internetMessageId,
         });
+        setSendProgress({ done: ++filed, total: sentFiles.length, label: "Filing" });
       }
     }
 
@@ -4859,6 +5441,7 @@ useEffect(() => {
 
     const sent = results.filter((r) => r.status === "Sent").length;
     const bounced = results.filter((r) => r.status === "Bounced").length;
+    setSendProgress(null);
     setIsSending(false);
     // An invalid address is a BOUNCE, not a send error — never surface it as an error. It's counted
     // on the Email Tracking dashboard. Only a genuine send failure (no bounce) shows an error.
@@ -4878,32 +5461,56 @@ useEffect(() => {
     }
   };
 
-  // When tags are applied, reflect the matching contacts' emails into the To field.
-  useEffect(() => {
-    if (!selectedTags.length) return;
-    apiClient
-      .get(`/Contact/tags/emails`, { params: { tags: selectedTags.join(",") } })
-      .then((res) => {
-        // Backend returns a comma-joined string; be defensive about other shapes.
-        let raw = res.data;
-        if (Array.isArray(raw)) raw = raw.join(",");
-        else if (raw && typeof raw === "object") raw = Object.values(raw).join(",");
-        const emailArr = String(raw ?? "")
+  // Resolve the chosen tags to their contacts — names included, so each can be greeted
+  // personally — then open the personalize popup to confirm who's in and how they're addressed.
+  // Mirrors the Contacts page: pick your tags, press Apply, confirm in the popup. Deliberately
+  // NOT driven off a selectedTags effect: that fires on the first tag ticked and the popup would
+  // interrupt before the rest could be chosen. The To field is only filled once confirmed.
+  const loadTagRecipients = useCallback(async (tags) => {
+    if (!tags.length) return;
+    setTagResolving(true);
+    try {
+      const params = { tags: tags.join(",") };
+      let clean;
+      try {
+        const res = await apiClient.get(`/Contact/tags/recipients`, { params });
+        clean = (Array.isArray(res.data) ? res.data : [])
+          .map((r) => ({
+            name: String(r.name ?? r.Name ?? "").trim(),
+            email: String(r.email ?? r.Email ?? "").trim(),
+            contactId: r.contactId ?? r.ContactId ?? null,
+          }))
+          .filter((r) => r.email);
+      } catch (e) {
+        // The named endpoint is missing (a backend that predates it — it 404s). Fall back to the
+        // long-standing address-only route so the popup still opens and the send still works;
+        // names are simply blank until the backend is redeployed, and a nameless contact
+        // greets as "Dear Mr.," rather than breaking.
+        console.warn("[Email] tags/recipients unavailable, falling back to tags/emails:", e);
+        const res = await apiClient.get(`/Contact/tags/emails`, { params });
+        let rawData = res.data;
+        if (Array.isArray(rawData)) rawData = rawData.join(",");
+        else if (rawData && typeof rawData === "object") rawData = Object.values(rawData).join(",");
+        clean = String(rawData ?? "")
           .split(/[,;\n]+/)
-          .map((e) => e.trim())
-          .filter((e) => e.length > 0);
-        if (emailArr.length === 0) {
-          // No emails for these tags — don't wipe what's already in To.
-          console.warn("[Email] No contact emails found for tags:", selectedTags);
-          return;
-        }
-        // Reflect the selected tags' contact emails into the To field.
-        setToInput([...new Set(emailArr)].join(", "));
-      })
-      .catch((err) => {
-        console.error("[Email] Failed to load emails for tags:", selectedTags, err);
-      });
-  }, [selectedTags]);
+          .map((e2) => e2.trim())
+          .filter(Boolean)
+          .map((email) => ({ name: "", email, contactId: null }));
+      }
+      if (clean.length === 0) {
+        // No contacts for these tags — don't wipe what's already in To.
+        console.warn("[Email] No contact emails found for tags:", tags);
+        setErrors((p) => ({ ...p, apiError: `No contacts with an email address carry ${tags.length === 1 ? "that tag" : "those tags"}.` }));
+        return;
+      }
+      setTagRecipients(clean);
+    } catch (err) {
+      console.error("[Email] Failed to load recipients for tags:", tags, err);
+      setErrors((p) => ({ ...p, apiError: "Could not load the contacts for those tags." }));
+    } finally {
+      setTagResolving(false);
+    }
+  }, []);
 
 
   // Static light-mode theme (Email compose always light)
@@ -5193,9 +5800,10 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={handleApply}
-                        className="px-3 py-2 bg-blue-500 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors shadow-sm"
+                        disabled={tagResolving}
+                        className="px-3 py-2 bg-blue-500 text-white text-xs sm:text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-60"
                       >
-                        Apply
+                        {tagResolving ? "Loading contacts…" : "Apply"}
                       </button>
                     </div>
                   </div>
@@ -5352,32 +5960,89 @@ useEffect(() => {
 
           {/* Message Body */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-col gap-3">
-            {/* Message body + footer in a single box (footer = logo on the left + text) */}
+            {/* Personalized send banner — makes it obvious that everyone gets their own copy
+                with their own greeting, and offers a way back into the popup to change it. */}
+            {personalized.length > 0 && (
+              <div className={`flex items-center gap-3 flex-wrap px-3 py-2 rounded-lg border text-xs ${
+                isDark ? "bg-blue-900/20 border-blue-800 text-blue-200" : "bg-blue-50 border-blue-200 text-blue-800"
+              }`}>
+                <User size={14} className="shrink-0" />
+                <span>
+                  <strong>{personalized.length}</strong> personalized {personalized.length === 1 ? "copy" : "copies"} — each opens
+                  with “{greetingFor(personalized[0])}”
+                  {personalized.length > SEND_BATCH_SIZE && <> · sent {SEND_BATCH_SIZE} at a time</>}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTagRecipients(personalized)}
+                  className="underline hover:no-underline"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPersonalized([])}
+                  className="underline hover:no-underline opacity-70"
+                >
+                  Turn off
+                </button>
+              </div>
+            )}
+            {/* Message body + footer in a single box (footer = logo on the left + text).
+                No overflow-hidden: that would zero the box's content-based minimum height and
+                clip a long body. Without it the box grows and the pane above scrolls. */}
             <div
-              className={`flex flex-col border rounded-lg overflow-hidden transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
-                quoteHtml ? "min-h-[220px]" : "flex-1 min-h-[480px]"
+              className={`flex flex-col border rounded-lg transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
+                quoteHtml ? "min-h-[220px]" : "grow min-h-[480px]"
               } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… or drop files"}
-                className={`flex-1 w-full resize-none text-base leading-relaxed bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
-              />
+              {bodyIsHtml ? (
+                <RichBodyEditor
+                  value={body}
+                  onChange={setBody}
+                  onError={(msg) => setErrors((p) => ({ ...p, apiError: msg }))}
+                  placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… paste an image to place it inline"}
+                  minHeight={quoteHtml ? 160 : 340}
+                  onDropHandled={() => setIsDragging(false)}
+                  // `grow` (basis auto), not `flex-1` (basis 0): the editor's own content is
+                  // its base height, so it grows with a long body instead of being pinned to
+                  // a short flex share — and still fills the box when the body is short.
+                  wrapperClassName="grow"
+                  className={`grow w-full text-base leading-relaxed bg-transparent outline-none border-0 p-3 ${d.text}`}
+                />
+              ) : (
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={quoteHtml ? "Type your reply here…" : "Type your message here… or drop files"}
+                  className={`flex-1 w-full resize-none text-base leading-relaxed bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
+                />
+              )}
               {(footerText || footerLogo) && (
                 <div className={`flex gap-3 items-center p-3 border-t ${d.border}`}>
                   {footerLogo && (
                     <img src={footerLogo} alt="Company logo" className={`h-16 max-w-[130px] object-contain shrink-0 self-center border-r ${d.border} pr-3`} />
                   )}
-                  <textarea
+                  <AutoGrowTextarea
                     value={footerText}
                     onChange={(e) => setFooterText(e.target.value)}
-                    rows={Math.max(1, (footerText || "").split("\n").length)}
                     placeholder="Footer / signature"
-                    className={`flex-1 w-full resize-none text-[15px] bg-transparent outline-none border-0 p-0 self-center leading-6 ${d.text} placeholder-gray-400`}
+                    style={{ fontSize: `${footerSize}px` }}
+                    className={`flex-1 w-full bg-transparent outline-none border-0 p-0 self-center leading-6 ${d.text} placeholder-gray-400`}
+                  />
+                </div>
+              )}
+              {disclaimerText && (
+                <div className={`p-3 border-t ${d.border}`}>
+                  <AutoGrowTextarea
+                    value={disclaimerText}
+                    onChange={(e) => setDisclaimerText(e.target.value)}
+                    placeholder="Disclaimer"
+                    style={{ fontSize: `${disclaimerSize}px`, fontStyle: "italic" }}
+                    className={`w-full bg-transparent outline-none border-0 p-0 leading-5 text-gray-400 placeholder-gray-400`}
                   />
                 </div>
               )}
@@ -5525,7 +6190,9 @@ useEffect(() => {
                     className="flex items-center gap-2 bg-blue-500 text-white px-3 sm:px-4 py-2 hover:bg-blue-600 transition disabled:bg-slate-400 disabled:cursor-not-allowed text-xs sm:text-sm font-medium h-10 sm:h-auto"
                   >
                     <Send size={15} />
-                    {isSending ? "Sending..." : "Send"}
+                    {sendProgress
+                      ? `${sendProgress.label || "Sending"} ${sendProgress.done}/${sendProgress.total}…`
+                      : isSending ? "Sending..." : "Send"}
                   </button>
                   <button
                     type="button"
@@ -5716,6 +6383,25 @@ useEffect(() => {
             </div>
           </div>
         )}
+
+        {/* Personalize recipients — opens once a tag selection resolves to contacts, so the
+            Mr./Miss. greeting and the final recipient list are confirmed before the To field
+            is filled. */}
+        <PersonalizeRecipientsModal
+          isOpen={!!tagRecipients}
+          recipients={tagRecipients || []}
+          isDark={isDark}
+          title="Personalize tagged recipients"
+          confirmLabel="Add to email"
+          // Cancel just backs out — the tag selection stands, exactly as cancelling leaves the
+          // Contacts page's ticks alone. Re-open from the banner or by applying the tags again.
+          onCancel={() => setTagRecipients(null)}
+          onConfirm={(chosen) => {
+            setTagRecipients(null);
+            setPersonalized(chosen);
+            setToInput(chosen.map((r) => r.email).join(", "));
+          }}
+        />
 
         {/* ── Schedule Send Modal ── */}
         {scheduleModal && (
