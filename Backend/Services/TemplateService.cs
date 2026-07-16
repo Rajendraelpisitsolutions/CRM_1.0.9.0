@@ -101,6 +101,75 @@ namespace Elpis_CRM.Service
         }
 
         /// <summary>
+        /// The logged-in user's active templates, WITHOUT bodies. Filtering runs in SQL and
+        /// Body is never selected, so the remote database only ships a few metadata rows —
+        /// bodies (base64 inline images, up to MBs each) are fetched per template by ID when
+        /// actually opened/applied. Ownership: CreatedBy equals the email; legacy templates
+        /// with no CreatedBy are owned when the email appears in their name or body.
+        /// </summary>
+        /// <param name="email">The owner's email (the value stored in CreatedBy).</param>
+        /// <returns>The user's active templates as lightweight list items.</returns>
+        public async Task<List<TemplateListItemDto>> GetMineAsync(string email)
+        {
+            var owner = (email ?? string.Empty).Trim();
+            return await _templateDbContext.Templates
+                .Where(t => t.IsActive &&
+                       (t.CreatedBy == owner ||
+                        ((t.CreatedBy == null || t.CreatedBy == "") && owner != "" &&
+                         ((t.Name != null && t.Name.Contains(owner)) ||
+                          (t.Body != null && t.Body.Contains(owner))))))
+                .Select(t => new TemplateListItemDto
+                {
+                    TemplateId = t.TemplateId,
+                    Name = t.Name,
+                    Subject = t.Subject,
+                    TemplateType = t.TemplateType,
+                    CreatedAt = t.CreatedAt,
+                    CreatedBy = t.CreatedBy,
+                    UpdatedAt = t.UpdatedAt,
+                    IsActive = t.IsActive,
+                    IsDefault = t.IsDefault,
+                })
+                .ToListAsync();
+        }
+
+        /// <summary>
+        /// Marks (or unmarks) a template as its owner's default — the one auto-loaded into a
+        /// fresh compose. Setting it clears the flag on the owner's other templates so each
+        /// owner (CreatedBy email) has at most one default. IsDefault is managed only here;
+        /// UpdateTemplate deliberately leaves it untouched so edits don't drop the flag.
+        /// </summary>
+        /// <param name="templateId">Primary key of the template to flag.</param>
+        /// <param name="isDefault">True to make it the owner's default; false to clear it.</param>
+        /// <returns>The updated template, or null when no row has that ID.</returns>
+        public async Task<TemplateModel?> SetDefaultAsync(int templateId, bool isDefault)
+        {
+            var template = await _templateDbContext.Templates.FindAsync(templateId);
+            if (template == null)
+            {
+                return null;
+            }
+
+            if (isDefault)
+            {
+                var owner = template.CreatedBy;
+                var otherDefaults = await _templateDbContext.Templates
+                    .Where(t => t.TemplateId != templateId && t.IsDefault && t.CreatedBy == owner)
+                    .ToListAsync();
+                foreach (var other in otherDefaults)
+                {
+                    other.IsDefault = false;
+                    other.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            template.IsDefault = isDefault;
+            template.UpdatedAt = DateTime.UtcNow;
+            await _templateDbContext.SaveChangesAsync();
+            return template;
+        }
+
+        /// <summary>
         /// Hard-deletes the template with the given ID, if it exists.
         /// </summary>
         /// <param name="templateId">Primary key of the template to remove.</param>

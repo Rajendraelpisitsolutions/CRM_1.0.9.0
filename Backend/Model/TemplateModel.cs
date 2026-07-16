@@ -32,5 +32,11 @@ namespace Elpis_CRM.Model
         public DateTime? UpdatedAt { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// The one template auto-loaded into a fresh compose for its owner
+        /// (CreatedBy). At most one per owner — enforced in TemplateService.
+        /// </summary>
+        public bool IsDefault { get; set; } = false;
     }
 }

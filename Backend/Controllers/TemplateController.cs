@@ -126,6 +126,46 @@ namespace Elpis_CRM.Controllers
         }
 
         /// <summary>
+        /// The given user's active templates, WITHOUT bodies — the fast list endpoint.
+        /// Bodies are heavy (base64 inline images) and the database is remote, so list
+        /// views call this and fetch a single body via GET /api/Template/{id} on demand.
+        /// </summary>
+        /// <param name="email">The owner's email (stored in CreatedBy).</param>
+        /// <returns>The user's active templates as lightweight list items.</returns>
+        /// <response code="200">List returned (empty when the user has none).</response>
+        /// <response code="400">No email supplied.</response>
+        [HttpGet("mine")]
+        public async Task<ActionResult<List<TemplateListItemDto>>> GetMine([FromQuery] string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                return BadRequest("email is required.");
+            }
+            return Ok(await _templateService.GetMineAsync(email));
+        }
+
+        /// <summary>
+        /// Marks (or unmarks) a template as its owner's default — the one auto-loaded into a
+        /// fresh compose. Setting true clears the flag on the owner's other templates, so each
+        /// owner keeps at most one default.
+        /// </summary>
+        /// <param name="id">Primary key of the template to flag.</param>
+        /// <param name="isDefault">True to make it the owner's default; false to clear it.</param>
+        /// <returns>The updated template, or a 404 when the ID is unknown.</returns>
+        /// <response code="200">Default flag updated.</response>
+        /// <response code="404">No template exists with the given ID.</response>
+        [HttpPut("{id:int}/default")]
+        public async Task<ActionResult<TemplateModel>> SetDefault(int id, [FromBody] bool isDefault)
+        {
+            var updated = await _templateService.SetDefaultAsync(id, isDefault);
+            if (updated == null)
+            {
+                return NotFound($"Template with ID '{id}' not found.");
+            }
+            return Ok(updated);
+        }
+
+        /// <summary>
         /// Permanently removes the template with the given ID.
         /// </summary>
         /// <param name="id">Primary key of the template to delete.</param>

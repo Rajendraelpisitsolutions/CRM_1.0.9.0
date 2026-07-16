@@ -123,6 +123,20 @@ function parseTemplateBody(raw) {
   return result(b, "");
 }
 
+// ─── On-demand template bodies ───────────────────────────────────────────────
+// Template bodies are heavy (base64 inline images, up to MBs) and the database is
+// remote, so list endpoints ship metadata only. A body is fetched once by ID when a
+// template is actually opened or applied, then cached for the session. Invalidate
+// after an edit so the next open refetches.
+const templateBodyCache = new Map(); // templateId -> body string
+async function fetchTemplateBody(id) {
+  if (templateBodyCache.has(id)) return templateBodyCache.get(id);
+  const r = await apiClient.get(`/Template/${id}`);
+  const body = r.data?.body ?? r.data?.Body ?? "";
+  templateBodyCache.set(id, body);
+  return body;
+}
+
 // ─── Rich body (inline images) ───────────────────────────────────────────────
 const BODY_ALLOWED_TAGS = [
   "p", "div", "span", "br", "b", "strong", "i", "em", "u", "s", "a", "ul", "ol", "li",
@@ -1004,16 +1018,16 @@ function OutlookEmail({ onToast }) {
   const [editTemplateIdx, setEditTemplateIdx] = useState(null);
   const [editTemplate, setEditTemplate] = useState(emptyTemplate);
 
-  // A user only sees / manages templates assigned to them (CreatedBy == their email);
-  // legacy templates with no assignment are owned if their footer carries the email.
-  const ownsTemplate = (tpl) => {
-    const cb = (tpl.createdBy ?? tpl.CreatedBy ?? "").toLowerCase().trim();
-    const em = loggedInEmail.toLowerCase().trim();
-    if (cb) return cb === em;
-    const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
-    return !!em && hay.includes(em);
+  // A user only sees / manages templates assigned to them. Ownership (CreatedBy ==
+  // their email, with a legacy body-contains fallback) is now filtered server-side by
+  // GET /Template/mine, which also omits the heavy bodies — so the list is used as-is.
+  const myTemplates = Array.isArray(apiTemplates) ? apiTemplates : [];
+  // Refresh the (body-less) template list for the logged-in user.
+  const refreshMyTemplates = () => {
+    apiClient.get("/Template/mine", { params: { email: loggedInEmail } })
+      .then(r => setApiTemplates(Array.isArray(r.data) ? r.data : []))
+      .catch(() => { });
   };
-  const myTemplates = Array.isArray(apiTemplates) ? apiTemplates.filter(ownsTemplate) : [];
 
   // ── Message-box popup (replaces toast for created/updated/deleted) ─────────
   const [popup, setPopup] = useState(null); // { message, type: "success" | "error" }
@@ -1030,11 +1044,29 @@ function OutlookEmail({ onToast }) {
     setTemplateToDelete(null);
     try {
       await apiClient.delete(`/Template/${tpl.templateId ?? tpl.TemplateId}`);
-      apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
+      templateBodyCache.delete(tpl.templateId ?? tpl.TemplateId);
+      refreshMyTemplates();
       setOpenedTemplateIdx(null);
       showPopup("Template deleted");
     } catch {
       showPopup("Could not delete template", "error");
+    }
+  };
+
+  // ── Default template (auto-loads into a fresh compose) ─────────────────────
+  // The server clears the flag on the user's other templates, so at most one
+  // template per owner is the default.
+  const setDefaultTemplate = async (tpl, makeDefault) => {
+    try {
+      await apiClient.put(
+        `/Template/${tpl.templateId ?? tpl.TemplateId}/default`,
+        JSON.stringify(!!makeDefault),
+        { headers: { "Content-Type": "application/json" } }
+      );
+      refreshMyTemplates();
+      showPopup(makeDefault ? "Default template set — it will auto-load on new email" : "Default removed");
+    } catch {
+      showPopup("Could not update default template", "error");
     }
   };
 
@@ -1471,14 +1503,32 @@ function OutlookEmail({ onToast }) {
     load();
   }, [activeFolder, accessToken, campaignFolder]);
 
-  // ─── Templates fetch ──────────────────────────────────────────────────────
+  // ─── Templates fetch (body-less list; bodies load on demand per template) ──
   useEffect(() => {
     if (activeFolder === "Templates") {
-      apiClient.get("/Template")
+      apiClient.get("/Template/mine", { params: { email: loggedInEmail } })
         .then(r => setApiTemplates(Array.isArray(r.data) ? r.data : []))
         .catch(() => setApiTemplates([]));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFolder]);
+
+  // ─── Opened template's body loads on demand (lists come body-less) ─────────
+  useEffect(() => {
+    if (openedTemplateIdx === null) return;
+    const tpl = myTemplates[openedTemplateIdx];
+    const id = tpl?.templateId ?? tpl?.TemplateId;
+    if (!id || tpl.body != null) return; // nothing opened or body already loaded
+    let cancelled = false;
+    fetchTemplateBody(id)
+      .then((body) => {
+        if (cancelled) return;
+        setApiTemplates(prev => prev.map(t => ((t.templateId ?? t.TemplateId) === id ? { ...t, body } : t)));
+      })
+      .catch(() => { });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedTemplateIdx, apiTemplates]);
 
   // ─── Calendar events fetch ────────────────────────────────────────────────
   useEffect(() => {
@@ -1907,7 +1957,7 @@ function OutlookEmail({ onToast }) {
       if (r.status >= 200 && r.status < 300) {
         setShowAddTemplate(false);
         setNewTemplate(emptyTemplate());
-        apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
+        refreshMyTemplates();
         showPopup("Template created");
       }
     } catch (err) {
@@ -3236,7 +3286,12 @@ function OutlookEmail({ onToast }) {
                         <div key={tpl.name + idx}
                           onClick={() => { setOpenedTemplateIdx(idx); setShowAddTemplate(false); }}
                           className={`border-b ${th.border} px-4 py-3 cursor-pointer transition ${th.hover} ${openedTemplateIdx === idx && !showAddTemplate ? isDark ? "bg-slate-700/30 border-l-2 border-l-slate-400" : "bg-slate-50 border-l-2 border-l-slate-700" : ""}`}>
-                          <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || "Untitled template"}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || "Untitled template"}</p>
+                            {(tpl.isDefault ?? tpl.IsDefault) && (
+                              <Star size={12} className="shrink-0 text-amber-500 fill-amber-500" title="Default — auto-loads on new email" />
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3262,7 +3317,7 @@ function OutlookEmail({ onToast }) {
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Assigned to</label>
                               <div className={`px-4 py-2.5 border rounded-xl text-sm ${th.input} opacity-80`}>{loggedInEmail || "you"}</div>
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it, and it auto-loads on new email.</p>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it. Mark it as default (star) to auto-load it on new email.</p>
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Subject</label>
@@ -3295,6 +3350,8 @@ function OutlookEmail({ onToast }) {
                       </>
                     ) : (() => {
                       const tpl = myTemplates[openedTemplateIdx];
+                      // Lists come body-less; the body streams in on open (see effect above).
+                      const tplBodyLoaded = !!tpl && tpl.body != null;
                       if (editTemplateIdx === openedTemplateIdx && tpl) return (
                         <>
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center ${th.surface} shrink-0`}>
@@ -3305,7 +3362,10 @@ function OutlookEmail({ onToast }) {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
                                 await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || stripHtml(editTemplate.body) || "").trim().slice(0, 40) || "Template", subject: (editTemplate.subject || "").slice(0, 255), body: buildTemplateBody(editTemplate), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
-                                apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
+                                // The body changed — drop the cached copy so the next open refetches.
+                                templateBodyCache.delete(tpl.templateId ?? tpl.TemplateId);
+                                setApiTemplates(prev => prev.map(t => ((t.templateId ?? t.TemplateId) === (tpl.templateId ?? tpl.TemplateId) ? { ...t, body: undefined } : t)));
+                                refreshMyTemplates();
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
                               } catch (err) {
@@ -3359,8 +3419,18 @@ function OutlookEmail({ onToast }) {
                           <div className={`h-12 border-b ${th.border} px-4 md:px-6 flex items-center justify-between ${th.surface} shrink-0`}>
                             <h2 className="text-sm font-semibold truncate">{tpl.name || "Untitled template"}</h2>
                             <div className="flex gap-2 shrink-0">
-                              <button onClick={() => {
-                                const parsed = parseTemplateBody(tpl.body);
+                              {(() => {
+                                const isDef = !!(tpl.isDefault ?? tpl.IsDefault);
+                                return (
+                                  <button onClick={() => setDefaultTemplate(tpl, !isDef)}
+                                    title={isDef ? "Auto-loads when you start a new email — click to remove" : "Auto-load this template when you start a new email"}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${isDef ? "text-amber-500" : th.text}`}>
+                                    <Star size={13} className={isDef ? "fill-amber-500" : ""} />{isDef ? "Default" : "Set as default"}
+                                  </button>
+                                );
+                              })()}
+                              <button disabled={!tplBodyLoaded} onClick={() => {
+                                const parsed = parseTemplateBody(tpl.body ?? "");
                                 setEditTemplateIdx(openedTemplateIdx);
                                 setEditTemplate({
                                   ...emptyTemplate(),
@@ -3373,7 +3443,7 @@ function OutlookEmail({ onToast }) {
                                   assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "",
                                 });
                               }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text} disabled:opacity-50`}><Pencil size={13} />Edit</button>
                               <button onClick={() => setTemplateToDelete(tpl)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg hover:bg-red-50 text-red-500">
                                 <Trash2 size={13} />Delete
@@ -3387,7 +3457,7 @@ function OutlookEmail({ onToast }) {
                                 <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{(tpl.createdBy ?? tpl.CreatedBy) || "— not assigned —"}</div>
                               </div>
                               {(() => {
-                                const parsed = parseTemplateBody(tpl.body);
+                                const parsed = parseTemplateBody(tpl.body ?? "");
                                 // One email preview — the whole thing (signature, logo, disclaimer,
                                 // inline images) rendered as it will be sent. Legacy templates are
                                 // folded into a single body first.
@@ -3404,14 +3474,20 @@ function OutlookEmail({ onToast }) {
                               )}
                               <div>
                                 <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Body</label>
-                                <div className={`${panel} text-sm min-h-32 overflow-x-auto break-words [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto`}
-                                  dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(previewHtml) }} />
+                                {tplBodyLoaded ? (
+                                  <div className={`${panel} text-sm min-h-32 overflow-x-auto break-words [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto`}
+                                    dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(previewHtml) }} />
+                                ) : (
+                                  <div className={`${panel} text-sm min-h-32 flex items-center justify-center gap-2 ${th.textMuted}`}>
+                                    <RefreshCw size={14} className="animate-spin" />Loading preview…
+                                  </div>
+                                )}
                               </div>
                               </>
                               ); })()}
-                              <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: tpl.body }); }}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition">
-                                <Mail size={14} />Use Template
+                              <button disabled={!tplBodyLoaded} onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: tpl.body }); }}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
+                                <Mail size={14} />{tplBodyLoaded ? "Use Template" : "Loading…"}
                               </button>
                             </div>
                           </div>
@@ -4254,6 +4330,9 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
 
   // Templates & Tags Modal state
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  // Templates and Tags are separate views inside the picker — selecting tags is never
+  // cluttered by the templates list and vice versa.
+  const [modalTab, setModalTab] = useState("tags"); // "templates" | "tags"
   // Let the host (OutlookEmail) react when the picker opens (e.g. widen the area).
   useEffect(() => { if (onTemplatesOpenChange) onTemplatesOpenChange(showTemplatesModal); }, [showTemplatesModal, onTemplatesOpenChange]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -4435,21 +4514,15 @@ useEffect(() => {
     };
   }, []);
 
-  // Fetch templates on mount
+  // Fetch the logged-in user's templates on mount — server-filtered and body-less
+  // (bodies are heavy and load on demand when a template is applied).
   useEffect(() => {
+    const me = (sessionStorage.getItem("userEmail") || accounts[0]?.username || "").trim();
+    if (!me) { setTemplates([]); return; }
     apiClient
-      .get(`/Template`)
+      .get(`/Template/mine`, { params: { email: me } })
       .then((res) => {
-        const templatesArray = Array.isArray(res.data) ? res.data : [];
-        // Active templates that belong to the logged-in user only.
-        const me = (sessionStorage.getItem("userEmail") || accounts[0]?.username || "").toLowerCase().trim();
-        const mine = templatesArray.filter((t) => {
-          if (t.IsActive === false || t.isActive === false) return false;
-          const cb = (t.createdBy ?? t.CreatedBy ?? "").toLowerCase().trim();
-          if (cb) return cb === me;
-          const hay = `${t.name ?? ""} ${t.body ?? t.Body ?? ""}`.toLowerCase();
-          return !!me && hay.includes(me);
-        });
+        const mine = Array.isArray(res.data) ? res.data : [];
         console.debug("[Email] Templates loaded (mine):", mine);
         setTemplates(mine);
       })
@@ -4457,12 +4530,13 @@ useEffect(() => {
         console.error("[Email] Failed to load templates:", err);
         setTemplates([]);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-select the template that belongs to the logged-in user (their signature)
-  // for a fresh new email — matched primarily by the user's EMAIL appearing in the
-  // template (footer/name) or its CreatedBy. Skips replies/forwards and never
-  // overrides a template the user picked themselves.
+  // Auto-select the logged-in user's template for a fresh new email — their
+  // explicit default (IsDefault) first, otherwise matched by the user's EMAIL
+  // appearing in the template (footer/name) or its CreatedBy. Skips
+  // replies/forwards and never overrides a template the user picked themselves.
   useEffect(() => {
     if (!templates.length || selectedTemplate) return;
     const t = replyData?.type;
@@ -4474,9 +4548,13 @@ useEffect(() => {
       .map((e) => (e || "").toLowerCase().trim())
       .filter(Boolean);
 
-    let match = null;
-    // Primary: the template that belongs to or carries the logged-in email.
-    if (emails.length) {
+    // The user's explicit default (Templates ▸ Set as default) always wins. The
+    // list is already filtered to the logged-in user's own templates, so the
+    // first flagged one is theirs.
+    let match = templates.find((tpl) => (tpl.isDefault ?? tpl.IsDefault) === true);
+
+    // Otherwise: the template that belongs to or carries the logged-in email.
+    if (!match && emails.length) {
       match = templates.find((tpl) => {
         const createdBy = (tpl.createdBy ?? tpl.CreatedBy ?? "").toLowerCase();
         if (emails.includes(createdBy)) return true;
@@ -4571,20 +4649,31 @@ useEffect(() => {
     setDisclaimerSize(parsed.disclaimerSize);
   }, []);
 
-  // When a template is selected, reflect its blocks and subject into the message box. The
-  // templates list from GET /Template already carries full data, so we resolve it locally
-  // instead of re-fetching by name — `/Template/{name}` isn't a valid route (the API only
-  // exposes /Template/{id} and /Template/name/{name}).
+  // When a template is selected, reflect its blocks and subject into the message box.
+  // The list from GET /Template/mine is body-less (bodies are heavy, DB is remote), so
+  // the body is fetched by ID on first use, merged into the list, and this effect
+  // re-runs to apply it.
   useEffect(() => {
     if (!selectedTemplate) return;
     const tpl = templates.find((t) => (t.name ?? t.Name) === selectedTemplate);
-    if (tpl) {
-      const parsed = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
-      setSubject(tpl.subject ?? tpl.Subject ?? "");
-      if (parsed.body) applyTemplateBody(parsed);
-      applyTemplateBlocks(parsed);
-      if (Array.isArray(parsed.attachments) && parsed.attachments.length) setAttachments(parsed.attachments);
+    if (!tpl) return;
+    const rawBody = tpl.body ?? tpl.Body;
+    const id = tpl.templateId ?? tpl.TemplateId;
+    if (rawBody == null && id) {
+      let cancelled = false;
+      fetchTemplateBody(id)
+        .then((body) => {
+          if (cancelled) return;
+          setTemplates(prev => prev.map(t => ((t.templateId ?? t.TemplateId) === id ? { ...t, body } : t)));
+        })
+        .catch((err) => console.error("[Email] Failed to load template body:", err));
+      return () => { cancelled = true; };
     }
+    const parsed = parseTemplateBody(rawBody ?? "");
+    setSubject(tpl.subject ?? tpl.Subject ?? "");
+    if (parsed.body) applyTemplateBody(parsed);
+    applyTemplateBlocks(parsed);
+    if (Array.isArray(parsed.attachments) && parsed.attachments.length) setAttachments(parsed.attachments);
   }, [selectedTemplate, templates]);
 
   // On mount, pick up the recipients handed over by the Contacts page (one-shot, cleared after
@@ -5475,14 +5564,26 @@ useEffect(() => {
           {!showTemplatesModal && (tags.length > 0 || templates.length > 1) && (
             <div className={`px-4 sm:px-6 py-3 border-b ${isDark ? "bg-blue-900/20 border-blue-800/40" : "bg-blue-50 border-blue-100"}`}>
               <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowTemplatesModal(true)}
-                  className={`px-3 py-2 ${isDark ? "bg-gray-700 text-blue-400 border-blue-700 hover:bg-gray-600" : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
-                >
-                  <Tag size={16} />
-                  Tags
-                </button>
+                {templates.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => { setModalTab("templates"); setShowTemplatesModal(true); }}
+                    className={`px-3 py-2 ${isDark ? "bg-gray-700 text-blue-400 border-blue-700 hover:bg-gray-600" : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
+                  >
+                    <FileText size={16} />
+                    Templates
+                  </button>
+                )}
+                {tags.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setModalTab("tags"); setShowTemplatesModal(true); }}
+                    className={`px-3 py-2 ${isDark ? "bg-gray-700 text-emerald-400 border-emerald-700 hover:bg-gray-600" : "bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
+                  >
+                    <Tag size={16} />
+                    Tags
+                  </button>
+                )}
 
                 {(selectedTemplate || selectedTags.length > 0) ? (
                   <div className="flex-1 min-w-0 flex flex-wrap content-start gap-2 max-h-[5.5rem] overflow-y-auto pr-1">
@@ -5519,7 +5620,7 @@ useEffect(() => {
                     ))}
                   </div>
                 ) : (
-                  <span className={`flex-1 self-center text-xs ${d.muted}`}>Click the Tags button to add recipients by tag.</span>
+                  <span className={`flex-1 self-center text-xs ${d.muted}`}>Pick a template or add recipients by tag.</span>
                 )}
               </div>
             </div>
@@ -5538,13 +5639,15 @@ useEffect(() => {
                 <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${d.border} ${isDark ? "bg-blue-900/20" : "bg-blue-50"}`}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-500 rounded-lg flex-shrink-0">
-                        <FileText size={20} className="text-white" />
+                      <div className={`p-2 ${modalTab === "templates" ? "bg-blue-500" : "bg-emerald-500"} rounded-lg flex-shrink-0`}>
+                        {modalTab === "templates" ? <FileText size={20} className="text-white" /> : <Tag size={20} className="text-white" />}
                       </div>
                       <div className="min-w-0">
-                        <h2 className={`text-base sm:text-lg font-bold ${d.text}`}>Tags</h2>
+                        <h2 className={`text-base sm:text-lg font-bold ${d.text}`}>{modalTab === "templates" ? "Templates" : "Tags"}</h2>
                         <p className={`text-xs sm:text-sm ${d.muted} mt-0.5`}>
-                          Pick tags to add their contacts to the recipients
+                          {modalTab === "templates"
+                            ? "Pick the template to use for this email"
+                            : "Pick tags to add their contacts to the recipients"}
                         </p>
                       </div>
                     </div>
@@ -5559,13 +5662,27 @@ useEffect(() => {
                   </div>
                 </div>
 
+                {/* Tabs — Templates and Tags never show at the same time */}
+                {templates.length > 1 && tags.length > 0 && (
+                  <div className={`px-4 sm:px-6 flex gap-4 ${d.surface} border-b ${d.border}`}>
+                    <button type="button" onClick={() => setModalTab("templates")}
+                      className={`py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${modalTab === "templates" ? "border-blue-500 text-blue-500" : `border-transparent ${d.muted}`}`}>
+                      <FileText size={14} />Templates
+                    </button>
+                    <button type="button" onClick={() => setModalTab("tags")}
+                      className={`py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${modalTab === "tags" ? "border-emerald-500 text-emerald-500" : `border-transparent ${d.muted}`}`}>
+                      <Tag size={14} />Tags
+                    </button>
+                  </div>
+                )}
+
                 {/* Search Bar */}
                 <div className={`px-4 sm:px-6 py-2 sm:py-3 ${d.surface} border-b ${d.border}`}>
                   <div className="relative">
                     <Search size={16} className={`absolute left-3 top-1/2 transform -translate-y-1/2 ${d.muted} flex-shrink-0`} />
                     <input
                       type="text"
-                      placeholder="Search tags..."
+                      placeholder={modalTab === "templates" ? "Search templates..." : "Search tags..."}
                       className={`w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 transition-all text-sm ${d.input}`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -5575,8 +5692,8 @@ useEffect(() => {
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4">
-                  {/* Templates Section — only when the user has more than one of their own to switch between */}
-                  {templates.length > 1 && (
+                  {/* Templates Section — its own tab; only when the user has more than one of their own to switch between */}
+                  {modalTab === "templates" && templates.length > 1 && (
                     <div className="mb-6">
                       <div className="flex items-center gap-2 mb-3">
                         <FileText size={16} className="text-blue-500 flex-shrink-0" />
@@ -5618,9 +5735,10 @@ useEffect(() => {
                                   </div>
                                   {(() => {
                                     // Show a clean preview — parse out the [[LOGO]]/[[ATTACH]]/[[FOOTER]]
-                                    // sentinels + base64 so raw packed data never renders.
+                                    // sentinels + base64 so raw packed data never renders. Lists are
+                                    // body-less now, so the subject stands in until a body is loaded.
                                     const p = parseTemplateBody(tpl.body ?? tpl.Body ?? "");
-                                    const preview = stripHtml(p.body || p.footer || "").trim();
+                                    const preview = stripHtml(p.body || p.footer || "").trim() || (tpl.subject ?? tpl.Subject ?? "");
                                     return preview ? (
                                       <p className={`${d.muted} text-xs mt-1 line-clamp-2`}>{preview}</p>
                                     ) : null;
@@ -5634,8 +5752,8 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* Tags Section */}
-                  {!tagsLoading && !tagsError && tags.length > 0 && (
+                  {/* Tags Section — its own tab */}
+                  {modalTab === "tags" && !tagsLoading && !tagsError && tags.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <Tag size={16} className="text-emerald-500 flex-shrink-0" />
@@ -5688,13 +5806,13 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {tagsLoading && (
+                  {modalTab === "tags" && tagsLoading && (
                     <div className={`${d.muted} text-sm text-center py-4`}>
                       Loading tags...
                     </div>
                   )}
 
-                  {tagsError && (
+                  {modalTab === "tags" && tagsError && (
                     <div className="text-red-500 text-sm text-center py-4">
                       {tagsError}
                     </div>

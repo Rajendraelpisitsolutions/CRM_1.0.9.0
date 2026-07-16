@@ -347,6 +347,10 @@ END
 IF OBJECT_ID(N'dbo.Templates', N'U') IS NOT NULL
    AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Templates') AND name = 'Body' AND max_length <> -1)
     ALTER TABLE dbo.Templates ALTER COLUMN Body NVARCHAR(MAX) NULL;
+-- Per-user default template: the one auto-loaded into a fresh compose (at most one per owner).
+IF OBJECT_ID(N'dbo.Templates', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.Templates', 'IsDefault') IS NULL
+    ALTER TABLE dbo.Templates ADD IsDefault BIT NOT NULL DEFAULT 0;
 -- Templates.Subject / Name must allow duplicates: different users legitimately save templates
 -- with the same subject or name. A hand-created table may carry an (auto-named) UNIQUE
 -- constraint or unique index on those columns — find and drop any so inserts stop 500ing with
