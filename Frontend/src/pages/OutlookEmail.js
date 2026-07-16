@@ -534,25 +534,69 @@ async function reconcileFolderReplies(accessToken, folderId) {
 function replaceCidImages(html, attachments = []) {
   if (!html) return html;
   let result = html;
-  attachments.forEach(att => {
-    if (!att.contentId) return;
+  const used = new Set();
+
+  // 1) Normal case: swap each `cid:` reference for the matching attachment's bytes. Exchange can
+  //    emit the id with angle brackets, a `:1`/`:2` suffix or an `@domain` tail, so try each shape.
+  (attachments || []).forEach(att => {
+    if (!att || !att.contentId || !att.contentBytes || !att.contentType) return;
     const cleanCid = att.contentId.replace(/[<>]/g, "");
-    if (!att.contentBytes || !att.contentType) {
-      [
-        `cid:${cleanCid}`, `cid:${cleanCid}:1`, `cid:${cleanCid}:2`,
-        `cid:${cleanCid}@`, att.contentId, `cid:${att.contentId}`,
-      ].forEach(p => { result = result.split(p).join(TRANSPARENT_GIF); });
-      return;
-    }
     const base64Src = `data:${att.contentType};base64,${att.contentBytes}`;
+    const before = result;
     [
       `cid:${cleanCid}`, `cid:${cleanCid}:1`, `cid:${cleanCid}:2`,
       `cid:${cleanCid}@`, att.contentId, `cid:${att.contentId}`,
-      `<${cleanCid}>`, `"cid:${cleanCid}"`, `'cid:${cleanCid}'`, cleanCid,
+      `<${cleanCid}>`, `"cid:${cleanCid}"`, `'cid:${cleanCid}'`,
     ].forEach(p => { result = result.split(p).join(base64Src); });
+    if (result !== before) used.add(att);
   });
+
+  // 2) Fallback: any <img src="cid:…"> still unresolved never matched a content-id. Exchange often
+  //    drops or rewrites the id on the stored/sent copy, so a strict id match misses even though the
+  //    inline image is right there in the attachments. Substitute the leftover inline images (those
+  //    that carry bytes) in the order they appear, so the pictures render instead of blanking out.
+  const spare = (attachments || []).filter(a =>
+    a && a.contentBytes && /^image\//i.test(a.contentType || "") &&
+    (a.isInline || a.contentId) && !used.has(a)
+  );
+  if (spare.length) {
+    let k = 0;
+    result = result.replace(/src\s*=\s*(["'])cid:[^"']*\1/gi, (m, q) => {
+      const att = spare[k++];
+      return att ? `src=${q}data:${att.contentType};base64,${att.contentBytes}${q}` : m;
+    });
+  }
+
+  // 3) Whatever is still a `cid:` has no bytes to show — blank it so no broken-image icon appears.
   result = result.replace(/src\s*=\s*["']cid:[^"']*["']/gi, `src="${TRANSPARENT_GIF}"`);
   return result;
+}
+
+// Inline images sometimes come back from a message's $expand=attachments without their contentBytes
+// (or the attachments weren't expanded at all). Fetch each inline/image attachment individually so
+// replaceCidImages has the data to swap in — otherwise those pictures blank out. Mutates + returns
+// the array in place. Best-effort: an attachment that can't be fetched is left as-is.
+async function hydrateInlineImageBytes(msgId, attachments, accessToken) {
+  const list = attachments || [];
+  const needBytes = list.filter(
+    a => a && !a.contentBytes && a.id &&
+      (a.isInline || /^image\//i.test(a.contentType || ""))
+  );
+  if (!needBytes.length) return list;
+  await Promise.all(needBytes.map(async (a) => {
+    try {
+      const ar = await fetch(
+        `https://graph.microsoft.com/v1.0/me/messages/${msgId}/attachments/${a.id}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (ar.ok) {
+        const full = await ar.json();
+        if (full.contentBytes) a.contentBytes = full.contentBytes;
+        if (!a.contentType && full.contentType) a.contentType = full.contentType;
+      }
+    } catch { /* leave unresolved; it will blank rather than break the render */ }
+  }));
+  return list;
 }
 
 function splitEmailBody(html) {
@@ -1459,6 +1503,7 @@ function OutlookEmail({ onToast }) {
         const data = await r.json();
         const htmlBody = data.body?.content || "";
         const attachments = data.attachments || [];
+        await hydrateInlineImageBytes(msg.id, attachments, accessToken);
         const body = replaceCidImages(htmlBody, attachments);
         const convId = data.conversationId || "";
         const updatedMsg = { ...msg, body, attachments, bodyLoaded: true, conversationId: convId };
@@ -1502,12 +1547,16 @@ function OutlookEmail({ onToast }) {
     if (threadBodies[msgId]) return;
     try {
       const r = await fetch(
-        `https://graph.microsoft.com/v1.0/me/messages/${msgId}?$select=id,body`,
+        `https://graph.microsoft.com/v1.0/me/messages/${msgId}?$select=id,body&$expand=attachments`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       if (!r.ok) return;
       const data = await r.json();
-      const html = replaceCidImages(data.body?.content || "", []);
+      // Pull the inline images through so cid: refs resolve — without the attachments every inline
+      // image in a threaded message would blank out.
+      const attachments = data.attachments || [];
+      await hydrateInlineImageBytes(msgId, attachments, accessToken);
+      const html = replaceCidImages(data.body?.content || "", attachments);
       setThreadBodies(prev => ({ ...prev, [msgId]: html }));
     } catch { }
   };

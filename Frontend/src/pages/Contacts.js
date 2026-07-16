@@ -277,8 +277,12 @@ function Contacts({
         const res = await fetch(`/Contact/tags/contacts?tags=${encodeURIComponent(tagValue)}`);
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const json = await res.json();
-        const items = Array.isArray(json) ? json : [];
-        return { items, totalCount: items.length };
+        // The tag endpoint returns the ENTIRE matching set (not server-paged), so slice it
+        // to the requested page here. Without this every page shows the same full list.
+        const all = Array.isArray(json) ? json : [];
+        const start = (page - 1) * pageSize;
+        const items = all.slice(start, start + pageSize);
+        return { items, totalCount: all.length };
       }
       // Always use server-side paged search - fast for both empty and non-empty queries
       const searchParam = normalizedSearch ? `&search=${encodeURIComponent(normalizedSearch)}` : '';

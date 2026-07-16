@@ -462,8 +462,8 @@ namespace Elpis_CRM.Controllers
         {
             var version = new
             {
-                version = "1.0.8.0",
-                timestamp = "18-06-2026",
+                version = "1.0.9.0",
+                timestamp = "15-07-2026",
                 environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"
             };
             return Ok(version);
