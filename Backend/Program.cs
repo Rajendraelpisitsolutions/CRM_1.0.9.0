@@ -346,7 +346,30 @@ END
 -- Ensure Templates.Body can hold large content (templates now carry base64 attachments).
 IF OBJECT_ID(N'dbo.Templates', N'U') IS NOT NULL
    AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.Templates') AND name = 'Body' AND max_length <> -1)
-    ALTER TABLE dbo.Templates ALTER COLUMN Body NVARCHAR(MAX) NULL;");
+    ALTER TABLE dbo.Templates ALTER COLUMN Body NVARCHAR(MAX) NULL;
+-- Templates.Subject / Name must allow duplicates: different users legitimately save templates
+-- with the same subject or name. A hand-created table may carry an (auto-named) UNIQUE
+-- constraint or unique index on those columns — find and drop any so inserts stop 500ing with
+-- 'Violation of UNIQUE KEY constraint'. Idempotent: does nothing once the constraints are gone.
+IF OBJECT_ID(N'dbo.Templates', N'U') IS NOT NULL
+BEGIN
+    DECLARE @dropSql NVARCHAR(MAX) = N'';
+    -- UNIQUE key constraints whose (single) key column is Subject or Name.
+    SELECT @dropSql = @dropSql + 'ALTER TABLE dbo.Templates DROP CONSTRAINT [' + kc.name + '];'
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = OBJECT_ID('dbo.Templates') AND kc.type = 'UQ' AND c.name IN ('Subject', 'Name');
+    -- Unique indexes on Subject or Name that are NOT backed by a key constraint (and not the PK).
+    SELECT @dropSql = @dropSql + 'DROP INDEX [' + i.name + '] ON dbo.Templates;'
+    FROM sys.indexes i
+    JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE i.object_id = OBJECT_ID('dbo.Templates') AND i.is_unique = 1 AND i.is_primary_key = 0
+      AND c.name IN ('Subject', 'Name')
+      AND NOT EXISTS (SELECT 1 FROM sys.key_constraints kc WHERE kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id);
+    IF @dropSql <> '' EXEC sp_executesql @dropSql;
+END");
 }
 catch (Exception ex)
 {

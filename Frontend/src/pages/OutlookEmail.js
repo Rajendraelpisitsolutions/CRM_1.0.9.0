@@ -45,7 +45,6 @@ const META_CLOSE = "[[/META]]";
 // The footer IS the signature block (name, company info, logo); the disclaimer is the legal
 // small print under it. Each is sized on its own.
 const DEFAULT_SIZES = { footer: 15, disclaimer: 11 };
-const FONT_SIZES = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24];
 
 function emptyTemplate() {
   return {
@@ -137,11 +136,38 @@ const BODY_ALLOWED_ATTR = [
 // Pasted markup comes from anywhere (Word, a website, another mail), so it's scrubbed to a
 // mail-safe subset before it ever reaches the editor. DOMPurify keeps `data:` image srcs.
 function sanitizeBodyHtml(html) {
-  return DOMPurify.sanitize(String(html || ""), {
+  const clean = DOMPurify.sanitize(String(html || ""), {
     ALLOWED_TAGS: BODY_ALLOWED_TAGS,
     ALLOWED_ATTR: BODY_ALLOWED_ATTR,
     FORBID_TAGS: ["script", "style", "meta", "link"],
   });
+  return collapseHtmlWhitespace(clean);
+}
+
+// Content pasted from Word/Outlook carries runs of spaces and &nbsp; (used there for visual
+// alignment), which HTML would normally collapse — but preserved in a mail they show up as ugly
+// gaps mid-sentence ("downtime      events"). Collapse every run of whitespace/&nbsp; in the
+// text to a single normal space, exactly like a browser renders normal text, so spacing looks
+// natural in the compose box and the sent mail. Line breaks (<br>, blocks) and <pre> are left
+// untouched, and a leading/trailing space per line is trimmed so indentation hacks don't linger.
+function collapseHtmlWhitespace(html) {
+  const s = String(html || "");
+  if (typeof document === "undefined" || typeof DOMParser === "undefined") return s;
+  const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
+  const root = doc.body;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const texts = [];
+  while (walker.nextNode()) texts.push(walker.currentNode);
+  for (const n of texts) {
+    let p = n.parentNode, inPre = false;
+    while (p && p !== root) { if (p.nodeName === "PRE" || p.nodeName === "CODE") { inPre = true; break; } p = p.parentNode; }
+    if (inPre) continue;
+    // In JS, \s matches the non-breaking space (&nbsp;) too, so this collapses every run of
+    // ASCII whitespace and &nbsp; down to a single ordinary space — normal text rendering.
+    const collapsed = n.nodeValue.replace(/\s+/g, " ");
+    if (collapsed !== n.nodeValue) n.nodeValue = collapsed;
+  }
+  return root.innerHTML;
 }
 function escapeHtml(s) {
   return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -154,6 +180,34 @@ function stripHtml(html) {
 // Plain-text bodies (legacy templates, forwards) rendered into the rich editor.
 function plainTextToHtml(text) {
   return escapeHtml(text).replace(/\n/g, "<br>");
+}
+
+// Templates are now composed as ONE rich body (like Outlook), so a legacy template that still
+// carries its footer/logo/disclaimer in separate blocks is folded into a single HTML body when
+// opened for edit/preview. The layout mirrors exactly how those blocks are assembled on send
+// (logo left of the signature text, disclaimer last) so nothing shifts when an old template is
+// upgraded. Returns the merged body HTML.
+function mergeLegacyBlocksIntoBody(parsed) {
+  const asHtml = (s) => escapeHtml(s).replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
+  let out = parsed.bodyHtml ? (parsed.body || "") : plainTextToHtml(parsed.body || "");
+  const footer = parsed.footer || "";
+  const logo = parsed.logo || "";
+  const footerSize = Number(parsed.footerSize) || DEFAULT_SIZES.footer;
+  const disclaimer = parsed.disclaimer || "";
+  const disclaimerSize = Number(parsed.disclaimerSize) || DEFAULT_SIZES.disclaimer;
+  if (footer || logo) {
+    const textHtml = asHtml(footer);
+    out += logo
+      ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
+        + `<td valign="middle" style="vertical-align:middle;padding-right:14px;"><img src="${logo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
+        + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
+        + `</tr></table>`
+      : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+  }
+  if (disclaimer) {
+    out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${asHtml(disclaimer)}</div>`;
+  }
+  return out;
 }
 
 function readFileAsDataUrl(file) {
@@ -172,16 +226,21 @@ function loadImage(src) {
     img.src = src;
   });
 }
-// A pasted screenshot is easily several MB, which would blow the template size cap and the
-// server upload limit, so inline images are downscaled before being embedded.
-async function compressImageToDataUrl(file, maxWidth = 900) {
+// Inline images balance clarity against template weight. A reasonably-sized image is embedded
+// byte-for-byte (no re-encoding, so it's IDENTICAL to sending it as an attachment). Only a large
+// image is optimised — scaled to a sharp cap and re-encoded at high quality (0.9), which is
+// visually indistinguishable for logos/banners/screenshots but keeps the stored body small so
+// the template saves fast and the list loads instantly. Without this a single pasted photo can
+// bloat one template to several MB, which is what made saving slow and the picker load late.
+async function compressImageToDataUrl(file, maxWidth = 1500) {
   const raw = await readFileAsDataUrl(file);
   if (!raw) return "";
   if (file.type === "image/gif") return raw; // re-encoding would drop the animation
   const img = await loadImage(raw);
   if (!img || !img.naturalWidth) return raw;
+  // Small enough → embed the original untouched (identical, lossless clarity).
+  if (img.naturalWidth <= maxWidth && raw.length < 700 * 1024) return raw;
   const scale = Math.min(1, maxWidth / img.naturalWidth);
-  if (scale >= 1 && raw.length < 400 * 1024) return raw;
   const w = Math.max(1, Math.round(img.naturalWidth * scale));
   const h = Math.max(1, Math.round(img.naturalHeight * scale));
   const canvas = document.createElement("canvas");
@@ -189,8 +248,12 @@ async function compressImageToDataUrl(file, maxWidth = 900) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return raw;
   ctx.drawImage(img, 0, 0, w, h);
-  let out = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
-  if (out.length > 600 * 1024) out = canvas.toDataURL("image/jpeg", 0.8);
+  const isPng = file.type === "image/png";
+  // PNG kept lossless if it stays small; otherwise (and for photos) high-quality JPEG (0.9),
+  // stepping down once more only if it's still heavy, so clarity is preserved whenever possible.
+  let out = isPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.9);
+  if (isPng && out.length > 900 * 1024) out = canvas.toDataURL("image/jpeg", 0.9);
+  if (out.length > 900 * 1024) out = canvas.toDataURL("image/jpeg", 0.82);
   return out.length < raw.length ? out : raw;
 }
 
@@ -313,7 +376,9 @@ function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassN
   };
 
   return (
-    <div className={`relative flex flex-col ${wrapperClassName || ""}`}>
+    // min-w-0 + max-w-full: as a flex child the wrapper must be allowed to shrink, otherwise a
+    // wide pasted image/table forces it past the compose box and the content spills out the side.
+    <div className={`relative flex flex-col min-w-0 max-w-full ${wrapperClassName || ""}`}>
       <div
         ref={ref}
         contentEditable
@@ -325,9 +390,11 @@ function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassN
         onPaste={handlePaste}
         onDrop={handleDrop}
         style={{ minHeight }}
-        // No overflow of its own: the editor grows with its content and the surrounding
-        // pane scrolls, so the body and footer scroll together as one page.
-        className={`${className || ""} break-words [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded`}
+        // Everything is capped to the box width so pasted Outlook/Word content (fixed-width
+        // banners, tables, images) fits instead of overflowing; anything still too wide (a rigid
+        // table) scrolls horizontally inside the box via overflow-x-auto rather than breaking the
+        // layout. break-words also wraps long unbroken strings/URLs.
+        className={`${className || ""} break-words overflow-x-auto [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto`}
       />
       {isEmpty && placeholder && (
         <span className="pointer-events-none absolute left-4 top-3 text-sm text-gray-400 select-none">
@@ -360,20 +427,6 @@ function AutoGrowTextarea({ value, onChange, className, style, placeholder }) {
       style={style}
       className={`${className || ""} resize-none overflow-hidden`}
     />
-  );
-}
-
-// Per-block font size picker (footer/signature and disclaimer).
-function FontSizeSelect({ value, onChange, className }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className={className}
-      aria-label="Font size"
-    >
-      {FONT_SIZES.map((s) => <option key={s} value={s}>{s} px</option>)}
-    </select>
   );
 }
 
@@ -1835,36 +1888,19 @@ function OutlookEmail({ onToast }) {
     setSentMails(p => [newMail, ...p]);
   };
 
-  // Reads picked files into base64 attachment objects for a template (create/edit).
-  // They're persisted inside the template, so total size is capped.
-  const addTemplateAttachments = async (fileList, setter, current) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
-    const readOne = (file) => new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ name: file.name, contentType: file.type || "application/octet-stream", contentBytes: (String(reader.result || "").split(",")[1] || ""), size: file.size });
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-    const read = (await Promise.all(files.map(readOne))).filter(Boolean);
-    const existingTotal = (current || []).reduce((s, a) => s + (a.size || 0), 0);
-    const addTotal = read.reduce((s, a) => s + (a.size || 0), 0);
-    if (existingTotal + addTotal > 4 * 1024 * 1024) { showPopup("Attachments too large (max ~4 MB total per template)", "error"); return; }
-    setter((p) => ({ ...p, attachments: [...(p.attachments || []), ...read] }));
-  };
-
   const handleAddTemplate = async e => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
       // The body is HTML, so tags are stripped before it can stand in as the name.
-      const name = (newTemplate.subject || stripHtml(newTemplate.body) || newTemplate.footer || "")
+      const name = (newTemplate.subject || stripHtml(newTemplate.body) || "")
         .trim().slice(0, 40) || "Template";
       // CreatedBy = the logged-in user's email: each user owns only their own templates.
-      // Subject is stored on its own; body + footer + logo + meta are packed into Body.
+      // Subject is stored on its own (capped to the column's 255); the whole email is one
+      // rich body, packed into Body via the META/FOOTER wire format for back-compat.
       const r = await apiClient.post("/Template", {
         name,
-        subject: newTemplate.subject || "",
+        subject: (newTemplate.subject || "").slice(0, 255),
         body: buildTemplateBody(newTemplate),
         createdBy: loggedInEmail,
       });
@@ -3182,7 +3218,7 @@ function OutlookEmail({ onToast }) {
                   <div className={`${openedTemplateIdx !== null || showAddTemplate ? "hidden md:flex" : "flex"} w-full md:w-80 border-r ${th.border} flex-col ${th.bg}`}>
                     <div className={`h-12 border-b ${th.border} px-4 flex items-center justify-between ${th.surface} shrink-0`}>
                       <h2 className="text-sm font-semibold">Templates</h2>
-                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ name: "", subject: "", body: "", footer: "", assignedEmail: loggedInEmail, logo: "", attachments: [] }); }}
+                      <button onClick={() => { setShowAddTemplate(true); setOpenedTemplateIdx(null); setNewTemplate({ ...emptyTemplate(), assignedEmail: loggedInEmail }); }}
                         className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs transition">
                         <Plus size={13} />New
                       </button>
@@ -3241,82 +3277,10 @@ function OutlookEmail({ onToast }) {
                                 value={newTemplate.body}
                                 onChange={html => setNewTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
                                 onError={msg => showPopup(msg, "error")}
-                                placeholder="Email body… paste or drop images right here"
-                                minHeight={200}
+                                placeholder="Compose the whole email here — greeting, message, your signature, logo and disclaimer. Paste or drop images right in."
+                                minHeight={320}
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Paste (Ctrl+V) or drop an image to place it inside the body. Files added below are sent as separate attachments instead.</p>
-                            </div>
-                            <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
-                              {(newTemplate.attachments || []).length > 0 && (
-                                <div className="space-y-1.5 mb-2">
-                                  {newTemplate.attachments.map((a, i) => (
-                                    <div key={i} className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-lg text-sm ${th.input}`}>
-                                      <span className="truncate flex items-center gap-2 min-w-0"><Paperclip size={14} className="shrink-0" /><span className="truncate">{a.name}</span></span>
-                                      <button type="button" onClick={() => setNewTemplate(p => ({ ...p, attachments: (p.attachments || []).filter((_, idx) => idx !== i) }))} className="text-xs text-red-600 hover:underline shrink-0">Remove</button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
-                                <Paperclip size={16} /><span>Add files</span>
-                                <input type="file" multiple className="hidden" onChange={(e) => { addTemplateAttachments(e.target.files, setNewTemplate, newTemplate.attachments); e.target.value = ""; }} />
-                              </label>
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between gap-3 mb-1.5">
-                                <label className={`block text-sm font-medium ${th.textMuted}`}>Footer / Signature</label>
-                                <FontSizeSelect value={newTemplate.footerSize}
-                                  onChange={v => setNewTemplate(p => ({ ...p, footerSize: v }))}
-                                  className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
-                              </div>
-                              <textarea value={newTemplate.footer}
-                                onChange={e => setNewTemplate(p => ({ ...p, footer: e.target.value }))}
-                                rows={4}
-                                placeholder="Your name, role, company info..."
-                                style={{ fontSize: `${newTemplate.footerSize}px` }}
-                                className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                            </div>
-                            <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
-                              {newTemplate.logo ? (
-                                <div className="flex items-center gap-3">
-                                  <img src={newTemplate.logo} alt="Company logo" className="h-14 max-w-[180px] object-contain border rounded-lg p-1 bg-white" />
-                                  <button type="button" onClick={() => setNewTemplate(p => ({ ...p, logo: "" }))}
-                                    className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Remove</button>
-                                </div>
-                              ) : (
-                                <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
-                                  <ImageIcon size={16} />
-                                  <span>Upload logo</span>
-                                  <input type="file" accept="image/*" className="hidden"
-                                    onChange={e => {
-                                      const file = e.target.files && e.target.files[0];
-                                      if (!file) return;
-                                      if (file.size > 512 * 1024) { showPopup("Logo too large (max 512 KB)", "error"); return; }
-                                      const reader = new FileReader();
-                                      reader.onload = () => setNewTemplate(p => ({ ...p, logo: String(reader.result || "") }));
-                                      reader.readAsDataURL(file);
-                                    }} />
-                                </label>
-                              )}
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Appears in the email footer when this template is used.</p>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between gap-3 mb-1.5">
-                                <label className={`block text-sm font-medium ${th.textMuted}`}>Disclaimer</label>
-                                <FontSizeSelect value={newTemplate.disclaimerSize}
-                                  onChange={v => setNewTemplate(p => ({ ...p, disclaimerSize: v }))}
-                                  className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
-                              </div>
-                              <textarea value={newTemplate.disclaimer}
-                                onChange={e => setNewTemplate(p => ({ ...p, disclaimer: e.target.value }))}
-                                rows={3}
-                                placeholder="Confidentiality notice, legal text..."
-                                style={{ fontSize: `${newTemplate.disclaimerSize}px`, fontStyle: "italic" }}
-                                className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Sent as the last block, below the footer.</p>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Just like Outlook: build the entire email in this one box. Paste (Ctrl+V) or drop an image (logo, banner, screenshot) to place it inline — images are auto-compressed.</p>
                             </div>
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
@@ -3340,7 +3304,7 @@ function OutlookEmail({ onToast }) {
                             <form onSubmit={async e => {
                               e.preventDefault(); setIsSubmitting(true);
                               try {
-                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || stripHtml(editTemplate.body) || editTemplate.footer || "").trim().slice(0, 40) || "Template", subject: editTemplate.subject || "", body: buildTemplateBody(editTemplate), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
+                                await apiClient.put(`/Template/${tpl.templateId ?? tpl.TemplateId}`, { name: (editTemplate.subject || stripHtml(editTemplate.body) || "").trim().slice(0, 40) || "Template", subject: (editTemplate.subject || "").slice(0, 255), body: buildTemplateBody(editTemplate), createdBy: (editTemplate.assignedEmail || loggedInEmail || "").trim(), isActive: true });
                                 apiClient.get("/Template").then(r => setApiTemplates(Array.isArray(r.data) ? r.data : [])).catch(() => { });
                                 setEditTemplateIdx(null);
                                 showPopup("Template updated");
@@ -3373,79 +3337,10 @@ function OutlookEmail({ onToast }) {
                                   value={editTemplate.body}
                                   onChange={html => setEditTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
                                   onError={msg => showPopup(msg, "error")}
-                                  placeholder="Email body… paste or drop images right here"
-                                  minHeight={200}
+                                  placeholder="Compose the whole email here — greeting, message, your signature, logo and disclaimer. Paste or drop images right in."
+                                  minHeight={320}
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                                <p className={`text-xs ${th.textMuted} mt-1`}>Paste (Ctrl+V) or drop an image to place it inside the body. Files added below are sent as separate attachments instead.</p>
-                              </div>
-                              <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Attachments (optional)</label>
-                                {(editTemplate.attachments || []).length > 0 && (
-                                  <div className="space-y-1.5 mb-2">
-                                    {editTemplate.attachments.map((a, i) => (
-                                      <div key={i} className={`flex items-center justify-between gap-2 px-3 py-2 border rounded-lg text-sm ${th.input}`}>
-                                        <span className="truncate flex items-center gap-2 min-w-0"><Paperclip size={14} className="shrink-0" /><span className="truncate">{a.name}</span></span>
-                                        <button type="button" onClick={() => setEditTemplate(p => ({ ...p, attachments: (p.attachments || []).filter((_, idx) => idx !== i) }))} className="text-xs text-red-600 hover:underline shrink-0">Remove</button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
-                                  <Paperclip size={16} /><span>Add files</span>
-                                  <input type="file" multiple className="hidden" onChange={(e) => { addTemplateAttachments(e.target.files, setEditTemplate, editTemplate.attachments); e.target.value = ""; }} />
-                                </label>
-                                <p className={`text-xs ${th.textMuted} mt-1`}>Attached to the email when this template is used (max ~4 MB total).</p>
-                              </div>
-                              <div>
-                                <div className="flex items-center justify-between gap-3 mb-1.5">
-                                  <label className={`block text-sm font-medium ${th.textMuted}`}>Footer / Signature</label>
-                                  <FontSizeSelect value={editTemplate.footerSize}
-                                    onChange={v => setEditTemplate(p => ({ ...p, footerSize: v }))}
-                                    className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
-                                </div>
-                                <textarea value={editTemplate.footer}
-                                  onChange={e => setEditTemplate(p => ({ ...p, footer: e.target.value }))} rows={4}
-                                  placeholder="Your name, role, company info..."
-                                  style={{ fontSize: `${editTemplate.footerSize}px` }}
-                                  className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                              </div>
-                              <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Company Logo (optional)</label>
-                                {editTemplate.logo ? (
-                                  <div className="flex items-center gap-3">
-                                    <img src={editTemplate.logo} alt="Company logo" className="h-14 max-w-[180px] object-contain border rounded-lg p-1 bg-white" />
-                                    <button type="button" onClick={() => setEditTemplate(p => ({ ...p, logo: "" }))}
-                                      className="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Remove</button>
-                                  </div>
-                                ) : (
-                                  <label className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm cursor-pointer ${th.input} ${th.hover}`}>
-                                    <ImageIcon size={16} />
-                                    <span>Upload logo</span>
-                                    <input type="file" accept="image/*" className="hidden"
-                                      onChange={e => {
-                                        const file = e.target.files && e.target.files[0];
-                                        if (!file) return;
-                                        if (file.size > 512 * 1024) { showPopup("Logo too large (max 512 KB)", "error"); return; }
-                                        const reader = new FileReader();
-                                        reader.onload = () => setEditTemplate(p => ({ ...p, logo: String(reader.result || "") }));
-                                        reader.readAsDataURL(file);
-                                      }} />
-                                  </label>
-                                )}
-                              </div>
-                              <div>
-                                <div className="flex items-center justify-between gap-3 mb-1.5">
-                                  <label className={`block text-sm font-medium ${th.textMuted}`}>Disclaimer</label>
-                                  <FontSizeSelect value={editTemplate.disclaimerSize}
-                                    onChange={v => setEditTemplate(p => ({ ...p, disclaimerSize: v }))}
-                                    className={`px-2 py-1 border rounded-lg text-xs ${th.input}`} />
-                                </div>
-                                <textarea value={editTemplate.disclaimer}
-                                  onChange={e => setEditTemplate(p => ({ ...p, disclaimer: e.target.value }))} rows={3}
-                                  placeholder="Confidentiality notice, legal text..."
-                                  style={{ fontSize: `${editTemplate.disclaimerSize}px`, fontStyle: "italic" }}
-                                  className={`w-full px-4 py-2.5 border rounded-xl ${th.input} resize-y focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                                <p className={`text-xs ${th.textMuted} mt-1`}>Sent as the last block, below the footer.</p>
+                                <p className={`text-xs ${th.textMuted} mt-1`}>Just like Outlook: build the entire email in this one box. Paste (Ctrl+V) or drop an image (logo, banner, screenshot) to place it inline — images are auto-compressed.</p>
                               </div>
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
@@ -3470,17 +3365,12 @@ function OutlookEmail({ onToast }) {
                                 setEditTemplate({
                                   ...emptyTemplate(),
                                   subject: tpl.subject ?? tpl.Subject ?? "",
-                                  // A pre-rich template holds plain text — convert it so the editor
-                                  // shows line breaks instead of one run-on paragraph.
-                                  body: parsed.bodyHtml ? parsed.body : plainTextToHtml(parsed.body),
+                                  // Everything is one rich body now — an older template's separate
+                                  // footer/logo/disclaimer are folded inline so nothing is lost and
+                                  // it's edited exactly as it will be sent.
+                                  body: mergeLegacyBlocksIntoBody(parsed),
                                   bodyHtml: true,
-                                  footer: parsed.footer,
                                   assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "",
-                                  logo: parsed.logo,
-                                  attachments: parsed.attachments || [],
-                                  disclaimer: parsed.disclaimer,
-                                  footerSize: parsed.footerSize,
-                                  disclaimerSize: parsed.disclaimerSize,
                                 });
                               }}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg ${th.hover} ${th.text}`}><Pencil size={13} />Edit</button>
@@ -3497,7 +3387,11 @@ function OutlookEmail({ onToast }) {
                                 <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{(tpl.createdBy ?? tpl.CreatedBy) || "— not assigned —"}</div>
                               </div>
                               {(() => {
-                                const { body, bodyHtml, footer, logo, disclaimer, footerSize, disclaimerSize } = parseTemplateBody(tpl.body);
+                                const parsed = parseTemplateBody(tpl.body);
+                                // One email preview — the whole thing (signature, logo, disclaimer,
+                                // inline images) rendered as it will be sent. Legacy templates are
+                                // folded into a single body first.
+                                const previewHtml = mergeLegacyBlocksIntoBody(parsed);
                                 const subj = tpl.subject ?? tpl.Subject ?? "";
                                 const panel = `px-4 py-4 border ${th.border} rounded-xl ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`;
                                 return (
@@ -3508,32 +3402,11 @@ function OutlookEmail({ onToast }) {
                                   <div className={`px-4 py-3 border ${th.border} rounded-xl text-sm ${th.text} ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>{subj}</div>
                                 </div>
                               )}
-                              {body && (
-                                <div>
-                                  <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Body</label>
-                                  {bodyHtml ? (
-                                    <div className={`${panel} text-sm min-h-24 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded`}
-                                      dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(body) }} />
-                                  ) : (
-                                    <div className={`${panel} text-sm whitespace-pre-wrap min-h-24`}>{body}</div>
-                                  )}
-                                </div>
-                              )}
                               <div>
-                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Footer / Signature · {footerSize}px</label>
-                                  {/* Logo centred against the text, matching the compose box and the
-                                      sent mail (valign="middle") — all three must agree. */}
-                                  <div className={`flex gap-4 items-center ${panel} min-h-32`}>
-                                    {logo && <img src={logo} alt="Company logo" className="h-16 max-w-[160px] object-contain shrink-0" />}
-                                    <div className="whitespace-pre-wrap flex-1 min-w-0" style={{ fontSize: `${footerSize}px` }}>{footer}</div>
-                                  </div>
+                                <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Body</label>
+                                <div className={`${panel} text-sm min-h-32 overflow-x-auto break-words [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto`}
+                                  dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(previewHtml) }} />
                               </div>
-                              {disclaimer && (
-                                <div>
-                                  <label className={`block text-xs font-semibold ${th.textMuted} uppercase tracking-wide mb-2`}>Disclaimer · {disclaimerSize}px</label>
-                                  <div className={`${panel} whitespace-pre-wrap ${th.textMuted}`} style={{ fontSize: `${disclaimerSize}px`, fontStyle: "italic" }}>{disclaimer}</div>
-                                </div>
-                              )}
                               </>
                               ); })()}
                               <button onClick={() => { startCompose({ type: "new", toEmail: "", subject: tpl.subject ?? tpl.Subject ?? "", body: tpl.body }); }}
