@@ -188,8 +188,11 @@ namespace Elpis_CRM.Services
         /// tracker, a hidden 1×1 open pixel appended, and an unsubscribe footer added. mailto:, tel:,
         /// and in-page anchors are left alone. <paramref name="baseUrl"/> is the public backend origin
         /// (e.g. https://crm.elpisitsolutions.com) — the recipient's mail client must be able to reach it.
+        /// When <paramref name="footerOnly"/> is true, ONLY the Subscribe/Unsubscribe footer is added:
+        /// the click-tracking link rewrite and the open pixel are skipped, so the normal Send button can
+        /// carry the (un)subscribe option without turning every email into a fully tracked one.
         /// </summary>
-        public string BuildTrackedHtml(string? bodyHtml, string token, string baseUrl, string? subBaseUrl = null)
+        public string BuildTrackedHtml(string? bodyHtml, string token, string baseUrl, string? subBaseUrl = null, bool footerOnly = false)
         {
             var b = (baseUrl ?? "").TrimEnd('/');
             // The (un)subscribe links go through the React app (/email/...), which is always reachable
@@ -197,22 +200,27 @@ namespace Elpis_CRM.Services
             var sub = string.IsNullOrWhiteSpace(subBaseUrl) ? b : subBaseUrl.TrimEnd('/');
             var html = bodyHtml ?? "";
 
-            // 1) Rewrite links → click tracker (keeps the real destination as ?u=).
-            html = HrefRegex.Replace(html, m =>
+            // 1) Rewrite links → click tracker (keeps the real destination as ?u=). Skipped for a
+            //    footer-only send, which leaves the recipient's links exactly as written.
+            if (!footerOnly)
             {
-                var url = m.Groups["url"].Value;
-                if (url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
-                    url.StartsWith("tel:", StringComparison.OrdinalIgnoreCase) ||
-                    url.StartsWith("#") ||
-                    url.StartsWith(b, StringComparison.OrdinalIgnoreCase))
+                html = HrefRegex.Replace(html, m =>
                 {
-                    return m.Value; // leave internal / non-web links untouched
-                }
-                var tracked = $"{b}/api/track/c/{token}?u={Uri.EscapeDataString(url)}";
-                return $"href=\"{tracked}\"";
-            });
+                    var url = m.Groups["url"].Value;
+                    if (url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+                        url.StartsWith("tel:", StringComparison.OrdinalIgnoreCase) ||
+                        url.StartsWith("#") ||
+                        url.StartsWith(b, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return m.Value; // leave internal / non-web links untouched
+                    }
+                    var tracked = $"{b}/api/track/c/{token}?u={Uri.EscapeDataString(url)}";
+                    return $"href=\"{tracked}\"";
+                });
+            }
 
             // 2) Subscription footer — clear Unsubscribe / Subscribe BUTTONS (email-safe styled links).
+            //    Always added, so every recipient can opt out (or back in) from any send.
             html += $"<div style=\"margin-top:24px;padding-top:16px;border-top:1px solid #eee;" +
                     $"text-align:center;font-family:Arial,Helvetica,sans-serif;\">" +
                     $"<p style=\"font-size:12px;color:#9ca3af;margin:0 0 12px;\">Don't want to receive these emails?</p>" +
@@ -224,9 +232,12 @@ namespace Elpis_CRM.Services
                     $"color:#2563eb;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;" +
                     $"border-radius:8px;border:1px solid #bfdbfe;\">Subscribe</a></div>";
 
-            // 3) Open pixel (last, so it loads after the body).
-            html += $"<img src=\"{b}/api/track/o/{token}\" width=\"1\" height=\"1\" " +
-                    $"style=\"display:none;width:1px;height:1px;\" alt=\"\" />";
+            // 3) Open pixel (last, so it loads after the body). Skipped for a footer-only send.
+            if (!footerOnly)
+            {
+                html += $"<img src=\"{b}/api/track/o/{token}\" width=\"1\" height=\"1\" " +
+                        $"style=\"display:none;width:1px;height:1px;\" alt=\"\" />";
+            }
 
             return html;
         }

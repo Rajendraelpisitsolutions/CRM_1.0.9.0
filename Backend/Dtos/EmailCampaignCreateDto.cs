@@ -17,6 +17,10 @@ namespace Elpis_CRM.Model.DTOs
         /// <summary>The app (SPA) origin, used to build the /email/subscribe and /email/unsubscribe
         /// links so recipients land on the React page (which records via the working /api path).</summary>
         public string? SubscribeBaseUrl { get; set; }
+        /// <summary>When true, only the Subscribe/Unsubscribe footer is added to each recipient's body —
+        /// no open pixel and no click-tracking link rewriting. Used by the normal Send button so every
+        /// email carries the (un)subscribe option (and honours opt-outs) without full tracking.</summary>
+        public bool FooterOnly { get; set; }
         public List<EmailRecipientInputDto> Recipients { get; set; } = new();
     }
 

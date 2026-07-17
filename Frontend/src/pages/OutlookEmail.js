@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useImperativeHandle, forwardRef } from "react";
 import {
   Inbox, Send, Trash2, Edit2, Reply, ReplyAll, Forward, ArrowLeft,
   Mail, MailOpen, Paperclip, Plus, Pencil, FileText, Archive,
@@ -11,6 +11,8 @@ import {
   AtSign, ArrowUpDown,
   MapPin, Video, Link2, Smile, Copy, Globe, Mic, ExternalLink, Bookmark, Lock, Menu,
   CheckCircle2, Image as ImageIcon,
+  Bold, Italic, Underline, Strikethrough, List, ListOrdered,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify, Baseline, Highlighter, RemoveFormatting,
 } from "lucide-react";
 import { FiTrash2 } from "react-icons/fi";
 import apiClient from "../api/client";
@@ -45,6 +47,18 @@ const META_CLOSE = "[[/META]]";
 // The footer IS the signature block (name, company info, logo); the disclaimer is the legal
 // small print under it. Each is sized on its own.
 const DEFAULT_SIZES = { footer: 15, disclaimer: 11 };
+
+// The signature logo sits to the LEFT of the contact details (name, designation, phone, email),
+// which flow to its right. width/height:auto preserve the aspect ratio while the max-* caps bound
+// it — sized so it's clearly visible without dominating.
+const SIG_LOGO_STYLE = "display:block;width:auto;height:auto;max-width:150px;max-height:100px;";
+
+// Font choices offered by the compose formatting toolbar (mirrors the common Outlook set).
+const TOOLBAR_FONTS = [
+  "Arial", "Calibri", "Times New Roman", "Georgia", "Courier New",
+  "Tahoma", "Verdana", "Trebuchet MS", "Comic Sans MS",
+];
+const TOOLBAR_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48];
 
 function emptyTemplate() {
   return {
@@ -196,6 +210,87 @@ function plainTextToHtml(text) {
   return escapeHtml(text).replace(/\n/g, "<br>");
 }
 
+// The disclaimer used to be plain text and is a rich (formatted) block now — same floating toolbar
+// as the body. Legacy plain-text disclaimers are upgraded so their line breaks survive in the
+// contentEditable; anything already carrying markup is left as-is.
+const looksLikeHtml = (s) => /<[a-z!/][\s\S]*>/i.test(s || "");
+function disclaimerToEditable(s) {
+  if (!s) return "";
+  // Linkify on load so any bare email/URL already shows as a hyperlink in the editor.
+  return autoLinkifyHtml(looksLikeHtml(s) ? s : plainTextToHtml(s));
+}
+
+// The footer/signature is a rich block now (bold name, inline logo, coloured text, hyperlinks) —
+// the same formatting toolbar as the body. A signature already saved as HTML is kept as-is (its
+// logo is inline). A legacy signature is plain text with the logo held separately, so it's folded
+// into one HTML block here: logo first, then the text, matching how a signature reads top-to-bottom.
+// Bare emails/URLs are linkified on load so the signature shows its links immediately.
+function footerToEditable(footer, logo) {
+  if (looksLikeHtml(footer)) return autoLinkifyHtml(footer);
+  const text = footer || "";
+  if (!text && !logo) return "";
+  const logoHtml = logo ? `<img src="${logo}" alt="logo" style="${SIG_LOGO_STYLE}" /><br>` : "";
+  return autoLinkifyHtml(logoHtml + plainTextToHtml(text));
+}
+
+// Turn bare email addresses and web URLs anywhere in an HTML fragment into real clickable links,
+// so a signature/body that just types "name@company.com" or "www.site.com" is sent as a hyperlink.
+// Only plain text is touched — text already inside an <a> (or in code/pre) is left alone, so
+// existing links are never doubled up. Runs on the editor's own DOM parse, matching how the browser
+// tokenises the content.
+const LINKIFY_TOKEN = /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|((?:https?:\/\/|www\.)[^\s<>]+)/g;
+function autoLinkifyHtml(html) {
+  const s = String(html || "");
+  if (!s || typeof DOMParser === "undefined") return s;
+  const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
+  const root = doc.body;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    if (!n.nodeValue || !LINKIFY_TOKEN.test(n.nodeValue)) { LINKIFY_TOKEN.lastIndex = 0; continue; }
+    LINKIFY_TOKEN.lastIndex = 0;
+    let p = n.parentNode, skip = false;
+    while (p && p !== root) {
+      const nm = p.nodeName;
+      if (nm === "A" || nm === "PRE" || nm === "CODE" || nm === "SCRIPT" || nm === "STYLE" || nm === "BUTTON") { skip = true; break; }
+      p = p.parentNode;
+    }
+    if (!skip) targets.push(n);
+  }
+  let changed = false;
+  for (const n of targets) {
+    const text = n.nodeValue;
+    LINKIFY_TOKEN.lastIndex = 0;
+    const frag = doc.createDocumentFragment();
+    let last = 0, m;
+    while ((m = LINKIFY_TOKEN.exec(text)) !== null) {
+      const start = m.index;
+      let matched = m[0];
+      // Keep trailing sentence punctuation out of the link ("visit site.com." → link + ".").
+      const trail = (matched.match(/[.,;:!?)\]}'"]+$/) || [""])[0];
+      if (trail) matched = matched.slice(0, matched.length - trail.length);
+      if (!matched) continue;
+      if (start > last) frag.appendChild(doc.createTextNode(text.slice(last, start)));
+      const a = doc.createElement("a");
+      const href = m[1]
+        ? `mailto:${matched}`
+        : (/^https?:\/\//i.test(matched) ? matched : `https://${matched}`);
+      a.setAttribute("href", href);
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+      a.textContent = matched;
+      frag.appendChild(a);
+      if (trail) frag.appendChild(doc.createTextNode(trail));
+      last = start + m[0].length;
+      changed = true;
+    }
+    if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
+    if (n.parentNode) n.parentNode.replaceChild(frag, n);
+  }
+  return changed ? root.innerHTML : s;
+}
+
 // Templates are now composed as ONE rich body (like Outlook), so a legacy template that still
 // carries its footer/logo/disclaimer in separate blocks is folded into a single HTML body when
 // opened for edit/preview. The layout mirrors exactly how those blocks are assembled on send
@@ -210,18 +305,25 @@ function mergeLegacyBlocksIntoBody(parsed) {
   const disclaimer = parsed.disclaimer || "";
   const disclaimerSize = Number(parsed.disclaimerSize) || DEFAULT_SIZES.disclaimer;
   if (footer || logo) {
-    const textHtml = asHtml(footer);
-    out += logo
-      ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
-        + `<td valign="middle" style="vertical-align:middle;padding-right:14px;"><img src="${logo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
-        + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
-        + `</tr></table>`
-      : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+    if (looksLikeHtml(footer)) {
+      // Rich signature: logo and formatting are inline in the HTML.
+      out += `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${sanitizeBodyHtml(footer)}</div>`;
+    } else {
+      const textHtml = asHtml(footer);
+      out += logo
+        ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
+          + `<td valign="middle" style="vertical-align:middle;padding-right:16px;"><img src="${logo}" alt="logo" style="${SIG_LOGO_STYLE}" /></td>`
+          + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
+          + `</tr></table>`
+        : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+    }
   }
   if (disclaimer) {
-    out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${asHtml(disclaimer)}</div>`;
+    const discHtml = looksLikeHtml(disclaimer) ? sanitizeBodyHtml(disclaimer) : asHtml(disclaimer);
+    out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${discHtml}</div>`;
   }
-  return out;
+  // Any bare email/URL in the body or signature is rendered as a clickable link in the preview.
+  return autoLinkifyHtml(out);
 }
 
 function readFileAsDataUrl(file) {
@@ -300,12 +402,16 @@ function extractInlineImages(html) {
 // A contenteditable body: images can be pasted or dropped straight in, alongside text.
 // The value is HTML; it's only written back into the DOM when it changes from the outside,
 // otherwise React would reset the caret to the start on every keystroke.
-function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassName, onError, onDropHandled, minHeight = 200 }) {
+const RichBodyEditor = forwardRef(function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassName, onError, onDropHandled, minHeight = 200, showToolbar = true, dockedToolbar = false, autoLink = false, imageMaxWidth = 1500, dark = false }, forwardedRef) {
   const ref = useRef(null);
+  const wrapRef = useRef(null);   // positioning context for the floating toolbar
+  const floatRef = useRef(null);  // the floating toolbar element (measured to place it)
   // null (not "") so the first run always writes: the editor is mounted with the template
   // already loaded, and React renders no children into a contenteditable.
   const lastHtml = useRef(null);
   const [isEmpty, setIsEmpty] = useState(!value);
+  // The selection rectangle (relative to the wrapper) that the toolbar hovers over; null hides it.
+  const [selBox, setSelBox] = useState(null);
 
   useEffect(() => {
     const el = ref.current;
@@ -324,6 +430,166 @@ function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassN
     setIsEmpty(!el.textContent.trim() && !el.querySelector("img"));
     onChange(el.innerHTML);
   }, [onChange]);
+
+  // On blur, turn any bare email/URL the user typed into a real link (opt-in via autoLink). Done on
+  // blur (not per keystroke) so it never fights the caret while typing; the editor is unfocused here,
+  // so replacing its HTML is safe.
+  const handleBlur = useCallback(() => {
+    const el = ref.current;
+    if (el && autoLink) {
+      const linked = autoLinkifyHtml(el.innerHTML);
+      if (linked !== el.innerHTML) el.innerHTML = linked;
+    }
+    emit();
+  }, [autoLink, emit]);
+
+  // ── Formatting toolbar plumbing ──────────────────────────────────────────
+  // The caret is remembered whenever focus is about to leave the editor for a
+  // toolbar control (a <select>, a colour picker, the link prompt) so the command
+  // can be applied to what the user had selected, not to an empty collapsed range.
+  const savedRange = useRef(null);
+  const saveSelection = useCallback(() => {
+    const el = ref.current;
+    const sel = window.getSelection();
+    if (el && sel && sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      if (el.contains(r.commonAncestorContainer)) savedRange.current = r.cloneRange();
+    }
+  }, []);
+  const restoreSelection = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (savedRange.current && sel) { sel.removeAllRanges(); sel.addRange(savedRange.current); }
+  }, []);
+
+  // execCommand is deprecated but is the only broadly-supported way to format a
+  // contentEditable, and every tag/attr it emits (b, i, u, span[style], font,
+  // ul/ol/li, a) is already on the mail-safe allowlist in sanitizeBodyHtml.
+  // styleWithCSS keeps the output as inline styles on spans, so nothing (e.g.
+  // strikethrough's <strike>) falls outside that allowlist.
+  const runCommand = useCallback((command, arg = null, keepSelection = false) => {
+    const el = ref.current;
+    if (!el) return;
+    if (keepSelection) restoreSelection(); else el.focus();
+    try { document.execCommand("styleWithCSS", false, true); } catch (e) { /* ignore */ }
+    try { document.execCommand(command, false, arg); } catch (e) { /* ignore */ }
+    emit();
+  }, [emit, restoreSelection]);
+
+  // execCommand("fontSize") only understands the legacy 1–7 scale, so a real px
+  // size is applied by tagging the run with the sentinel size 7 and rewriting it.
+  const applyFontSize = useCallback((px) => {
+    const el = ref.current;
+    if (!el) return;
+    restoreSelection();
+    // styleWithCSS is a persistent document flag; other toolbar commands leave it ON, which would
+    // make fontSize emit a keyword-sized span instead of the <font size="7"> element this relies on.
+    try { document.execCommand("styleWithCSS", false, false); } catch (e) { /* ignore */ }
+    try { document.execCommand("fontSize", false, "7"); } catch (e) { /* ignore */ }
+    el.querySelectorAll('font[size="7"]').forEach((f) => {
+      f.removeAttribute("size");
+      f.style.fontSize = `${px}px`;
+    });
+    emit();
+  }, [emit, restoreSelection]);
+
+  const applyHighlight = useCallback((color) => {
+    const el = ref.current;
+    if (!el) return;
+    restoreSelection();
+    try { document.execCommand("styleWithCSS", false, true); } catch (e) { /* ignore */ }
+    // hiliteColor is the standard command; Chrome only honours it with styleWithCSS
+    // on, and a few engines still need backColor — try that as a fallback.
+    let ok = false;
+    try { ok = document.execCommand("hiliteColor", false, color); } catch (e) { ok = false; }
+    if (!ok) { try { document.execCommand("backColor", false, color); } catch (e) { /* ignore */ } }
+    emit();
+  }, [emit, restoreSelection]);
+
+  const applyLink = useCallback(() => {
+    saveSelection();
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString() : "";
+    // eslint-disable-next-line no-alert
+    const url = window.prompt("Enter the link URL:", "https://");
+    if (url == null) return;
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const href = /^(https?:|mailto:)/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    restoreSelection();
+    if (selectedText.trim()) {
+      try { document.execCommand("createLink", false, href); } catch (e) { /* ignore */ }
+    } else {
+      const safeHref = href.replace(/"/g, "&quot;");
+      const safeText = href.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      try {
+        document.execCommand("insertHTML", false,
+          `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeText}</a>`);
+      } catch (e) { /* ignore */ }
+    }
+    // New links open in a new tab and can't reach window.opener.
+    const el = ref.current;
+    if (el) el.querySelectorAll("a[href]").forEach((a) => {
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+    });
+    emit();
+  }, [emit, saveSelection, restoreSelection]);
+
+  // The toolbar only appears while there is a real (non-empty, in-editor) text selection, and it
+  // floats just above that selection — so it's computed from the current selection rectangle.
+  const syncToolbar = useCallback(() => {
+    if (!showToolbar) return;
+    const el = ref.current, wrap = wrapRef.current;
+    if (!el || !wrap) return;
+    // Keep the bar up while the user is actually using one of its controls (a <select> or colour
+    // picker takes focus and can collapse the selection) — that focus lives inside the bar itself.
+    const usingToolbar = floatRef.current && document.activeElement && floatRef.current.contains(document.activeElement);
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) { if (!usingToolbar) setSelBox(null); return; }
+    const range = sel.getRangeAt(0);
+    const withinEditor = el.contains(range.commonAncestorContainer);
+    // Remember the caret even when it's just a click (collapsed) so an insert (e.g. the logo button)
+    // lands exactly where the cursor is, not at the end.
+    if (withinEditor) savedRange.current = range.cloneRange();
+    if (sel.isCollapsed || !withinEditor || !sel.toString().trim()) {
+      if (!usingToolbar) setSelBox(null);
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    setSelBox({
+      top: rect.top - wrapRect.top,
+      bottom: rect.bottom - wrapRect.top,
+      left: rect.left - wrapRect.left,
+      width: rect.width,
+    });
+  }, [showToolbar]);
+
+  useEffect(() => {
+    if (!showToolbar) return undefined;
+    const onSelChange = () => syncToolbar();
+    document.addEventListener("selectionchange", onSelChange);
+    return () => document.removeEventListener("selectionchange", onSelChange);
+  }, [showToolbar, syncToolbar]);
+
+  // Place the floating bar once it's rendered: centred over the selection and above it, flipping
+  // below when there's no room, and clamped to the editor's width so it never spills out the side.
+  useLayoutEffect(() => {
+    const bar = floatRef.current, wrap = wrapRef.current;
+    if (!bar || !wrap || !selBox) return;
+    const tw = bar.offsetWidth, th = bar.offsetHeight;
+    const wrapW = wrap.clientWidth;
+    let left = selBox.left + selBox.width / 2 - tw / 2;
+    left = Math.max(4, Math.min(left, wrapW - tw - 4));
+    let top = selBox.top - th - 4;
+    if (top < 0) top = selBox.bottom + 4;
+    bar.style.left = `${left}px`;
+    bar.style.top = `${top}px`;
+  }, [selBox]);
 
   const insertHtmlAtCaret = useCallback((html) => {
     const el = ref.current;
@@ -348,13 +614,27 @@ function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassN
     emit();
   }, [emit]);
 
+  // Imperative API for callers that hold a ref (e.g. the template editor's "Add logo" button):
+  // restore the last in-editor caret, then insert the HTML there — so the logo lands wherever the
+  // cursor was, not at the end.
+  const insertHtmlAtSavedCaret = useCallback((html) => {
+    restoreSelection();
+    insertHtmlAtCaret(html);
+  }, [restoreSelection, insertHtmlAtCaret]);
+  useImperativeHandle(forwardedRef, () => ({
+    focus: () => { const el = ref.current; if (el) el.focus(); },
+    insertHtml: insertHtmlAtSavedCaret,
+  }), [insertHtmlAtSavedCaret]);
+
   const insertImageFiles = useCallback(async (files) => {
     for (const f of files) {
-      const dataUrl = await compressImageToDataUrl(f);
+      // Signature editors cap images small (they're logos); the body keeps the large default.
+      const dataUrl = await compressImageToDataUrl(f, imageMaxWidth);
       if (!dataUrl) { onError && onError(`Could not read "${f.name || "image"}"`); continue; }
-      insertHtmlAtCaret(`<img src="${dataUrl}" alt="" style="max-width:100%;height:auto;" />`);
+      const style = imageMaxWidth <= 400 ? SIG_LOGO_STYLE : "max-width:100%;height:auto;";
+      insertHtmlAtCaret(`<img src="${dataUrl}" alt="" style="${style}" />`);
     }
-  }, [insertHtmlAtCaret, onError]);
+  }, [insertHtmlAtCaret, onError, imageMaxWidth]);
 
   const imagesFrom = (dt) => {
     const files = Array.from(dt.files || []).filter((f) => f.type.startsWith("image/"));
@@ -389,58 +669,253 @@ function RichBodyEditor({ value, onChange, placeholder, className, wrapperClassN
     insertImageFiles(imgs);
   };
 
+  const toolbar = (
+    <FormatToolbar
+      dark={dark}
+      onCommand={(cmd, arg) => runCommand(cmd, arg)}
+      onFont={(family) => runCommand("fontName", family, true)}
+      onFontSize={applyFontSize}
+      onColor={(color) => runCommand("foreColor", color, true)}
+      onHighlight={applyHighlight}
+      onLink={applyLink}
+      onSaveSelection={saveSelection}
+    />
+  );
+
   return (
     // min-w-0 + max-w-full: as a flex child the wrapper must be allowed to shrink, otherwise a
     // wide pasted image/table forces it past the compose box and the content spills out the side.
-    <div className={`relative flex flex-col min-w-0 max-w-full ${wrapperClassName || ""}`}>
-      <div
-        ref={ref}
-        contentEditable
-        suppressContentEditableWarning
-        role="textbox"
-        aria-multiline="true"
-        onInput={emit}
-        onBlur={emit}
-        onPaste={handlePaste}
-        onDrop={handleDrop}
-        style={{ minHeight }}
-        // Everything is capped to the box width so pasted Outlook/Word content (fixed-width
-        // banners, tables, images) fits instead of overflowing; anything still too wide (a rigid
-        // table) scrolls horizontally inside the box via overflow-x-auto rather than breaking the
-        // layout. break-words also wraps long unbroken strings/URLs.
-        className={`${className || ""} break-words overflow-x-auto [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto`}
-      />
-      {isEmpty && placeholder && (
-        <span className="pointer-events-none absolute left-4 top-3 text-sm text-gray-400 select-none">
-          {placeholder}
-        </span>
+    // `relative` makes it the positioning context for the floating toolbar.
+    <div ref={wrapRef} className={`relative flex flex-col min-w-0 max-w-full ${wrapperClassName || ""}`}>
+      {/* Docked (always-visible) toolbar — used for the signature/footer, where formatting is the
+          whole point, so it's handier than the select-to-reveal floating bar. */}
+      {dockedToolbar && (
+        <div className="mb-2 flex overflow-x-auto">
+          {toolbar}
+        </div>
       )}
+      {/* Inner relative box so the placeholder + floating toolbar sit over the editable, not the
+          docked bar above it. */}
+      <div className="relative flex flex-col grow min-w-0 max-w-full">
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          onInput={emit}
+          onBlur={handleBlur}
+          onPaste={handlePaste}
+          onDrop={handleDrop}
+          style={{ minHeight }}
+          // Everything is capped to the box width so pasted Outlook/Word content (fixed-width
+          // banners, tables, images) fits instead of overflowing; anything still too wide (a rigid
+          // table) scrolls horizontally inside the box via overflow-x-auto rather than breaking the
+          // layout. break-words also wraps long unbroken strings/URLs.
+          // The list-* / pl-* rules restore bullets and numbers that Tailwind's Preflight strips from
+          // <ul>/<ol> — without them insertUnorderedList/insertOrderedList add a list with no marker.
+          className={`${className || ""} break-words overflow-x-auto [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_ul]:my-1 [&_ol]:my-1 [&_li]:mb-0.5`}
+        />
+        {isEmpty && placeholder && (
+          <span className="pointer-events-none absolute left-4 top-3 text-sm text-gray-400 select-none whitespace-pre-line">
+            {placeholder}
+          </span>
+        )}
+        {/* Floating formatting toolbar — only while text is selected, hovering above the selection.
+            Suppressed when the docked bar is shown, so they never both appear. */}
+        {showToolbar && !dockedToolbar && selBox && (
+          <div ref={floatRef} className="absolute z-30" style={{ top: 0, left: 0 }}>
+            {toolbar}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// The Outlook-style formatting toolbar for the compose/template body. Buttons use onMouseDown +
+// preventDefault so clicking one never blurs the editor and the current selection is preserved;
+// the <select>/colour controls do take focus, so they save the caret on mouse-down and the
+// handlers restore it before applying the command.
+function FormatToolbar({ dark, onCommand, onFont, onFontSize, onColor, onHighlight, onLink, onSaveSelection }) {
+  const barStyle = { background: dark ? "#111827" : "#f9fafb", borderColor: "#000000" };
+  const ctrlStyle = { background: dark ? "#1f2937" : "#ffffff", borderColor: dark ? "#374151" : "#d1d5db", color: dark ? "#e5e7eb" : "#374151" };
+  const btnCls = "inline-flex items-center justify-center w-8 h-8 rounded hover:bg-black/10 dark:hover:bg-white/10 transition";
+  const iconColor = dark ? "#e5e7eb" : "#4b5563";
+
+  // A formatting button: preventDefault on mousedown keeps the editor focused/selected.
+  const Btn = ({ title, onClick, children }) => (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      className={btnCls}
+      style={{ color: iconColor }}
+    >
+      {children}
+    </button>
+  );
+  const Sep = () => <span className="mx-1 w-px h-5 self-center" style={{ background: dark ? "#374151" : "#e5e7eb" }} />;
+
+  return (
+    <div
+      className="flex items-center gap-0.5 px-1.5 py-1 border-2 rounded-lg shadow-lg select-none"
+      style={barStyle}
+    >
+      {/* Font family */}
+      <select
+        title="Font"
+        aria-label="Font family"
+        value=""
+        onMouseDown={onSaveSelection}
+        onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) onFont(v); }}
+        className="h-8 px-1.5 text-xs rounded border outline-none cursor-pointer"
+        style={ctrlStyle}
+      >
+        <option value="" disabled>Font</option>
+        {TOOLBAR_FONTS.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+      </select>
+
+      {/* Font size */}
+      <select
+        title="Font size"
+        aria-label="Font size"
+        value=""
+        onMouseDown={onSaveSelection}
+        onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) onFontSize(Number(v)); }}
+        className="h-8 px-1.5 text-xs rounded border outline-none cursor-pointer"
+        style={ctrlStyle}
+      >
+        <option value="" disabled>Size</option>
+        {TOOLBAR_SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+      </select>
+
+      <Sep />
+
+      <Btn title="Bold (Ctrl+B)" onClick={() => onCommand("bold")}><Bold size={16} /></Btn>
+      <Btn title="Italic (Ctrl+I)" onClick={() => onCommand("italic")}><Italic size={16} /></Btn>
+      <Btn title="Underline (Ctrl+U)" onClick={() => onCommand("underline")}><Underline size={16} /></Btn>
+      <Btn title="Strikethrough" onClick={() => onCommand("strikeThrough")}><Strikethrough size={16} /></Btn>
+
+      <Sep />
+
+      {/* Text colour — the swatch label opens a hidden native colour picker. */}
+      <label title="Text color" className={`${btnCls} relative cursor-pointer`} style={{ color: iconColor }} onMouseDown={onSaveSelection}>
+        <Baseline size={16} />
+        <input type="color" defaultValue="#111827" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          onChange={(e) => onColor(e.target.value)} />
+      </label>
+      {/* Highlight colour */}
+      <label title="Highlight color" className={`${btnCls} relative cursor-pointer`} style={{ color: iconColor }} onMouseDown={onSaveSelection}>
+        <Highlighter size={16} />
+        <input type="color" defaultValue="#ffff00" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          onChange={(e) => onHighlight(e.target.value)} />
+      </label>
+
+      <Sep />
+
+      <Btn title="Align left" onClick={() => onCommand("justifyLeft")}><AlignLeft size={16} /></Btn>
+      <Btn title="Align center" onClick={() => onCommand("justifyCenter")}><AlignCenter size={16} /></Btn>
+      <Btn title="Align right" onClick={() => onCommand("justifyRight")}><AlignRight size={16} /></Btn>
+      <Btn title="Justify" onClick={() => onCommand("justifyFull")}><AlignJustify size={16} /></Btn>
+
+      <Sep />
+
+      <Btn title="Bulleted list" onClick={() => onCommand("insertUnorderedList")}><List size={16} /></Btn>
+      <Btn title="Numbered list" onClick={() => onCommand("insertOrderedList")}><ListOrdered size={16} /></Btn>
+
+      <Sep />
+
+      <Btn title="Insert link" onClick={onLink}><Link size={16} /></Btn>
+      <Btn title="Clear formatting" onClick={() => { onCommand("removeFormat"); onCommand("unlink"); }}><RemoveFormatting size={16} /></Btn>
     </div>
   );
 }
 
-// A textarea that grows to fit its text, so the footer/disclaimer never scroll inside
-// themselves — the compose pane does all the scrolling. Re-measures when the font size
-// changes, since that reflows the content.
-function AutoGrowTextarea({ value, onChange, className, style, placeholder }) {
-  const ref = useRef(null);
-  const fontSize = style && style.fontSize;
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value, fontSize]);
+// The Footer (signature) + Disclaimer portions of a template, kept SEPARATE from the message body.
+// The footer is a rich block: the logo is placed inline and the text is formatted (bold name,
+// coloured labels, hyperlinks) with the same floating toolbar as the body — so the whole signature
+// is built exactly as it will be sent (trailingBlocksHtml) and previewed (mergeLegacyBlocksIntoBody).
+function SignatureFooterEditor({ tpl, patch, dark, onError }) {
+  const fileRef = useRef(null);
+  const editorRef = useRef(null);
+  const border = dark ? "border-gray-600" : "border-gray-300";
+  const fieldBg = dark ? "bg-gray-700 text-white placeholder-gray-400" : "bg-white text-gray-900 placeholder-gray-400";
+  const muted = dark ? "text-gray-300" : "text-gray-500";
+
+  // The logo is inserted inline at the current cursor position in the signature (click where you
+  // want it first), so it can sit anywhere between the name/company/email lines. You can also paste
+  // or drag it straight into the editor. Falls back to the end if the cursor isn't in the editor.
+  const readImage = async (file) => {
+    if (!file || !(file.type || "").startsWith("image/")) return;
+    // A signature logo displays at ≤150px, so cap it small (≈2× for sharpness) instead of the 1500px
+    // body default — this keeps the stored template tiny so it saves fast instead of shipping an MB.
+    const dataUrl = await compressImageToDataUrl(file, 320);
+    if (!dataUrl) { if (onError) onError(`Could not read "${file.name || "image"}"`); return; }
+    const img = `<img src="${dataUrl}" alt="logo" style="${SIG_LOGO_STYLE}" />`;
+    if (editorRef.current) editorRef.current.insertHtml(img);
+    else patch({ footer: (tpl.footer || "") + img });
+  };
+
   return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      rows={1}
-      style={style}
-      className={`${className || ""} resize-none overflow-hidden`}
-    />
+    <>
+      <div>
+        <label className={`block text-sm font-medium ${muted} mb-1.5`}>Footer / Signature</label>
+        <p className={`text-xs ${muted} mb-2`}>
+          Build your full signature here — click where you want the logo and press <b>Add logo</b>
+          (or paste/drag it in), then format the text (bold, colour, hyperlinks) with the toolbar
+          that appears when you select it.
+        </p>
+        <div
+          className={`w-full px-4 py-2.5 border ${border} rounded-xl ${fieldBg} focus-within:ring-2 focus-within:ring-blue-500`}
+          style={{ fontSize: `${Number(tpl.footerSize) || DEFAULT_SIZES.footer}px` }}
+        >
+          <RichBodyEditor
+            ref={editorRef}
+            dark={dark}
+            dockedToolbar
+            autoLink
+            imageMaxWidth={320}
+            value={tpl.footer || ""}
+            onChange={(html) => patch({ footer: html })}
+            onError={onError}
+            placeholder={"Your name | Designation\nCompany\n(Email) … | (Mobile) …\n(Web) …"}
+            minHeight={120}
+            wrapperClassName="w-full"
+            className="w-full bg-transparent outline-none border-0 p-0 leading-6"
+          />
+        </div>
+        <div className="mt-2">
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => fileRef.current && fileRef.current.click()}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ${border} ${muted} hover:bg-black/5`}>
+            <ImageIcon size={14} /> Add logo
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; readImage(f); }} />
+      </div>
+      <div>
+        <label className={`block text-sm font-medium ${muted} mb-1.5`}>Disclaimer</label>
+        {/* Rich disclaimer: select text to get the same floating formatting toolbar as the body. */}
+        <div
+          className={`w-full px-4 py-2.5 border ${border} rounded-xl ${fieldBg} focus-within:ring-2 focus-within:ring-blue-500`}
+          style={{ fontSize: `${Number(tpl.disclaimerSize) || DEFAULT_SIZES.disclaimer}px` }}
+        >
+          <RichBodyEditor
+            dark={dark}
+            autoLink
+            value={tpl.disclaimer || ""}
+            onChange={(html) => patch({ disclaimer: html })}
+            onError={onError}
+            placeholder="Legal / confidentiality notice (optional) — shown in small print under the signature."
+            minHeight={40}
+            wrapperClassName="w-full"
+            className="w-full bg-transparent outline-none border-0 p-0 leading-5"
+          />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1010,8 +1485,7 @@ function OutlookEmail({ onToast }) {
   // ── Templates ─────────────────────────────────────────────────────────────
   const [openedTemplateIdx, setOpenedTemplateIdx] = useState(null);
   const [showAddTemplate, setShowAddTemplate] = useState(false);
-  // A template is "assigned" to an email (stored in CreatedBy). That email is the
-  // key used to auto-load a user's template on compose.
+  // A template is "assigned" to an email (stored in CreatedBy) — the owner who can see and use it.
   const loggedInEmail = (typeof window !== "undefined" ? sessionStorage.getItem("userEmail") : "") || "";
   const [newTemplate, setNewTemplate] = useState(emptyTemplate);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1053,9 +1527,10 @@ function OutlookEmail({ onToast }) {
     }
   };
 
-  // ── Default template (auto-loads into a fresh compose) ─────────────────────
+  // ── Default template (a marker/preference only) ────────────────────────────
   // The server clears the flag on the user's other templates, so at most one
-  // template per owner is the default.
+  // template per owner is the default. It is NOT auto-loaded into a compose — the
+  // user always picks a template explicitly from the Templates picker.
   const setDefaultTemplate = async (tpl, makeDefault) => {
     try {
       await apiClient.put(
@@ -1064,7 +1539,7 @@ function OutlookEmail({ onToast }) {
         { headers: { "Content-Type": "application/json" } }
       );
       refreshMyTemplates();
-      showPopup(makeDefault ? "Default template set — it will auto-load on new email" : "Default removed");
+      showPopup(makeDefault ? "Default template set" : "Default removed");
     } catch {
       showPopup("Could not update default template", "error");
     }
@@ -3289,7 +3764,7 @@ function OutlookEmail({ onToast }) {
                           <div className="flex items-center gap-1.5">
                             <p className={`text-sm font-medium truncate ${th.text}`}>{tpl.name || "Untitled template"}</p>
                             {(tpl.isDefault ?? tpl.IsDefault) && (
-                              <Star size={12} className="shrink-0 text-amber-500 fill-amber-500" title="Default — auto-loads on new email" />
+                              <Star size={12} className="shrink-0 text-amber-500 fill-amber-500" title="Your default template" />
                             )}
                           </div>
                         </div>
@@ -3317,7 +3792,7 @@ function OutlookEmail({ onToast }) {
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Assigned to</label>
                               <div className={`px-4 py-2.5 border rounded-xl text-sm ${th.input} opacity-80`}>{loggedInEmail || "you"}</div>
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it. Mark it as default (star) to auto-load it on new email.</p>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>Saved under your account — only you can see and use it. Mark it as default (star) to flag it as your go-to template in the picker.</p>
                             </div>
                             <div>
                               <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Subject</label>
@@ -3327,16 +3802,24 @@ function OutlookEmail({ onToast }) {
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                             </div>
                             <div>
-                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
+                              <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Content Body</label>
                               <RichBodyEditor
+                                dark={isDark}
+                                autoLink
                                 value={newTemplate.body}
                                 onChange={html => setNewTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
                                 onError={msg => showPopup(msg, "error")}
-                                placeholder="Compose the whole email here — greeting, message, your signature, logo and disclaimer. Paste or drop images right in."
-                                minHeight={320}
+                                placeholder="Compose the message here — greeting and body. Add your signature, logo and disclaimer in the sections below. Paste or drop images right in."
+                                minHeight={280}
                                 className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                              <p className={`text-xs ${th.textMuted} mt-1`}>Just like Outlook: build the entire email in this one box. Paste (Ctrl+V) or drop an image (logo, banner, screenshot) to place it inline — images are auto-compressed.</p>
+                              <p className={`text-xs ${th.textMuted} mt-1`}>The message content only. Select text to format it; paste (Ctrl+V) or drop an image to place it inline — images are auto-compressed.</p>
                             </div>
+                            <SignatureFooterEditor
+                              tpl={newTemplate}
+                              patch={(p) => setNewTemplate(prev => ({ ...prev, ...p }))}
+                              dark={isDark}
+                              onError={msg => showPopup(msg, "error")}
+                            />
                             <div className="flex gap-3 flex-wrap">
                               <button type="submit" disabled={isSubmitting}
                                 className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
@@ -3392,16 +3875,24 @@ function OutlookEmail({ onToast }) {
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
                               </div>
                               <div>
-                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Body</label>
+                                <label className={`block text-sm font-medium ${th.textMuted} mb-1.5`}>Content Body</label>
                                 <RichBodyEditor
+                                  dark={isDark}
+                                  autoLink
                                   value={editTemplate.body}
                                   onChange={html => setEditTemplate(p => ({ ...p, body: html, bodyHtml: true }))}
                                   onError={msg => showPopup(msg, "error")}
-                                  placeholder="Compose the whole email here — greeting, message, your signature, logo and disclaimer. Paste or drop images right in."
-                                  minHeight={320}
+                                  placeholder="Compose the message here — greeting and body. Add your signature, logo and disclaimer in the sections below. Paste or drop images right in."
+                                  minHeight={280}
                                   className={`w-full px-4 py-2.5 border rounded-xl text-sm ${th.input} focus:outline-none focus:ring-2 focus:ring-blue-500`} />
-                                <p className={`text-xs ${th.textMuted} mt-1`}>Just like Outlook: build the entire email in this one box. Paste (Ctrl+V) or drop an image (logo, banner, screenshot) to place it inline — images are auto-compressed.</p>
+                                <p className={`text-xs ${th.textMuted} mt-1`}>The message content only. Select text to format it; paste (Ctrl+V) or drop an image to place it inline — images are auto-compressed.</p>
                               </div>
+                              <SignatureFooterEditor
+                                tpl={editTemplate}
+                                patch={(p) => setEditTemplate(prev => ({ ...prev, ...p }))}
+                                dark={isDark}
+                                onError={msg => showPopup(msg, "error")}
+                              />
                               <div className="flex gap-3 flex-wrap">
                                 <button type="submit" disabled={isSubmitting}
                                   className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-xl transition disabled:opacity-50">
@@ -3432,14 +3923,20 @@ function OutlookEmail({ onToast }) {
                               <button disabled={!tplBodyLoaded} onClick={() => {
                                 const parsed = parseTemplateBody(tpl.body ?? "");
                                 setEditTemplateIdx(openedTemplateIdx);
+                                // Body, footer/signature and disclaimer are edited as SEPARATE rich
+                                // portions. A legacy separate logo is folded inline into the footer
+                                // HTML (footerToEditable), so the signature is one formatted block.
                                 setEditTemplate({
                                   ...emptyTemplate(),
                                   subject: tpl.subject ?? tpl.Subject ?? "",
-                                  // Everything is one rich body now — an older template's separate
-                                  // footer/logo/disclaimer are folded inline so nothing is lost and
-                                  // it's edited exactly as it will be sent.
-                                  body: mergeLegacyBlocksIntoBody(parsed),
+                                  body: parsed.bodyHtml ? sanitizeBodyHtml(parsed.body || "") : plainTextToHtml(parsed.body || ""),
                                   bodyHtml: true,
+                                  footer: footerToEditable(parsed.footer, parsed.logo),
+                                  logo: "",
+                                  disclaimer: disclaimerToEditable(parsed.disclaimer || ""),
+                                  footerSize: Number(parsed.footerSize) || DEFAULT_SIZES.footer,
+                                  disclaimerSize: Number(parsed.disclaimerSize) || DEFAULT_SIZES.disclaimer,
+                                  attachments: parsed.attachments || [],
                                   assignedEmail: tpl.createdBy ?? tpl.CreatedBy ?? "",
                                 });
                               }}
@@ -4282,9 +4779,10 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [ccInput, setCcInput] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  // Set once a rich template is loaded: `body` then holds HTML (with inline images) rather
-  // than plain text, so it must not be newline-escaped again on send.
-  const [bodyIsHtml, setBodyIsHtml] = useState(false);
+  // `body` holds HTML (from the rich editor, a loaded template, or converted plain text) so the
+  // formatting toolbar is always available on a new mail. It's only newline-escaped on send when
+  // this is false, which now only happens for a legacy plain-text path.
+  const [bodyIsHtml, setBodyIsHtml] = useState(true);
   // Per-recipient greeting data: [{ name, email, prefix }] confirmed in the personalize popup
   // (from the Contacts hand-off or a tag selection). When set, each recipient gets their own
   // copy opening with "Dear Mr. <name>,". Empty means a plain, identical send to everyone.
@@ -4419,12 +4917,34 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
     tag.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Removing the selected template clears the content it loaded — subject, body and the
+  // footer/signature + disclaimer blocks — so the compose returns to a blank message, not a
+  // half-emptied one carrying the old template's signature.
+  const clearLoadedTemplate = () => {
+    setSelectedTemplate("");
+    setModalSelectedTemplate("");
+    setSubject("");
+    setBody("");
+    setBodyIsHtml(true);
+    setFooterText("");
+    setFooterLogo("");
+    setFooterSize(DEFAULT_SIZES.footer);
+    setDisclaimerText("");
+    setDisclaimerSize(DEFAULT_SIZES.disclaimer);
+  };
+
   // Handler functions for the modal. Picking a template reflects immediately; tags do NOT —
   // they only resolve to recipients on "Apply", so the whole set can be chosen first and
   // confirmed in one personalize popup (see handleApply).
+  // Toggle behaviour, like the tags: clicking the already-selected template again removes it and
+  // clears its content; clicking a different one switches to it.
   const handleTemplateSelect = (templateName) => {
-    setModalSelectedTemplate(templateName);
-    setSelectedTemplate(templateName);
+    if (modalSelectedTemplate === templateName) {
+      clearLoadedTemplate();
+    } else {
+      setModalSelectedTemplate(templateName);
+      setSelectedTemplate(templateName);
+    }
   };
 
   const handleTagToggle = (tag) => {
@@ -4445,10 +4965,10 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   };
 
   const handleClearAll = () => {
-    setModalSelectedTemplate("");
     setModalSelectedTags([]);
-    setSelectedTemplate("");
     setSelectedTags([]);
+    // Also wipe the template's loaded content, not just the selection.
+    clearLoadedTemplate();
   };
 
   // Get access token from MSAL (redirect-safe, no popup)
@@ -4533,57 +5053,11 @@ useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-select the logged-in user's template for a fresh new email — their
-  // explicit default (IsDefault) first, otherwise matched by the user's EMAIL
-  // appearing in the template (footer/name) or its CreatedBy. Skips
-  // replies/forwards and never overrides a template the user picked themselves.
-  useEffect(() => {
-    if (!templates.length || selectedTemplate) return;
-    const t = replyData?.type;
-    if (t === "reply" || t === "replyAll" || t === "forward") return;
-    if (replyData?.body) return; // "Use Template" already supplied a specific template
-
-    // The logged-in user's email(s): CRM session login and the connected mailbox.
-    const emails = [sessionStorage.getItem("userEmail"), accounts[0]?.username]
-      .map((e) => (e || "").toLowerCase().trim())
-      .filter(Boolean);
-
-    // The user's explicit default (Templates ▸ Set as default) always wins. The
-    // list is already filtered to the logged-in user's own templates, so the
-    // first flagged one is theirs.
-    let match = templates.find((tpl) => (tpl.isDefault ?? tpl.IsDefault) === true);
-
-    // Otherwise: the template that belongs to or carries the logged-in email.
-    if (!match && emails.length) {
-      match = templates.find((tpl) => {
-        const createdBy = (tpl.createdBy ?? tpl.CreatedBy ?? "").toLowerCase();
-        if (emails.includes(createdBy)) return true;
-        const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
-        return emails.some((em) => hay.includes(em));
-      });
-    }
-
-    // Fallback: match by the user's name / email handle if no email match.
-    if (!match) {
-      const name = (accounts[0]?.name || sessionStorage.getItem("userName") || "").toLowerCase().trim();
-      const local = (emails[0] || "").split("@")[0];
-      const tokens = [name, ...name.split(/\s+/), local, ...local.split(/[._-]+/)]
-        .map((s) => s.trim())
-        .filter((s) => s.length >= 3);
-      if (tokens.length) {
-        match = templates.find((tpl) => {
-          const hay = `${tpl.name ?? ""} ${tpl.body ?? tpl.Body ?? ""}`.toLowerCase();
-          return tokens.some((tok) => hay.includes(tok));
-        });
-      }
-    }
-
-    if (match) {
-      setSelectedTemplate(match.name);
-      setModalSelectedTemplate(match.name);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templates, accounts]);
+  // NOTE: A fresh compose starts with an empty subject/body — a full template is only applied when
+  // the user picks one from the Templates button (the picker) or "Use Template". The one exception is
+  // the SIGNATURE: a blank New email auto-loads the footer/logo/address + disclaimer from the user's
+  // DEFAULT template (see the default-signature effect below), so the company address is always
+  // present. Removing the selected template clears the content it loaded (see clearLoadedTemplate).
 
   // Fetch tags on mount (so button shows if there are any tags)
   useEffect(() => {
@@ -4642,10 +5116,11 @@ useEffect(() => {
 
   // The footer/signature and disclaimer blocks and their font sizes, as saved on the template.
   const applyTemplateBlocks = useCallback((parsed) => {
-    setFooterText(parsed.footer);
-    setFooterLogo(parsed.logo);
+    // The logo is folded into the rich footer HTML (inline), so it's no longer tracked separately.
+    setFooterText(footerToEditable(parsed.footer, parsed.logo));
+    setFooterLogo("");
     setFooterSize(parsed.footerSize);
-    setDisclaimerText(parsed.disclaimer);
+    setDisclaimerText(disclaimerToEditable(parsed.disclaimer));
     setDisclaimerSize(parsed.disclaimerSize);
   }, []);
 
@@ -4675,6 +5150,31 @@ useEffect(() => {
     applyTemplateBlocks(parsed);
     if (Array.isArray(parsed.attachments) && parsed.attachments.length) setAttachments(parsed.attachments);
   }, [selectedTemplate, templates]);
+
+  // A blank "New email" now auto-loads the signature (footer/logo/address + disclaimer) from the
+  // user's DEFAULT template, so the company address is always there without picking a template each
+  // time. Only the signature blocks are applied — the subject/body stay empty for the user to write.
+  // Skipped for replies/forwards and for the "Use Template" hand-off (those carry their own content),
+  // and once the compose already has a signature or a template was picked.
+  const defaultSigApplied = useRef(false);
+  useEffect(() => {
+    if (defaultSigApplied.current) return;
+    if (replyData) return;                                   // reply / forward / "Use Template"
+    if (selectedTemplate) return;                            // a template was already chosen
+    if (footerText || footerLogo || disclaimerText) return;  // signature already present
+    if (!templates.length) return;                           // wait for the list to arrive
+    // Prefer the starred default; if none is starred but the user has exactly one template, use it —
+    // so a single-template user gets their signature without having to mark a default.
+    const def = templates.find((t) => (t.isDefault ?? t.IsDefault))
+      || (templates.length === 1 ? templates[0] : null);
+    if (!def) return;
+    defaultSigApplied.current = true;
+    const applySig = (rawBody) => applyTemplateBlocks(parseTemplateBody(rawBody ?? ""));
+    const raw = def.body ?? def.Body;
+    const id = def.templateId ?? def.TemplateId;
+    if (raw != null) applySig(raw);
+    else if (id) fetchTemplateBody(id).then(applySig).catch((err) => console.error("[Email] Failed to load default signature:", err));
+  }, [templates, replyData, selectedTemplate, footerText, footerLogo, disclaimerText, applyTemplateBlocks]);
 
   // On mount, pick up the recipients handed over by the Contacts page (one-shot, cleared after
   // read). The richer key carries each contact's name + Mr./Miss. prefix from the personalize
@@ -4747,7 +5247,9 @@ useEffect(() => {
       } else if (replyData.type === "forward") {
         const plainTextBody = htmlToPlainText(replyData.originalBody);
         const forwardText = `\n\n---\nForwarded message:\nFrom: ${replyData.originalMail.sender}\nTo: ${replyData.originalMail.toEmail}\nDate: ${new Date(replyData.originalMail.receivedDateTime).toLocaleString()}\nSubject: ${replyData.originalMail.subject}\n\n${plainTextBody}`;
-        setBody(forwardText);
+        // Rendered in the rich editor, so the plain text becomes HTML (newlines → <br>).
+        setBody(plainTextToHtml(forwardText));
+        setBodyIsHtml(true);
         setQuoteHtml("");
         if (replyData.attachments && replyData.attachments.length > 0) {
           setAttachments(replyData.attachments);
@@ -4881,24 +5383,30 @@ useEffect(() => {
     });
   };
 
-  // Everything under the body, in send order: the footer/signature (logo on the LEFT, vertically
-  // centred against the text on the right) then the disclaimer. Each block carries its own font
-  // size from the template. Both the valign attribute AND vertical-align are set: Outlook
-  // desktop honours one and not always the other, and the logo must sit centred in both.
+  // Everything under the body, in send order: the footer/signature (logo on the LEFT, contact
+  // details top-aligned to its right) then the disclaimer. Each block carries its own font size
+  // from the template. Both the valign attribute AND vertical-align are set: Outlook desktop honours
+  // one and not always the other, so the logo aligns to the top in both.
   const trailingBlocksHtml = () => {
     const asHtml = (s) => (s || "").replace(/\n/g, "<br>").replace(/ {2}/g, "&nbsp;&nbsp;");
     let out = "";
     if (footerText || footerLogo) {
-      const textHtml = asHtml(footerText);
-      out += footerLogo
-        ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
-          + `<td valign="middle" style="vertical-align:middle;padding-right:14px;"><img src="${footerLogo}" alt="logo" style="display:block;max-width:140px;max-height:90px;" /></td>`
-          + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
-          + `</tr></table>`
-        : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+      if (looksLikeHtml(footerText)) {
+        // Rich signature: the logo and formatting are inline in the HTML — sanitise and drop it in.
+        out += `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${sanitizeBodyHtml(footerText)}</div>`;
+      } else {
+        const textHtml = asHtml(footerText);
+        out += footerLogo
+          ? `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:18px;"><tr>`
+            + `<td valign="middle" style="vertical-align:middle;padding-right:16px;"><img src="${footerLogo}" alt="logo" style="${SIG_LOGO_STYLE}" /></td>`
+            + `<td valign="middle" style="vertical-align:middle;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</td>`
+            + `</tr></table>`
+          : `<div style="margin-top:18px;font-size:${footerSize}px;color:#374151;line-height:1.6;">${textHtml}</div>`;
+      }
     }
     if (disclaimerText) {
-      out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${asHtml(disclaimerText)}</div>`;
+      const discHtml = looksLikeHtml(disclaimerText) ? sanitizeBodyHtml(disclaimerText) : asHtml(disclaimerText);
+      out += `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:${disclaimerSize}px;font-style:italic;color:#9ca3af;line-height:1.5;">${discHtml}</div>`;
     }
     return out;
   };
@@ -4936,18 +5444,11 @@ useEffect(() => {
     e.preventDefault();
     setIsSending(true);
 
-    // Parse inputs into arrays (include any address still being typed), split on comma/semicolon/space.
+    // Parse recipients (including any address still being typed). Invalid ones (bad @/domain/TLD or
+    // typo domain) are handled downstream as bounces — we only stop here if there's no valid
+    // recipient / no subject / no body. The actual send is done by the footer-only engine below.
     const toEmailsRaw = allToEmails;
-    const ccEmailsRaw = parseEmails(ccInput);
-
-    // Validate every address. Invalid ones (bad @/domain/TLD or typo domain) are SKIPPED, not blocked —
-    // the valid ones still send. We only stop if there's no valid recipient / no subject / no body.
     const toEmails = toEmailsRaw.filter((addr) => !looksBounceableEmail(addr));
-    const ccEmails = ccEmailsRaw.filter((addr) => !looksBounceableEmail(addr));
-    const skipped = [
-      ...toEmailsRaw.filter((addr) => looksBounceableEmail(addr)),
-      ...ccEmailsRaw.filter((addr) => looksBounceableEmail(addr)),
-    ];
 
     let validationErrors = {};
     if (toEmailsRaw.length === 0) validationErrors.to = "At least one recipient is required";
@@ -4982,194 +5483,25 @@ useEffect(() => {
       return;
     }
 
-    // Prepare attachments for Microsoft Graph API
-    let attachmentsPayload = [];
-    try {
-      for (const file of attachments) {
-        // Template/reply attachments arrive already base64-encoded ({name, contentBytes});
-        // freshly-picked files are File objects that need reading.
-        if (file && file.contentBytes) {
-          attachmentsPayload.push({
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            name: file.name,
-            contentBytes: file.contentBytes,
-            contentType: file.contentType || "application/octet-stream",
-          });
-        } else {
-          const base64 = await fileToBase64(file);
-          attachmentsPayload.push({
-            "@odata.type": "#microsoft.graph.fileAttachment",
-            name: file.name,
-            contentBytes: base64,
-          });
-        }
-      }
-
-      for (const file of images) {
-        const base64 = await fileToBase64(file);
-        attachmentsPayload.push({
-          "@odata.type": "#microsoft.graph.fileAttachment",
-          name: file.name,
-          contentBytes: base64,
-        });
-      }
-    } catch (error) {
-      console.error("Error converting files to base64:", error);
-      setErrors({ apiError: "Failed to process attachments/images" });
-      setIsSending(false);
-      return;
-    }
-
-    // Build the final HTML, then lift any inline (pasted) images out into CID attachments.
-    const userHtml = bodyHtmlForSend();
-    const composedHtml = quoteHtml
-      ? `${userHtml}${trailingBlocksHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
-      : `${userHtml}${trailingBlocksHtml()}`;
-    const { html: finalHtml, attachments: inlineAttachments } = extractInlineImages(composedHtml);
-    attachmentsPayload = attachmentsPayload.concat(inlineAttachments);
-
-    // Personalized send — each recipient's copy opens with their own "Dear Mr. <name>," so one
-    // shared message isn't possible; every person needs their own. Sent in batches of
-    // SEND_BATCH_SIZE rather than firing the whole list at Graph back to back.
-    if (needsPersonalizedSend(toEmails)) {
-      let sent = 0, failed = 0;
-      setSendProgress({ done: 0, total: toEmails.length });
-      for (let start = 0; start < toEmails.length; start += SEND_BATCH_SIZE) {
-        const batch = toEmails.slice(start, start + SEND_BATCH_SIZE);
-        for (const addr of batch) {
-          const perRecipient = {
-            subject,
-            body: { contentType: "HTML", content: htmlForRecipient(addr, finalHtml) },
-            toRecipients: [{ emailAddress: { address: addr } }],
-            // CC rides on the first copy only — on every copy it would mail the CC'd person
-            // once per recipient.
-            ccRecipients: (sent + failed === 0 && ccEmails.length > 0)
-              ? ccEmails.map((a) => ({ emailAddress: { address: a } }))
-              : [],
-          };
-          if (attachmentsPayload.length > 0) perRecipient.attachments = attachmentsPayload;
-          try {
-            const r = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ message: perRecipient, saveToSentItems: true }),
-            });
-            if (r.ok || r.status === 202) sent++; else failed++;
-          } catch { failed++; }
-          setSendProgress({ done: sent + failed, total: toEmails.length });
-        }
-      }
-      setSendProgress(null);
-      setIsSending(false);
-      if (sent === 0) {
-        setErrors({ apiError: "Could not send to any recipient. Check your Outlook connection and try again." });
-        return;
-      }
-      const skipNote = skipped.length > 0
-        ? ` ${skipped.length} invalid address${skipped.length === 1 ? "" : "es"} skipped.`
-        : "";
-      const failNote = failed > 0 ? ` ${failed} failed.` : "";
-      const ccNote = ccEmails.length > 0 ? " CC was included on the first copy only." : "";
-      setSuccessMessage(`Sent ${sent} personalized email${sent === 1 ? "" : "s"}.${failNote}${skipNote}${ccNote}`);
-      setErrors({});
-      setToInput(""); setCcInput(""); setSubject(""); setBody(""); setBodyIsHtml(false);
-      setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
-      setAttachments([]); setImages([]); setPersonalized([]);
-      setFooterText(""); setFooterLogo(""); setDisclaimerText("");
-      try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
-      if (typeof onMailSent === "function") onMailSent({ subject, body, to: toEmails, cc: ccEmails });
-      setTimeout(() => onClose(), 1200);
-      return;
-    }
-
-    // Normal send — ONE message to all recipients, no tracking. The sent copy is filed into the
-    // user's CRM Campaign folder (same as tracked campaigns) so sent mail is kept together.
-    // (For open/click tracking, use the Send dropdown → "Send tracked campaign".)
-    try {
-      const message = {
-        subject,
-        body: { contentType: "HTML", content: finalHtml },
-        toRecipients: toEmails.map((addr) => ({ emailAddress: { address: addr } })),
-        ccRecipients: ccEmails.length > 0 ? ccEmails.map((addr) => ({ emailAddress: { address: addr } })) : [],
-      };
-      if (attachmentsPayload.length > 0) message.attachments = attachmentsPayload;
-
-      // Only when the user chose to store this email in the campaign folder do we resolve/create it.
-      // When "Sent Items" is chosen, campaignFolderId stays null → a plain send to Sent Items.
-      const campaignFolderId = saveTarget === "campaign"
-        ? await ensureMailFolderId(accessToken, campaignFolderName)
-        : null;
-
-      let ok = false, errText = "Failed to send email";
-      if (campaignFolderId) {
-        // Draft → send → move so a REAL sent message lands in the folder (not a draft). Stamp a
-        // unique tag on the draft so we can move back exactly THIS sent copy — nothing else.
-        const tag = newCrmTag();
-        const draftRes = await fetch("https://graph.microsoft.com/v1.0/me/messages", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ ...message, singleValueExtendedProperties: [{ id: CRM_TAG_PROP, value: tag }] }),
-        });
-        if (draftRes.ok || draftRes.status === 201) {
-          const draft = await draftRes.json();
-          const mid = draft.id;
-          const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${mid}/send`, {
-            method: "POST", headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          ok = sendRes.ok || sendRes.status === 202;
-          if (ok) {
-            // The draft id is dead after /send — find THIS exact sent copy (by its unique tag) in
-            // Sent Items and move only that one.
-            await moveSentMessageToFolder(accessToken, campaignFolderId, {
-              tag, internetMessageId: draft.internetMessageId,
-            });
-          } else { try { const ed = await sendRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
-        } else { try { const ed = await draftRes.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
-      } else {
-        // No campaign folder available — plain send, kept in Sent Items.
-        const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ message, saveToSentItems: true }),
-        });
-        ok = response.ok || response.status === 202;
-        if (!ok) { try { const ed = await response.json(); errText = ed.error?.message || errText; } catch { /* keep default */ } }
-      }
-
-      if (ok) {
-        const skipNote = skipped.length > 0
-          ? ` ${skipped.length} invalid address${skipped.length === 1 ? "" : "es"} skipped (${skipped.join(", ")}).`
-          : "";
-        setSuccessMessage(`Email sent successfully!${skipNote}`);
-        setErrors({});
-        setToInput(""); setCcInput(""); setSubject(""); setBody(""); setBodyIsHtml(false);
-        setQuoteHtml(""); setSelectedTemplate(""); setSelectedTags([]);
-        setAttachments([]); setImages([]);
-        setFooterText(""); setFooterLogo(""); setDisclaimerText("");
-        try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
-        if (typeof onMailSent === "function") onMailSent({ subject, body, to: toEmails, cc: ccEmails });
-        setIsSending(false);
-        setTimeout(() => onClose(), 1000);
-      } else {
-        console.error("Graph API send error:", errText);
-        setErrors({ apiError: errText });
-        setIsSending(false);
-      }
-    } catch (error) {
-      console.error("Network/parse error when sending email:", error);
-      setErrors({ apiError: error.message || "Failed to send email" });
-      setIsSending(false);
-    }
+    // Every email now carries the Subscribe/Unsubscribe footer and honours opt-outs. That needs a
+    // per-recipient token from the backend, so the send is routed through the browser-driven engine
+    // in FOOTER-ONLY mode: it adds only the Subscribe/Unsubscribe buttons (no open pixel, no click
+    // tracking). All the existing subscribe logic — the tokens, the /email/(un)subscribe confirmation
+    // page the recipient lands on, and the opt-out recording — is reused unchanged.
+    await handleTrackedCampaign({ footerOnly: true });
   };
 
   // Build send payload (shared by schedule + mail merge)
   const buildPayload = () => {
     const toEmails = allToEmails;
     const ccEmails = parseEmails(ccInput);
-    const userHtml = bodyHtmlForSend();
+    // Linkify the body + signature (not the quoted original) so any bare email/URL is sent clickable,
+    // even if the user never blurred the field.
+    const userHtml = autoLinkifyHtml(bodyHtmlForSend());
+    const trailing = autoLinkifyHtml(trailingBlocksHtml());
     const composedHtml = quoteHtml
-      ? `${userHtml}${trailingBlocksHtml()}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
-      : `${userHtml}${trailingBlocksHtml()}`;
+      ? `${userHtml}${trailing}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
+      : `${userHtml}${trailing}`;
     const { html, attachments: inlineAttachments } = extractInlineImages(composedHtml);
     return { toEmails, ccEmails, html, inlineAttachments };
   };
@@ -5256,11 +5588,15 @@ useEffect(() => {
     setTimeout(() => onClose(), 1200);
   };
 
-  // TRACKED CAMPAIGN — sends each recipient their OWN email with a unique open pixel + tracked
-  // links, so opens/clicks/unsubscribes are attributed per person on the Email Tracking page.
-  // Sending is browser-driven (uses your Outlook token), and each outcome is reported back so the
-  // tracking page shows real delivery. The plain Send button (above) does NOT track.
-  const handleTrackedCampaign = async () => {
+  // Browser-driven per-recipient send. Each recipient gets their OWN copy carrying a unique token,
+  // so the Subscribe/Unsubscribe footer works per person and opt-outs are honoured on future sends.
+  //   • footerOnly:true  (the normal Send button) — ONLY the Subscribe/Unsubscribe footer is added;
+  //     no open pixel, no click-link rewriting. The sent copy respects the "store in" choice.
+  //   • footerOnly:false ("Send tracked campaign") — full tracking: open pixel + click tracking +
+  //     footer, attributed per person on the Email Tracking page; copies filed in the campaign folder.
+  // Either way outcomes are reported back so delivery is reflected, and opted-out addresses are
+  // dropped by the backend before sending.
+  const handleTrackedCampaign = async ({ footerOnly = false } = {}) => {
     const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
@@ -5290,6 +5626,8 @@ useEffect(() => {
         // The Subscribe/Unsubscribe buttons land on this app's /email/* pages (always reachable),
         // which record via the working /api path.
         subscribeBaseUrl: window.location.origin,
+        // Footer-only: add just the Subscribe/Unsubscribe footer (no open pixel / click rewriting).
+        footerOnly,
         // Pass the contact behind each address when we know it, so the campaign's recipients are
         // tied to real contacts instead of loose strings (EmailRecipients.ContactId).
         recipients: toEmails.map((e) => {
@@ -5313,10 +5651,12 @@ useEffect(() => {
         || "the backend may not be running";
       setErrors({
         apiError: allSuppressed
-          ? `A tracked campaign skips anyone who has unsubscribed, and ${toEmails.length === 1
-              ? "that recipient has"
-              : `all ${toEmails.length} of these recipients have`} opted out — so there's nobody left to send to. Use the plain Send button (it doesn't track and doesn't filter), or resubscribe them first.`
-          : `Couldn't start the tracked campaign: ${detail}`,
+          ? `${toEmails.length === 1
+              ? "That recipient has"
+              : `All ${toEmails.length} of these recipients have`} unsubscribed, so there's nobody left to send to. Resubscribe them first.`
+          : footerOnly
+            ? `Couldn't send: ${detail}`
+            : `Couldn't start the tracked campaign: ${detail}`,
       });
       setIsSending(false);
       return;
@@ -5324,9 +5664,13 @@ useEffect(() => {
 
     // Get (or create) a dedicated Outlook folder to file campaign copies into, so a large
     // send doesn't pile up in Sent Items / the mailbox. Falls back to Sent Items if unavailable.
+    // A footer-only (normal) send respects the user's "store in" choice; a tracked campaign always
+    // files its copies together in the campaign folder.
     let campaignFolderName = "CRM Campaigns";
     try { campaignFolderName = (localStorage.getItem("_crm_campaign_folder") || "CRM Campaigns").trim() || "CRM Campaigns"; } catch { /* default */ }
-    const campaignFolderId = await ensureMailFolderId(accessToken, campaignFolderName);
+    const campaignFolderId = (!footerOnly || saveTarget === "campaign")
+      ? await ensureMailFolderId(accessToken, campaignFolderName)
+      : null;
 
     // Build the attachment payload once (shared by every recipient). Handles both freshly-picked
     // File objects and pre-encoded template attachments ({name, contentBytes}).
@@ -5379,16 +5723,15 @@ useEffect(() => {
       }
       const message = {
         subject,
-        // item.html is this recipient's tracked copy (pixel + rewritten links); the greeting is
-        // bound from their address back to their contact and sits above it.
+        // item.html is this recipient's copy (footer, plus pixel/rewritten links when tracked); the
+        // greeting is bound from their address back to their contact and sits above it.
         body: { contentType: "HTML", content: htmlForRecipient(item.email, item.html) },
         toRecipients: [{ emailAddress: { address: item.email } }],
         ccRecipients: i === 0 ? ccEmails.map((a) => ({ emailAddress: { address: a } })) : [],
         ...(campaignAttachments.length ? { attachments: campaignAttachments } : {}),
-        // Ask for read + delivery receipts so we can confirm opens/delivery even when
-        // the recipient's client blocks the tracking pixel (images turned off).
-        isReadReceiptRequested: true,
-        isDeliveryReceiptRequested: true,
+        // Only a tracked campaign asks for read + delivery receipts (to confirm opens/delivery even
+        // when the pixel is blocked). A plain footer-only send stays clean — no receipts.
+        ...(footerOnly ? {} : { isReadReceiptRequested: true, isDeliveryReceiptRequested: true }),
       };
       try {
         let ok = false, errMsg = null;
@@ -5459,13 +5802,18 @@ useEffect(() => {
     if (sent > 0 || bounced > 0) {
       const bounceNote = bounced > 0 ? ` ${bounced} bounced (invalid address${bounced === 1 ? "" : "es"}).` : "";
       const sentNote = sent > 0
-        ? `Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}.`
+        ? (footerOnly
+            ? `Email sent to ${sent} recipient${sent !== 1 ? "s" : ""}.`
+            : `Sent & tracking ${sent} of ${results.length} email${results.length !== 1 ? "s" : ""}.`)
         : "No valid addresses to send to.";
-      setSuccessMessage(`${sentNote}${bounceNote} Follow results on the Email Tracking page.`);
+      const tail = footerOnly ? "" : " Follow results on the Email Tracking page.";
+      setSuccessMessage(`${sentNote}${bounceNote}${tail}`);
       setErrors({});
       setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
       setSelectedTags([]); setAttachments([]); setImages([]);
+      setFooterText(""); setFooterLogo(""); setDisclaimerText(""); setPersonalized([]);
       try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
+      if (footerOnly && typeof onMailSent === "function") onMailSent({ subject, to: toEmails, cc: ccEmails });
       setTimeout(() => onClose(), 1500);
     } else {
       setErrors({ apiError: `All sends failed — ${results[0]?.error || "check your Outlook sign-in / permissions."}` });
@@ -5560,11 +5908,13 @@ useEffect(() => {
           onSubmit={handleSubmit}
           className="flex flex-col flex-1 overflow-hidden"
         >
-          {/* Selected template + tags, with the Tags picker button (hidden while picking) */}
-          {!showTemplatesModal && (tags.length > 0 || templates.length > 1) && (
+          {/* Selected template + tags, with the Tags picker button (hidden while picking).
+              Shown whenever there is at least one template — a template is never auto-loaded now,
+              so the user must always be able to open the picker to choose one. */}
+          {!showTemplatesModal && (tags.length > 0 || templates.length > 0) && (
             <div className={`px-4 sm:px-6 py-3 border-b ${isDark ? "bg-blue-900/20 border-blue-800/40" : "bg-blue-50 border-blue-100"}`}>
               <div className="flex items-start gap-3">
-                {templates.length > 1 && (
+                {templates.length > 0 && (
                   <button
                     type="button"
                     onClick={() => { setModalTab("templates"); setShowTemplatesModal(true); }}
@@ -5593,9 +5943,10 @@ useEffect(() => {
                         <span className="truncate max-w-[220px]">{selectedTemplate}</span>
                         <button
                           type="button"
-                          onClick={() => setSelectedTemplate("")}
+                          onClick={clearLoadedTemplate}
                           className="flex-shrink-0 w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-blue-200 font-bold leading-none"
                           aria-label="Remove template"
+                          title="Remove template and clear its content"
                         >
                           ×
                         </button>
@@ -5662,8 +6013,8 @@ useEffect(() => {
                   </div>
                 </div>
 
-                {/* Tabs — Templates and Tags never show at the same time */}
-                {templates.length > 1 && tags.length > 0 && (
+                {/* Tabs — switch between the Templates and Tags pickers when both exist. */}
+                {templates.length > 0 && tags.length > 0 && (
                   <div className={`px-4 sm:px-6 flex gap-4 ${d.surface} border-b ${d.border}`}>
                     <button type="button" onClick={() => setModalTab("templates")}
                       className={`py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${modalTab === "templates" ? "border-blue-500 text-blue-500" : `border-transparent ${d.muted}`}`}>
@@ -5692,8 +6043,8 @@ useEffect(() => {
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4">
-                  {/* Templates Section — its own tab; only when the user has more than one of their own to switch between */}
-                  {modalTab === "templates" && templates.length > 1 && (
+                  {/* Templates Section — shown whenever the user has at least one template to pick. */}
+                  {modalTab === "templates" && templates.length > 0 && (
                     <div className="mb-6">
                       <div className="flex items-center gap-2 mb-3">
                         <FileText size={16} className="text-blue-500 flex-shrink-0" />
@@ -6032,15 +6383,17 @@ useEffect(() => {
                 No overflow-hidden: that would zero the box's content-based minimum height and
                 clip a long body. Without it the box grows and the pane above scrolls. */}
             <div
-              className={`flex flex-col border rounded-lg transition-all focus-within:ring-2 focus-within:ring-slate-500 focus-within:border-transparent ${
+              className={`flex flex-col rounded-lg transition-all ${
                 quoteHtml ? "min-h-[220px]" : "grow min-h-[480px]"
-              } ${isDragging ? "border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
+              } ${isDragging ? "border border-blue-500 " + (isDark ? "bg-blue-900/20" : "bg-blue-50") : d.input}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
               {bodyIsHtml ? (
                 <RichBodyEditor
+                  dark={isDark}
+                  autoLink
                   value={body}
                   onChange={setBody}
                   onError={(msg) => setErrors((p) => ({ ...p, apiError: msg }))}
@@ -6061,28 +6414,40 @@ useEffect(() => {
                   className={`flex-1 w-full resize-none text-base leading-relaxed bg-transparent outline-none border-0 p-3 ${d.text} placeholder-gray-400 ${quoteHtml ? "min-h-[160px]" : "min-h-[340px]"}`}
                 />
               )}
-              {(footerText || footerLogo) && (
-                <div className={`flex gap-3 items-center p-3 border-t ${d.border}`}>
-                  {footerLogo && (
-                    <img src={footerLogo} alt="Company logo" className={`h-16 max-w-[130px] object-contain shrink-0 self-center border-r ${d.border} pr-3`} />
-                  )}
-                  <AutoGrowTextarea
+              {footerText && (
+                // Rich footer/signature: the same floating formatting toolbar as the body. The logo
+                // lives inline in the HTML, so the whole signature (bold name, logo, coloured text,
+                // hyperlinks) is edited and rendered together, exactly as it will be sent.
+                <div className={`p-3 border-t ${d.border}`} style={{ fontSize: `${footerSize}px` }}>
+                  <RichBodyEditor
+                    dark={isDark}
+                    dockedToolbar
+                    autoLink
+                    imageMaxWidth={320}
                     value={footerText}
-                    onChange={(e) => setFooterText(e.target.value)}
-                    placeholder="Footer / signature"
-                    style={{ fontSize: `${footerSize}px` }}
-                    className={`flex-1 w-full bg-transparent outline-none border-0 p-0 self-center leading-6 ${d.text} placeholder-gray-400`}
+                    onChange={setFooterText}
+                    onError={(msg) => setErrors((p) => ({ ...p, apiError: msg }))}
+                    placeholder="Footer / signature — paste your logo inline, format with the toolbar"
+                    minHeight={48}
+                    wrapperClassName="w-full"
+                    className={`w-full bg-transparent outline-none border-0 p-0 leading-6 ${d.text}`}
                   />
                 </div>
               )}
               {disclaimerText && (
-                <div className={`p-3 border-t ${d.border}`}>
-                  <AutoGrowTextarea
+                // Rich disclaimer: the same floating formatting toolbar as the body appears when
+                // text is selected. Font size / italic are set here so the editable inherits them.
+                <div className={`p-3 border-t ${d.border}`} style={{ fontSize: `${disclaimerSize}px`, fontStyle: "italic" }}>
+                  <RichBodyEditor
+                    dark={isDark}
+                    autoLink
                     value={disclaimerText}
-                    onChange={(e) => setDisclaimerText(e.target.value)}
+                    onChange={setDisclaimerText}
+                    onError={(msg) => setErrors((p) => ({ ...p, apiError: msg }))}
                     placeholder="Disclaimer"
-                    style={{ fontSize: `${disclaimerSize}px`, fontStyle: "italic" }}
-                    className={`w-full bg-transparent outline-none border-0 p-0 leading-5 text-gray-400 placeholder-gray-400`}
+                    minHeight={28}
+                    wrapperClassName="w-full"
+                    className={`w-full bg-transparent outline-none border-0 p-0 leading-5 text-gray-400`}
                   />
                 </div>
               )}

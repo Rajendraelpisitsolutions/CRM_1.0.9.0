@@ -118,7 +118,7 @@ namespace Elpis_CRM.Controllers
             {
                 recipientId = r.Id,
                 email = r.Email,
-                html = _tracking.BuildTrackedHtml(dto.Body, r.TrackingToken, baseUrl, subBaseUrl)
+                html = _tracking.BuildTrackedHtml(dto.Body, r.TrackingToken, baseUrl, subBaseUrl, dto.FooterOnly)
             });
 
             return Ok(new { campaignId = campaign.Id, items });
