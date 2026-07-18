@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(git clone https://github.com/PuneetOffice/CRM_17-072026.git d:\\\\CRM_17)",
+      "PowerShell(git init d:\\\\CRM_17)",
+      "PowerShell(git -C d:\\\\CRM_17 remote add origin https://github.com/PuneetOffice/CRM_17-072026.git)",
+      "PowerShell(git -C d:\\\\CRM_17 fetch origin)",
+      "PowerShell(git -C d:\\\\CRM_17 checkout -b main origin/main)",
+      "PowerShell(git -C d:\\\\CRM_17 log --oneline -5)",
+      "PowerShell(npm install --prefix d:\\\\CRM_17\\\\Frontend)",
+      "PowerShell(dotnet restore d:\\\\CRM_17\\\\Backend\\\\Elpis_CRM.csproj)",
+      "PowerShell(npm install --prefix d:\\\\CRM_17)",
+      "PowerShell(dotnet build d:\\\\CRM_17\\\\Backend\\\\Elpis_CRM.csproj --no-restore -clp:ErrorsOnly)",
+      "Read(//d/dev/npm-cache/_logs/**)",
+      "PowerShell(npm install)",
+      "PowerShell(Push-Location d:\\\\CRM_17\\\\Frontend; $env:BABEL_ENV='development'; node -e \"const b=require\\('@babel/core'\\); const fs=require\\('fs'\\); for \\(const f of ['src/pages/OutlookEmail.js','src/components/modals/PersonalizeRecipientsModal.js']\\) { b.parseSync\\(fs.readFileSync\\(f,'utf8'\\), {presets:[require.resolve\\('babel-preset-react-app'\\)], filename:f}\\); console.log\\('OK ' + f\\); }\"; Pop-Location)",
+      "PowerShell(Push-Location d:\\\\CRM_17\\\\Frontend; $env:BABEL_ENV='development'; node -e \"const b=require\\('@babel/core'\\); const fs=require\\('fs'\\); b.parseSync\\(fs.readFileSync\\('src/pages/OutlookEmail.js','utf8'\\), {presets:[require.resolve\\('babel-preset-react-app'\\)], filename:'src/pages/OutlookEmail.js'}\\); console.log\\('OK'\\);\"; Pop-Location)",
+      "Read(//d/CRM_17/Frontend/build/static/js/**)",
+      "Bash(NODE_ENV=development node -e ' *)",
+      "Bash(ls -la Frontend/build 2>/dev/null | head -5; echo ---; stat -c '%y %n' Frontend/build/index.html Frontend/src/pages/OutlookEmail.js 2>/dev/null; echo ---; ls Frontend/build/static/js/*.js 2>/dev/null | head -5)",
+      "Read(//d/CRM_17/**)",
+      "Bash(git ls-remote *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

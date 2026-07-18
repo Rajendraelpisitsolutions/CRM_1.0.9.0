@@ -24,6 +24,36 @@ import PersonalizeRecipientsModal, {
 } from "../components/modals/PersonalizeRecipientsModal";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// An in-flight personalize run (the full recipient list with its Mr./Miss./excluded ticks, the
+// page to resume on, and the tags it came from) is kept in localStorage so it SURVIVES the
+// composer closing or the page reloading — reopening the compose restores the tags and brings
+// the personalize popup straight back with the remaining recipients.
+const PERSONALIZE_RUN_KEY = "_crm_personalize_run";
+// One-shot flag set by the sidebar "Resume Personalize" button: the next compose to mount
+// restores the run's email (subject/tags/body/footer) AND opens the personalize page on top.
+// Without it a new compose starts clean — the saved run is only picked up on request.
+const PERSONALIZE_RESUME_KEY = "_crm_personalize_resume";
+function savePersonalizeRun(rows, startPage, tags, message) {
+  try {
+    // `message` is the composed draft (subject/body/signature…) riding along with the run.
+    // Undefined → keep whatever the saved run already carries, so callers that only know about
+    // recipients (the mail-list resume popup) can't wipe the draft.
+    if (message === undefined) {
+      try { message = JSON.parse(localStorage.getItem(PERSONALIZE_RUN_KEY))?.message ?? null; } catch { message = null; }
+    }
+    try {
+      localStorage.setItem(PERSONALIZE_RUN_KEY, JSON.stringify({ rows, startPage, tags, message }));
+    } catch {
+      // A huge draft (inline images) can blow the storage quota — the recipient state is the
+      // part that must never be lost, so fall back to saving the run without the draft.
+      localStorage.setItem(PERSONALIZE_RUN_KEY, JSON.stringify({ rows, startPage, tags, message: null }));
+    }
+  } catch { /* full/blocked storage is non-fatal */ }
+}
+function clearPersonalizeRun() {
+  try { localStorage.removeItem(PERSONALIZE_RUN_KEY); } catch { /* ignore */ }
+}
 const TRANSPARENT_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 // A template packs a body, a footer, an optional company logo (a data URL), file
@@ -1461,6 +1491,31 @@ function OutlookEmail({ onToast }) {
 
   // ── Compose ───────────────────────────────────────────────────────────────
   const [showCompose, setShowCompose] = useState(false);
+  // An unfinished personalize run (saved by the composer) is surfaced HERE as a sidebar
+  // "Resume Personalize" button — nothing pops up on its own. Clicking the button opens a fresh
+  // compose that restores the run's email (subject/tags/body/footer) and its personalize page.
+  const [resumeRun, setResumeRun] = useState(null); // {rows, startPage, tags}
+  useEffect(() => {
+    if (showCompose) { setResumeRun(null); return; }
+    try {
+      const raw = localStorage.getItem(PERSONALIZE_RUN_KEY);
+      if (!raw) { setResumeRun(null); return; }
+      const run = JSON.parse(raw);
+      const rows = Array.isArray(run?.rows) ? run.rows : [];
+      // Only a run where EVERYONE has been sent is finished — drop it instead of surfacing it.
+      // Unticked-but-unsent people keep it alive; they were left out of a batch, not sent.
+      if (!rows.length || rows.every((r) => r.sent)) { clearPersonalizeRun(); setResumeRun(null); return; }
+      setResumeRun({ rows, startPage: run.startPage || 0, tags: Array.isArray(run.tags) ? run.tags : [] });
+    } catch { setResumeRun(null); }
+  }, [showCompose]);
+  // Bumped by the Resume Personalize button so the compose remounts even if one is already
+  // open — the resume flag is read once, on mount.
+  const [composeKey, setComposeKey] = useState(0);
+  const startResumePersonalize = () => {
+    try { localStorage.setItem(PERSONALIZE_RESUME_KEY, "1"); } catch { /* ignore */ }
+    setComposeKey((k) => k + 1);
+    startCompose();
+  };
   // True while the compose's Templates & Tags panel is open — used to hide the
   // mail list so the bigger template panel + compose can take over that space.
   const [composeTemplatesOpen, setComposeTemplatesOpen] = useState(false);
@@ -2936,11 +2991,17 @@ function OutlookEmail({ onToast }) {
               <span className="font-semibold text-sm">Folders</span>
               <button onClick={() => setShowMobileSidebar(false)} className={`p-2 rounded-lg ${th.hover}`}><X size={16} /></button>
             </div>
-            <div className="p-3 shrink-0">
+            <div className="p-3 shrink-0 space-y-2">
               <button onClick={() => { startCompose(); setShowMobileSidebar(false); }}
                 className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
                 <Plus size={16} />New email
               </button>
+              {resumeRun && (
+                <button onClick={() => { startResumePersonalize(); setShowMobileSidebar(false); }}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
+                  <User size={15} />Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})
+                </button>
+              )}
             </div>
             <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
               {[
@@ -3101,6 +3162,15 @@ function OutlookEmail({ onToast }) {
                         {campaignFolderSaved ? "Saved ✓ — " : ""}Tracked-campaign sends &amp; their replies are filed here (created if new).
                       </p>
                     </div>
+                  )}
+                  {/* An unfinished personalized send is resumed from HERE (nothing pops up on
+                      its own): the old email — subject, tags, body, footer — comes back along
+                      with the personalize page, sent people locked as "Sent ✓". */}
+                  {resumeRun && (
+                    <button onClick={startResumePersonalize}
+                      className="mt-1.5 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3 py-2 rounded-xl transition shadow-sm font-medium">
+                      <User size={15} />Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})
+                    </button>
                   )}
                 </div>
 
@@ -3304,6 +3374,7 @@ function OutlookEmail({ onToast }) {
                     <div className={`flex flex-1 flex-col ${isDark ? "bg-[#1b1a19]" : "bg-[#F3F2F1]"} overflow-hidden min-w-0`}>
                       {showCompose ? (
                         <Email
+                          key={composeKey}
                           inline
                           accessToken={accessToken}
                           onClose={() => { setShowCompose(false); setReplyData(null); }}
@@ -4735,6 +4806,7 @@ function OutlookEmail({ onToast }) {
           </button>
         ))}
       </nav>
+
     </div>
   );
 }
@@ -4789,6 +4861,13 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
   const [personalized, setPersonalized] = useState([]);
   // Non-null while the popup is open for a freshly resolved tag selection.
   const [tagRecipients, setTagRecipients] = useState(null);
+  // The FULL personalize list (every page, with each row's Mr./Miss./excluded state) as it stood
+  // at the last confirm. A tracked-campaign send reopens the popup from this so the next page can
+  // be sent without redoing the tag selection or losing any ticks.
+  const [lastPersonalizeRows, setLastPersonalizeRows] = useState(null);
+  // Which page the personalize popup opens on. After a mid-run send it points at the first page
+  // that still has someone left to send; a fresh tag selection starts back at page 1.
+  const [personalizeStartPage, setPersonalizeStartPage] = useState(0);
   // True while the chosen tags are being resolved to contacts (between Apply and the popup).
   const [tagResolving, setTagResolving] = useState(false);
   // {done, total} while a batched personalized send is in flight.
@@ -5203,6 +5282,72 @@ useEffect(() => {
     } catch (e) {}
   }, []);
 
+  // On mount, resume an unfinished personalize run — but ONLY when the sidebar "Resume
+  // Personalize" button asked for it (one-shot flag). Then the composed email comes back
+  // exactly as it was (subject, body, signature), the old tags come back, and the personalize
+  // page opens with the full list — sent people locked, the rest editable — on the page it
+  // left off. A plain New email (or a Contacts hand-off) starts clean and leaves the saved run
+  // alone. A run with nobody left to send is finished — it's dropped instead of restored.
+  useEffect(() => {
+    try {
+      let wantResume = false;
+      try {
+        wantResume = !!localStorage.getItem(PERSONALIZE_RESUME_KEY);
+        if (wantResume) localStorage.removeItem(PERSONALIZE_RESUME_KEY);
+      } catch { /* ignore */ }
+      const raw = localStorage.getItem(PERSONALIZE_RUN_KEY);
+      if (!raw) return;
+      const run = JSON.parse(raw);
+      const rows = Array.isArray(run?.rows) ? run.rows : [];
+      // Only a run where EVERYONE has been sent is finished. Unticked-but-unsent people keep it
+      // alive — they were left out of a batch, not dealt with.
+      if (!rows.length || rows.every((r) => r.sent)) { clearPersonalizeRun(); return; }
+      if (!wantResume) return;
+      if (Array.isArray(run.tags) && run.tags.length) setSelectedTags(run.tags);
+      setLastPersonalizeRows(rows);
+      setPersonalizeStartPage(run.startPage || 0);
+      // Bring the composed email back exactly as it was mid-run. The default-signature
+      // auto-apply is suppressed so it can't overwrite a restored draft whose signature was
+      // deliberately edited or emptied.
+      const m = run.message;
+      if (m) {
+        defaultSigApplied.current = true;
+        if (m.subject) setSubject(m.subject);
+        if (m.body) { setBody(m.body); setBodyIsHtml(m.bodyIsHtml !== false); }
+        if (m.ccInput) { setCcInput(m.ccInput); setShowCc(true); }
+        if (m.quoteHtml) setQuoteHtml(m.quoteHtml);
+        if (m.footerText) setFooterText(m.footerText);
+        if (m.footerLogo) setFooterLogo(m.footerLogo);
+        if (m.footerSize) setFooterSize(m.footerSize);
+        if (m.disclaimerText) setDisclaimerText(m.disclaimerText);
+        if (m.disclaimerSize) setDisclaimerSize(m.disclaimerSize);
+      }
+      setTagRecipients(rows);
+    } catch (e) { /* a malformed saved run is just ignored */ }
+    // Mount-only by design: the run must be picked up once, when the composer (re)opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The composed draft that rides along with a saved run — everything a resume needs to put the
+  // compose back exactly as the user left it. Attachments are File objects and can't be stored.
+  const draftMessage = () => ({
+    subject, body, bodyIsHtml, ccInput, quoteHtml,
+    footerText, footerLogo, footerSize, disclaimerText, disclaimerSize,
+  });
+
+  // While a run is active, keep the saved run's copy of the draft current (debounced), so a
+  // resume restores whatever the user LAST typed — not the draft as it was at confirm time.
+  useEffect(() => {
+    if (!lastPersonalizeRows || !lastPersonalizeRows.length) return;
+    const t = setTimeout(() => {
+      savePersonalizeRun(lastPersonalizeRows, personalizeStartPage, selectedTags, draftMessage());
+    }, 400);
+    return () => clearTimeout(t);
+    // draftMessage is rebuilt each render; its inputs are what matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, body, bodyIsHtml, ccInput, quoteHtml, footerText, footerLogo, footerSize,
+      disclaimerText, disclaimerSize, lastPersonalizeRows, personalizeStartPage, selectedTags]);
+
   // Convert HTML to plain text while preserving structure
   const htmlToPlainText = (html) => {
     if (!html) return "";
@@ -5560,6 +5705,7 @@ useEffect(() => {
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
     setIsSending(true); setErrors({});
     let sent = 0;
+    const sentAddrs = [];
     setSendProgress({ done: 0, total: toEmails.length });
     // Already one message per person — batched so a long list doesn't hit Graph flat out.
     for (let start = 0; start < toEmails.length; start += SEND_BATCH_SIZE) {
@@ -5577,7 +5723,7 @@ useEffect(() => {
               ...(inlineAttachments.length ? { attachments: inlineAttachments } : {}),
             }}),
           });
-          if (res.ok || res.status === 202) sent++;
+          if (res.ok || res.status === 202) { sent++; sentAddrs.push(addr); }
         } catch {}
         setSendProgress((p) => ({ done: (p?.done || 0) + 1, total: toEmails.length }));
       }
@@ -5585,7 +5731,37 @@ useEffect(() => {
     setSendProgress(null);
     setIsSending(false);
     setSuccessMessage(`Mail merge sent to ${sent} of ${toEmails.length} recipient${toEmails.length !== 1 ? "s" : ""}.`);
-    setTimeout(() => onClose(), 1200);
+    // Same page-per-send rhythm as the other send paths — but ONLY when a personalize run is
+    // actually going: untick everyone just sent so they can't go twice and bring the popup back
+    // on the first page that still has someone left. When the send covered everyone (or no
+    // personalization was on), there's nothing to continue — no popup, and a plain merge closes
+    // the composer as it always did.
+    const hadPersonalize = !!((lastPersonalizeRows && lastPersonalizeRows.length) || personalized.length);
+    if (hadPersonalize) {
+      const baseRows = (lastPersonalizeRows && lastPersonalizeRows.length)
+        ? lastPersonalizeRows
+        : personalized;
+      const doneAddrs = new Set(sentAddrs.map((a) => String(a || "").toLowerCase()));
+      const personalizeRows = baseRows.map((r) =>
+        doneAddrs.has(String(r.email || "").toLowerCase()) ? { ...r, prefix: "", sent: true } : r
+      );
+      const firstUnsent = personalizeRows.findIndex((r) => !r.sent);
+      if (firstUnsent === -1) {
+        // Everyone has been sent — the run is over. Drop it so nothing tries to resume it
+        // later; the compose keeps its content and the success message says what happened.
+        clearPersonalizeRun();
+        setLastPersonalizeRows(null);
+      } else {
+        // People are still left: save the run (sent people marked) so the sidebar "Resume
+        // Personalize" button can bring everything back. Nothing pops up on its own.
+        const nextStart = Math.floor(firstUnsent / SEND_BATCH_SIZE);
+        setPersonalizeStartPage(nextStart);
+        setLastPersonalizeRows(personalizeRows);
+        savePersonalizeRun(personalizeRows, nextStart, selectedTags, draftMessage());
+      }
+    } else {
+      setTimeout(() => onClose(), 1200);
+    }
   };
 
   // Browser-driven per-recipient send. Each recipient gets their OWN copy carrying a unique token,
@@ -5790,9 +5966,6 @@ useEffect(() => {
       }
     }
 
-    // 3) Report outcomes so the Email Tracking page reflects delivery.
-    try { await apiClient.post(`/EmailCampaign/${tracked.campaignId}/status`, { results }); } catch (e) {}
-
     const sent = results.filter((r) => r.status === "Sent").length;
     const bounced = results.filter((r) => r.status === "Bounced").length;
     setSendProgress(null);
@@ -5809,15 +5982,59 @@ useEffect(() => {
       const tail = footerOnly ? "" : " Follow results on the Email Tracking page.";
       setSuccessMessage(`${sentNote}${bounceNote}${tail}`);
       setErrors({});
-      setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
-      setSelectedTags([]); setAttachments([]); setImages([]);
-      setFooterText(""); setFooterLogo(""); setDisclaimerText(""); setPersonalized([]);
-      try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
-      if (footerOnly && typeof onMailSent === "function") onMailSent({ subject, to: toEmails, cc: ccEmails });
-      setTimeout(() => onClose(), 1500);
+      // When a personalize run is going, the popup comes STRAIGHT back with the previous data —
+      // the confirmed list with its Mr./Miss./excluded ticks — everyone just sent unticked, on
+      // the first page that still has someone left. Nothing is cleared and the composer stays
+      // open (onMailSent is skipped: it closes the compose pane, which would kill the popup),
+      // so the next page/batch can be confirmed and sent without redoing anything. Once the send
+      // has covered EVERYONE the run is over: no popup, and a plain (non-personalized) send
+      // clears and closes the composer exactly as it always did.
+      const hadPersonalize = !!((lastPersonalizeRows && lastPersonalizeRows.length) || personalized.length);
+      if (hadPersonalize) {
+        const baseRows = (lastPersonalizeRows && lastPersonalizeRows.length)
+          ? lastPersonalizeRows
+          : personalized;
+        // Mark everyone this send just covered as SENT (bounced too — no point re-sending an
+        // invalid address) and untick them so nobody can be emailed twice. People merely left
+        // out of this batch (unticked, never sent) keep the run alive — the panel comes back so
+        // they can be included in a later batch.
+        const doneIds = new Set(results.filter((r) => r.status !== "Failed").map((r) => r.recipientId));
+        const doneAddrs = new Set(
+          tracked.items.filter((it) => doneIds.has(it.recipientId)).map((it) => String(it.email || "").toLowerCase())
+        );
+        const personalizeRows = baseRows.map((r) =>
+          doneAddrs.has(String(r.email || "").toLowerCase()) ? { ...r, prefix: "", sent: true } : r
+        );
+        const firstUnsent = personalizeRows.findIndex((r) => !r.sent);
+        if (firstUnsent === -1) {
+          // Everyone has been sent — the run is over. Drop it so nothing tries to resume it
+          // later; the compose keeps its content and the success message says what happened.
+          clearPersonalizeRun();
+          setLastPersonalizeRows(null);
+        } else {
+          // People are still left: save the run (sent people marked) so the sidebar "Resume
+          // Personalize" button can bring everything back. Nothing pops up on its own.
+          const nextStart = Math.floor(firstUnsent / SEND_BATCH_SIZE);
+          setPersonalizeStartPage(nextStart);
+          setLastPersonalizeRows(personalizeRows);
+          savePersonalizeRun(personalizeRows, nextStart, selectedTags, draftMessage());
+        }
+      } else {
+        setToInput(""); setCcInput(""); setSubject(""); setBody(""); setQuoteHtml("");
+        setSelectedTags([]); setAttachments([]); setImages([]);
+        setFooterText(""); setFooterLogo(""); setDisclaimerText("");
+        try { localStorage.removeItem("selectedContactEmails"); } catch (e) {}
+        if (footerOnly && typeof onMailSent === "function") onMailSent({ subject, to: toEmails, cc: ccEmails });
+        setTimeout(() => onClose(), 1500);
+      }
     } else {
       setErrors({ apiError: `All sends failed — ${results[0]?.error || "check your Outlook sign-in / permissions."}` });
     }
+
+    // 3) Report outcomes so the Email Tracking page reflects delivery. Deliberately AFTER the
+    // popup is opened: this network call can take a moment and must not delay the personalize
+    // page appearing the instant filing finishes.
+    try { await apiClient.post(`/EmailCampaign/${tracked.campaignId}/status`, { results }); } catch (e) {}
   };
 
   // Resolve the chosen tags to their contacts — names included, so each can be greeted
@@ -5862,6 +6079,8 @@ useEffect(() => {
         setErrors((p) => ({ ...p, apiError: `No contacts with an email address carry ${tags.length === 1 ? "that tag" : "those tags"}.` }));
         return;
       }
+      // A fresh tag selection starts a new run — open at page 1.
+      setPersonalizeStartPage(0);
       setTagRecipients(clean);
     } catch (err) {
       console.error("[Email] Failed to load recipients for tags:", tags, err);
@@ -6365,14 +6584,21 @@ useEffect(() => {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setTagRecipients(personalized)}
+                  // Reopen with the FULL list (all pages, ticks intact) when we have it, so
+                  // editing doesn't shrink the popup down to just the page last confirmed.
+                  onClick={() => setTagRecipients(
+                    lastPersonalizeRows && lastPersonalizeRows.length ? lastPersonalizeRows : personalized
+                  )}
                   className="underline hover:no-underline"
                 >
                   Edit
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPersonalized([])}
+                  // Turning personalization off also forgets the saved list (including the
+                  // persisted run) — otherwise the next tracked send would reopen the popup the
+                  // user just opted out of.
+                  onClick={() => { setPersonalized([]); setLastPersonalizeRows(null); clearPersonalizeRun(); }}
                   className="underline hover:no-underline opacity-70"
                 >
                   Turn off
@@ -6798,12 +7024,19 @@ useEffect(() => {
           isDark={isDark}
           title="Personalize tagged recipients"
           confirmLabel="Add to email"
+          initialPage={personalizeStartPage}
           // Cancel just backs out — the tag selection stands, exactly as cancelling leaves the
           // Contacts page's ticks alone. Re-open from the banner or by applying the tags again.
           onCancel={() => setTagRecipients(null)}
-          onConfirm={(chosen) => {
+          onConfirm={(chosen, allRows) => {
             setTagRecipients(null);
             setPersonalized(chosen);
+            // Remember the whole list (all pages, ticks included) so the popup can come straight
+            // back after a tracked send for the next page — and persist it so the run survives
+            // the composer closing.
+            const full = Array.isArray(allRows) && allRows.length ? allRows : null;
+            setLastPersonalizeRows(full);
+            if (full) savePersonalizeRun(full, personalizeStartPage, selectedTags, draftMessage());
             setToInput(chosen.map((r) => r.email).join(", "));
           }}
         />

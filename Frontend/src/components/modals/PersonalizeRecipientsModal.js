@@ -23,12 +23,15 @@ export function greetingFor(recipient) {
 
 // Turns raw contact rows into the shape this modal works with, defaulting everyone to Mr.
 // contactId is carried through untouched so the send can tie each address back to its contact.
+// `sent` marks people a previous batch already covered — they come back unticked and labelled
+// "Sent" (instead of "Will not be emailed"), so a resumed run can't email anyone twice.
 export function toPersonalizedRecipients(rows) {
   return (rows || []).map((r) => ({
     name: (r.name || "").trim(),
     email: (r.email || "").trim(),
     contactId: r.contactId ?? null,
     prefix: r.prefix === undefined ? PREFIX_MR : r.prefix,
+    sent: !!r.sent,
   }));
 }
 
@@ -42,7 +45,9 @@ export function toPersonalizedRecipients(rows) {
  * send: confirm this page, send it, come back and pick the next. This keeps one send to one
  * page of people, which is why page size and batch size are the same number.
  *
- * onConfirm receives: [{ name, email, contactId, prefix }].
+ * onConfirm receives: (pageRecipients, allRows) — the included recipients on the current page
+ * [{ name, email, contactId, prefix }], plus EVERY row with its current prefix/exclusion state.
+ * Callers keep allRows so the popup can be reopened after a send with nothing lost.
  */
 function PersonalizeRecipientsModal({
   isOpen,
@@ -52,11 +57,28 @@ function PersonalizeRecipientsModal({
   isDark = false,
   title = "Personalize recipients",
   confirmLabel = "Continue",
+  // Page to land on when the popup opens — used after a mid-run send so the user arrives at
+  // the first page that still has someone left to send, instead of back at page 1.
+  initialPage = 0,
 }) {
   const [rows, setRows] = useState([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const wasOpen = useRef(false);
+  // How far the dialog has been dragged from its centered position. Grabbing the header with
+  // the cursor moves the whole page anywhere on screen; reset to center on every open.
+  const [drag, setDrag] = useState({ x: 0, y: 0 });
+  const startDrag = (e) => {
+    if (e.button !== undefined && e.button !== 0) return; // left button / touch only
+    const start = { px: e.clientX, py: e.clientY, ox: drag.x, oy: drag.y };
+    const move = (ev) => setDrag({ x: start.ox + ev.clientX - start.px, y: start.oy + ev.clientY - start.py });
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  };
 
   // Load on OPEN only — deliberately not whenever `recipients` changes identity. A caller that
   // passes a freshly built array on each render would otherwise wipe the user's ticks on every
@@ -65,10 +87,11 @@ function PersonalizeRecipientsModal({
     if (isOpen && !wasOpen.current) {
       setRows(toPersonalizedRecipients(recipients));
       setQuery("");
-      setPage(0);
+      setPage(initialPage || 0);
+      setDrag({ x: 0, y: 0 });
     }
     wasOpen.current = isOpen;
-  }, [isOpen, recipients]);
+  }, [isOpen, recipients, initialPage]);
 
   // Search first, then page. One page holds exactly one send batch, so a page IS a shot.
   const matching = useMemo(() => {
@@ -98,14 +121,16 @@ function PersonalizeRecipientsModal({
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, prefix } : r)));
 
   // Bulk actions apply to THIS page only — 150 rows is the unit the user is looking at and
-  // the unit that goes out in one shot.
+  // the unit that goes out in one shot. Rows already SENT are skipped, matching their disabled
+  // checkboxes: someone a previous batch covered can never be re-included.
   const applyToPage = (prefix) => {
-    const targets = new Set(visible.map((r) => r.i));
+    const targets = new Set(visible.filter((r) => !r.sent).map((r) => r.i));
     setRows((prev) => prev.map((r, i) => (targets.has(i) ? { ...r, prefix } : r)));
   };
 
+  const selectableOnPage = visible.filter((r) => !r.sent).length;
   const includedOnPage = visible.filter((r) => r.prefix).length;
-  const allOnPageIncluded = visible.length > 0 && includedOnPage === visible.length;
+  const allOnPageIncluded = selectableOnPage > 0 && includedOnPage === selectableOnPage;
   const someOnPageIncluded = includedOnPage > 0 && !allOnPageIncluded;
   const surface = isDark ? "bg-[#252423] text-gray-100" : "bg-white text-gray-900";
   const border = isDark ? "border-[#3d3b39]" : "border-gray-200";
@@ -119,9 +144,12 @@ function PersonalizeRecipientsModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1500] p-3 sm:p-6">
       {/* Sized to work: 150 rows need room, so this takes most of the viewport rather than a
           narrow dialog you'd scroll forever in. */}
-      <div className={`${surface} rounded-xl shadow-2xl w-full max-w-6xl flex flex-col h-[92vh]`}>
-        {/* Header */}
-        <div className={`px-6 py-3 border-b ${border} shrink-0`}>
+      <div
+        className={`${surface} rounded-xl shadow-2xl w-full max-w-6xl flex flex-col h-[92vh]`}
+        style={{ transform: `translate(${drag.x}px, ${drag.y}px)` }}
+      >
+        {/* Header — grab it with the cursor to move the whole page anywhere on screen. */}
+        <div className={`px-6 py-3 border-b ${border} shrink-0 cursor-move select-none`} onPointerDown={startDrag}>
           <h2 className="text-base font-semibold">{title}</h2>
           <p className={`text-xs ${muted} mt-0.5`}>
             Everyone starts as <strong>Mr.</strong> — switch to <strong>Miss.</strong>, or clear both
@@ -206,23 +234,28 @@ function PersonalizeRecipientsModal({
               {visible.map((r, idx) => {
                 const excluded = !r.prefix;
                 return (
-                  <tr key={`${r.email}-${r.i}`} className={`border-b ${border} ${excluded ? "opacity-40" : ""}`}>
+                  // A SENT row is NOT faded like an excluded one — its "Sent ✓" badge must stay
+                  // clearly readable; the muted name + locked checkboxes already say it's done.
+                  <tr key={`${r.email}-${r.i}`} className={`border-b ${border} ${excluded && !r.sent ? "opacity-40" : ""}`}>
                     {/* Numbering runs across pages, not per page: page 2 starts at 151, so the
                         count reads continuously through the whole list. */}
                     <td className={`pl-6 pr-2 py-2.5 text-right text-xs tabular-nums ${muted}`}>
                       {pageStart + idx + 1}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="font-medium truncate">{r.name || <span className={muted}>— no name —</span>}</div>
+                      <div className={`font-medium truncate ${r.sent ? muted : ""}`}>{r.name || <span className={muted}>— no name —</span>}</div>
                       <div className={`text-xs ${muted} truncate`}>{r.email}</div>
                     </td>
+                    {/* A SENT row is locked — its email already went out, so it can't be ticked
+                        back in and emailed twice. */}
                     <td className="px-3 py-2.5 text-center">
                       <input
                         type="checkbox"
                         aria-label={`Address ${r.email} as Mr.`}
                         checked={r.prefix === PREFIX_MR}
+                        disabled={r.sent}
                         onChange={(e) => setPrefix(r.i, e.target.checked ? PREFIX_MR : "")}
-                        className="w-4 h-4 accent-blue-600 cursor-pointer"
+                        className={`w-4 h-4 accent-blue-600 ${r.sent ? "cursor-not-allowed" : "cursor-pointer"}`}
                       />
                     </td>
                     <td className="px-3 py-2.5 text-center">
@@ -230,12 +263,19 @@ function PersonalizeRecipientsModal({
                         type="checkbox"
                         aria-label={`Address ${r.email} as Miss.`}
                         checked={r.prefix === PREFIX_MISS}
+                        disabled={r.sent}
                         onChange={(e) => setPrefix(r.i, e.target.checked ? PREFIX_MISS : "")}
-                        className="w-4 h-4 accent-blue-600 cursor-pointer"
+                        className={`w-4 h-4 accent-blue-600 ${r.sent ? "cursor-not-allowed" : "cursor-pointer"}`}
                       />
                     </td>
                     <td className={`px-4 py-2.5 text-xs ${excluded ? "" : "italic"}`}>
-                      {excluded ? <span className={muted}>Will not be emailed</span> : greetingFor(r)}
+                      {excluded
+                        ? (r.sent
+                            ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-semibold ${
+                                isDark ? "bg-emerald-900/40 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                              }`}>Sent ✓</span>
+                            : <span className={muted}>Will not be emailed</span>)
+                        : greetingFor(r)}
                     </td>
                   </tr>
                 );
@@ -293,7 +333,9 @@ function PersonalizeRecipientsModal({
               type="button"
               disabled={includedOnPage === 0}
               // THIS PAGE ONLY — `visible`, not `rows`. One send covers one page of people.
-              onClick={() => onConfirm(visible.filter((r) => r.prefix).map(({ i, ...r }) => r))}
+              // `rows` rides along so the caller can reopen this popup mid-run (page 2, 3, …)
+              // with every tick exactly as the user left it.
+              onClick={() => onConfirm(visible.filter((r) => r.prefix).map(({ i, ...r }) => r), rows)}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium whitespace-nowrap"
             >
               {confirmLabel}{includedOnPage > 0 && ` (${includedOnPage})`}
