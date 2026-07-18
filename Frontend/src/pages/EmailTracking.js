@@ -495,7 +495,7 @@ export default function EmailTracking() {
   const o = overview || {};
   const tiles = [
     { metric: "campaigns", label: "Campaigns", value: fmtNum(o.campaigns), sub: `${fmtNum(o.recipients)} recipients` },
-    { metric: "sent", label: "Sent", value: fmtNum(o.sent), sub: o.failed > 0 ? `${fmtNum(o.failed)} failed` : "delivered" },
+    { metric: "sent", label: "Sent", value: fmtNum(o.sent), sub: `of ${fmtNum(o.recipients)} recipient${o.recipients === 1 ? "" : "s"}${o.failed > 0 ? ` · ${fmtNum(o.failed)} failed` : ""}` },
     { metric: "opened", label: "Opened", value: fmtNum(o.opened), sub: `${o.openRate || 0}% open rate` },
     { metric: "bounced", label: "Bounced", value: fmtNum(o.bounced), sub: `${o.bounceRate || 0}% bounce rate` },
     { metric: "replied", label: "Replied", value: fmtNum(o.replied), sub: `${o.replyRate || 0}% reply rate` },
@@ -636,7 +636,7 @@ export default function EmailTracking() {
                           <div className="text-xs truncate" style={{ color: MUTED }}>{c.fromEmail || c.createdBy || "—"}</div>
                         </td>
                         <td className="px-4 py-3.5"><StatusPill status={c.status} /></td>
-                        <td className="px-4 py-3.5 text-right tabular-nums" style={{ color: BODY }}>{fmtNum(c.sentCount)}<span style={{ color: MUTED }}>/{fmtNum(c.totalRecipients)}</span></td>
+                        <td className="px-4 py-3.5 text-right whitespace-nowrap"><span className="font-semibold tabular-nums" style={{ color: M.sent.c }}>{fmtNum(c.sentCount)}</span> <span className="text-xs" style={{ color: MUTED }}>of {fmtNum(c.totalRecipients)}</span></td>
                         <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.opened.c }}>{c.openRate}%</span> <span className="text-xs" style={{ color: MUTED }}>({fmtNum(c.openedCount)})</span></td>
                         <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.bounced.c }}>{fmtNum(c.bouncedCount)}</span> <span className="text-xs" style={{ color: MUTED }}>({c.bounceRate}%)</span></td>
                         <td className="px-4 py-3.5 text-right"><span className="font-semibold tabular-nums" style={{ color: M.replied.c }}>{fmtNum(c.repliedCount)}</span></td>

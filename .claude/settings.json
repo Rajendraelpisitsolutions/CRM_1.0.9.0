@@ -21,7 +21,9 @@
       "Read(//d/CRM_17/**)",
       "Bash(git ls-remote *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
     ]
   }
 }

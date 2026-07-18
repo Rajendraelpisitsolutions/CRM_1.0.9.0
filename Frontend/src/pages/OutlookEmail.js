@@ -34,6 +34,10 @@ const PERSONALIZE_RUN_KEY = "_crm_personalize_run";
 // restores the run's email (subject/tags/body/footer) AND opens the personalize page on top.
 // Without it a new compose starts clean — the saved run is only picked up on request.
 const PERSONALIZE_RESUME_KEY = "_crm_personalize_resume";
+// Set when the user presses SAVE under the sidebar's Resume Personalize button: while it's on
+// (and the run still exists), "+ New email" is disabled — the saved send must be resumed or
+// cancelled before a fresh email can be started. Cleared with the run.
+const PERSONALIZE_LOCK_KEY = "_crm_personalize_lock";
 function savePersonalizeRun(rows, startPage, tags, message) {
   try {
     // `message` is the composed draft (subject/body/signature…) riding along with the run.
@@ -52,7 +56,11 @@ function savePersonalizeRun(rows, startPage, tags, message) {
   } catch { /* full/blocked storage is non-fatal */ }
 }
 function clearPersonalizeRun() {
-  try { localStorage.removeItem(PERSONALIZE_RUN_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(PERSONALIZE_RUN_KEY);
+    // No run → nothing to protect: the New-email lock goes with it.
+    localStorage.removeItem(PERSONALIZE_LOCK_KEY);
+  } catch { /* ignore */ }
 }
 const TRANSPARENT_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -263,62 +271,112 @@ function footerToEditable(footer, logo) {
   return autoLinkifyHtml(logoHtml + plainTextToHtml(text));
 }
 
+// Mail clients render <ul>/<ol>/<p> with big default margins, which puts extra blank space
+// around bulleted lines that the compose box doesn't show. Zero those margins INLINE on the
+// outgoing HTML so the sent email keeps exactly the compose box's tight line spacing.
+function tightenListSpacing(html) {
+  const s = String(html || "");
+  if (!s || typeof DOMParser === "undefined") return s;
+  const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
+  doc.body.querySelectorAll("ul,ol").forEach((el) => {
+    el.style.marginTop = "0";
+    el.style.marginBottom = "0";
+    if (!el.style.paddingLeft) el.style.paddingLeft = "24px";
+  });
+  doc.body.querySelectorAll("li,p").forEach((el) => {
+    el.style.marginTop = "0";
+    el.style.marginBottom = "0";
+  });
+  return doc.body.innerHTML;
+}
+
 // Turn bare email addresses and web URLs anywhere in an HTML fragment into real clickable links,
 // so a signature/body that just types "name@company.com" or "www.site.com" is sent as a hyperlink.
 // Only plain text is touched — text already inside an <a> (or in code/pre) is left alone, so
 // existing links are never doubled up. Runs on the editor's own DOM parse, matching how the browser
 // tokenises the content.
 const LINKIFY_TOKEN = /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|((?:https?:\/\/|www\.)[^\s<>]+)/g;
+// Matching runs over the CONCATENATED text of each block, not text node by text node — an
+// address split across formatting <span>s (typical in a signature edited with bold/colour)
+// is still recognised as ONE token and the link wraps the WHOLE of it, formatting intact.
 function autoLinkifyHtml(html) {
   const s = String(html || "");
   if (!s || typeof DOMParser === "undefined") return s;
   const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
   const root = doc.body;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  const targets = [];
-  while (walker.nextNode()) {
-    const n = walker.currentNode;
-    if (!n.nodeValue || !LINKIFY_TOKEN.test(n.nodeValue)) { LINKIFY_TOKEN.lastIndex = 0; continue; }
-    LINKIFY_TOKEN.lastIndex = 0;
-    let p = n.parentNode, skip = false;
-    while (p && p !== root) {
-      const nm = p.nodeName;
-      if (nm === "A" || nm === "PRE" || nm === "CODE" || nm === "SCRIPT" || nm === "STYLE" || nm === "BUTTON") { skip = true; break; }
-      p = p.parentNode;
+  const BLOCK = /^(P|DIV|LI|TD|TH|TR|TABLE|UL|OL|BR|H[1-6]|BLOCKQUOTE|HR|IMG)$/;
+  const SKIP = /^(A|PRE|CODE|SCRIPT|STYLE|BUTTON)$/;
+
+  // Flatten to one string with block boundaries as \n (an address never contains \n, so a
+  // match can never leak across lines or into/out of an existing link).
+  const pieces = []; // { node, start } — where each text node begins in `text`
+  let text = "";
+  const visit = (el) => {
+    for (let child = el.firstChild; child; child = child.nextSibling) {
+      if (child.nodeType === 3) {
+        pieces.push({ node: child, start: text.length });
+        text += child.nodeValue;
+      } else if (child.nodeType === 1) {
+        if (SKIP.test(child.nodeName)) { text += "\n"; continue; }
+        const isBlock = BLOCK.test(child.nodeName);
+        if (isBlock) text += "\n";
+        visit(child);
+        if (isBlock) text += "\n";
+      }
     }
-    if (!skip) targets.push(n);
+  };
+  visit(root);
+
+  LINKIFY_TOKEN.lastIndex = 0;
+  const matches = [];
+  let m;
+  while ((m = LINKIFY_TOKEN.exec(text)) !== null) {
+    let matched = m[0];
+    // Keep trailing sentence punctuation out of the link ("visit site.com." → link + ".").
+    const trail = (matched.match(/[.,;:!?)\]}'"]+$/) || [""])[0];
+    if (trail) matched = matched.slice(0, matched.length - trail.length);
+    if (!matched) continue;
+    matches.push({ start: m.index, end: m.index + matched.length, isEmail: !!m[1], matched });
   }
-  let changed = false;
-  for (const n of targets) {
-    const text = n.nodeValue;
-    LINKIFY_TOKEN.lastIndex = 0;
-    const frag = doc.createDocumentFragment();
-    let last = 0, m;
-    while ((m = LINKIFY_TOKEN.exec(text)) !== null) {
-      const start = m.index;
-      let matched = m[0];
-      // Keep trailing sentence punctuation out of the link ("visit site.com." → link + ".").
-      const trail = (matched.match(/[.,;:!?)\]}'"]+$/) || [""])[0];
-      if (trail) matched = matched.slice(0, matched.length - trail.length);
-      if (!matched) continue;
-      if (start > last) frag.appendChild(doc.createTextNode(text.slice(last, start)));
+  if (!matches.length) return s;
+
+  const locateStart = (off) => {
+    for (const p of pieces) {
+      const len = p.node.nodeValue.length;
+      if (off >= p.start && off < p.start + len) return { node: p.node, offset: off - p.start };
+    }
+    return null;
+  };
+  const locateEnd = (off) => {
+    for (const p of pieces) {
+      const len = p.node.nodeValue.length;
+      if (off > p.start && off <= p.start + len) return { node: p.node, offset: off - p.start };
+    }
+    return null;
+  };
+  // Resolve every match to DOM positions BEFORE mutating, then wrap from last to first so the
+  // earlier positions stay valid (extracting a range only splits nodes at/after its offsets).
+  const jobs = matches
+    .map((mm) => ({ ...mm, s: locateStart(mm.start), e: locateEnd(mm.end) }))
+    .filter((j) => j.s && j.e);
+  for (let i = jobs.length - 1; i >= 0; i--) {
+    const j = jobs[i];
+    try {
+      const range = doc.createRange();
+      range.setStart(j.s.node, j.s.offset);
+      range.setEnd(j.e.node, j.e.offset);
       const a = doc.createElement("a");
-      const href = m[1]
-        ? `mailto:${matched}`
-        : (/^https?:\/\//i.test(matched) ? matched : `https://${matched}`);
+      const href = j.isEmail
+        ? `mailto:${j.matched}`
+        : (/^https?:\/\//i.test(j.matched) ? j.matched : `https://${j.matched}`);
       a.setAttribute("href", href);
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener noreferrer");
-      a.textContent = matched;
-      frag.appendChild(a);
-      if (trail) frag.appendChild(doc.createTextNode(trail));
-      last = start + m[0].length;
-      changed = true;
-    }
-    if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
-    if (n.parentNode) n.parentNode.replaceChild(frag, n);
+      a.appendChild(range.extractContents());
+      range.insertNode(a);
+    } catch (e) { /* leave this one as plain text rather than fail the whole body */ }
   }
-  return changed ? root.innerHTML : s;
+  return root.innerHTML;
 }
 
 // Templates are now composed as ONE rich body (like Outlook), so a legacy template that still
@@ -744,16 +802,19 @@ const RichBodyEditor = forwardRef(function RichBodyEditor({ value, onChange, pla
           // layout. break-words also wraps long unbroken strings/URLs.
           // The list-* / pl-* rules restore bullets and numbers that Tailwind's Preflight strips from
           // <ul>/<ol> — without them insertUnorderedList/insertOrderedList add a list with no marker.
-          className={`${className || ""} break-words overflow-x-auto [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_ul]:my-1 [&_ol]:my-1 [&_li]:mb-0.5`}
+          // List/paragraph margins are ZEROED so a bulleted line sits with exactly the same
+          // spacing as a normal line — no extra gap above, below or between bullets.
+          className={`${className || ""} break-words overflow-x-auto [&_*]:max-w-full [&_img]:h-auto [&_img]:rounded [&_table]:w-auto [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_ul]:my-0 [&_ol]:my-0 [&_li]:my-0 [&_p]:my-0`}
         />
         {isEmpty && placeholder && (
           <span className="pointer-events-none absolute left-4 top-3 text-sm text-gray-400 select-none whitespace-pre-line">
             {placeholder}
           </span>
         )}
-        {/* Floating formatting toolbar — only while text is selected, hovering above the selection.
-            Suppressed when the docked bar is shown, so they never both appear. */}
-        {showToolbar && !dockedToolbar && selBox && (
+        {/* Floating formatting toolbar — while text is selected, the FULL set of edit options
+            hovers right next to the selection, so formatting a word never means reaching for
+            the docked bar. (The docked bar stays too — same controls, both work.) */}
+        {showToolbar && selBox && (
           <div ref={floatRef} className="absolute z-30" style={{ top: 0, left: 0 }}>
             {toolbar}
           </div>
@@ -1264,15 +1325,23 @@ const CATEGORY_COLORS = {
 };
 
 // ─── Isolated email body renderer ────────────────────────────────────────────
-function EmailBodyFrame({ html, isDark }) {
+function EmailBodyFrame({ html, isDark, onMailto }) {
   const frameId = useRef("ef-" + Math.random().toString(36).slice(2));
   const [frameHeight, setFrameHeight] = useState(120);
+  // Kept in a ref so the message listener (bound once) always calls the latest handler.
+  const onMailtoRef = useRef(onMailto);
+  onMailtoRef.current = onMailto;
 
   useEffect(() => {
     const id = frameId.current;
     const handler = (e) => {
       if (e.data?.type === "email-frame-resize" && e.data?.id === id) {
         setFrameHeight(Math.max(120, (e.data.height || 0) + 16));
+      }
+      // A mailto: link clicked inside the email opens OUR compose (prefilled To), instead of
+      // relying on a desktop mail app being configured — which is why it looked dead on laptops.
+      if (e.data?.type === "email-frame-mailto" && e.data?.id === id && e.data.email) {
+        if (onMailtoRef.current) onMailtoRef.current(String(e.data.email));
       }
     };
     window.addEventListener("message", handler);
@@ -1309,12 +1378,39 @@ function EmailBodyFrame({ html, isDark }) {
   });
   new MutationObserver(send).observe(document.documentElement,{subtree:true,childList:true,attributes:true});
   [200,600,1200].forEach(function(t){setTimeout(send,t);});
+  // mailto: links are handed to the parent app (it opens its own compose) — a sandboxed frame
+  // can't reliably launch a desktop mail client, so on laptops these clicks went nowhere.
+  document.addEventListener("click",function(e){
+    var t=e.target; while(t&&t.nodeName!=="A")t=t.parentNode;
+    if(!t)return;
+    var href=t.getAttribute("href")||"";
+    if(/^mailto:/i.test(href)){
+      e.preventDefault();
+      var addr=(href.replace(/^mailto:/i,"").split("?")[0]||"").trim();
+      // Older mails may carry a link over only PART of the address (formatting split it).
+      // Recover the full one from the surrounding text: pick the address that contains or
+      // extends what the link holds.
+      try{
+        var scope=t.closest("p,div,td,li,body")||t.parentNode||t;
+        var all=(scope.textContent||"").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g)||[];
+        for(var i=0;i<all.length;i++){
+          var full=all[i], a=addr.toLowerCase(), f=full.toLowerCase();
+          if(f===a){break;}
+          if(f.indexOf(a)!==-1||a.indexOf(f)!==-1){addr=full;break;}
+        }
+      }catch(err){}
+      window.parent.postMessage({type:"email-frame-mailto",id:ID,email:addr},"*");
+    }
+  },true);
 })();`;
 
   const srcdoc = [
     "<!DOCTYPE html><html><head>",
     '<meta charset="UTF-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
+    // Every link opens OUTSIDE the reading pane (new tab / mail client). Without this,
+    // links try to navigate the sandboxed frame itself and appear dead when clicked.
+    '<base target="_blank">',
     "<style>",
     "html,body{margin:0;padding:8px;font-size:15px;line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;word-wrap:break-word;overflow-x:hidden;}",
     "img{max-width:100%;height:auto;display:inline-block;}",
@@ -1331,7 +1427,10 @@ function EmailBodyFrame({ html, isDark }) {
     <iframe
       srcDoc={srcdoc}
       title="email-body"
-      sandbox="allow-scripts"
+      // allow-popups lets links actually OPEN (new tab, and mailto: hand-off to the mail
+      // client); popups-to-escape-sandbox lets the opened page (e.g. the Subscribe /
+      // Unsubscribe confirmation) run un-sandboxed so it can record the choice.
+      sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       style={{ width: "100%", border: "none", height: frameHeight + "px", display: "block" }}
     />
   );
@@ -1495,17 +1594,21 @@ function OutlookEmail({ onToast }) {
   // "Resume Personalize" button — nothing pops up on its own. Clicking the button opens a fresh
   // compose that restores the run's email (subject/tags/body/footer) and its personalize page.
   const [resumeRun, setResumeRun] = useState(null); // {rows, startPage, tags}
+  // True after the user pressed SAVE under Resume Personalize: "+ New email" is disabled until
+  // the saved send is resumed or cancelled. Survives reloads via the lock key; dies with the run.
+  const [newEmailLocked, setNewEmailLocked] = useState(false);
   useEffect(() => {
     if (showCompose) { setResumeRun(null); return; }
     try {
       const raw = localStorage.getItem(PERSONALIZE_RUN_KEY);
-      if (!raw) { setResumeRun(null); return; }
+      if (!raw) { setResumeRun(null); setNewEmailLocked(false); return; }
       const run = JSON.parse(raw);
       const rows = Array.isArray(run?.rows) ? run.rows : [];
       // Only a run where EVERYONE has been sent is finished — drop it instead of surfacing it.
       // Unticked-but-unsent people keep it alive; they were left out of a batch, not sent.
-      if (!rows.length || rows.every((r) => r.sent)) { clearPersonalizeRun(); setResumeRun(null); return; }
+      if (!rows.length || rows.every((r) => r.sent)) { clearPersonalizeRun(); setResumeRun(null); setNewEmailLocked(false); return; }
       setResumeRun({ rows, startPage: run.startPage || 0, tags: Array.isArray(run.tags) ? run.tags : [] });
+      try { setNewEmailLocked(!!localStorage.getItem(PERSONALIZE_LOCK_KEY)); } catch { /* ignore */ }
     } catch { setResumeRun(null); }
   }, [showCompose]);
   // Bumped by the Resume Personalize button so the compose remounts even if one is already
@@ -1513,6 +1616,29 @@ function OutlookEmail({ onToast }) {
   const [composeKey, setComposeKey] = useState(0);
   const startResumePersonalize = () => {
     try { localStorage.setItem(PERSONALIZE_RESUME_KEY, "1"); } catch { /* ignore */ }
+    setComposeKey((k) => k + 1);
+    startCompose();
+  };
+  // "Saved ✓" flash after the sidebar's Save button re-confirms the stored run.
+  const [resumeSaved, setResumeSaved] = useState(false);
+  const saveResumeRun = () => {
+    if (!resumeRun) return;
+    savePersonalizeRun(resumeRun.rows, resumeRun.startPage || 0, resumeRun.tags || []);
+    // Saving locks "+ New email": no fresh email until this saved send is resumed or cancelled.
+    try { localStorage.setItem(PERSONALIZE_LOCK_KEY, "1"); } catch { /* ignore */ }
+    setNewEmailLocked(true);
+    setResumeSaved(true);
+    setTimeout(() => setResumeSaved(false), 1600);
+  };
+  const cancelResumeRun = () => {
+    clearPersonalizeRun(); // also removes the New-email lock
+    setResumeRun(null);
+    setNewEmailLocked(false);
+  };
+  // Clicking an email address inside a message (e.g. in a signature) opens OUR compose with
+  // that address already in To — no dependence on a desktop mail app being configured.
+  const composeToAddress = (email) => {
+    try { localStorage.setItem("selectedContactEmails", JSON.stringify([email])); } catch { /* ignore */ }
     setComposeKey((k) => k + 1);
     startCompose();
   };
@@ -2993,14 +3119,37 @@ function OutlookEmail({ onToast }) {
             </div>
             <div className="p-3 shrink-0 space-y-2">
               <button onClick={() => { startCompose(); setShowMobileSidebar(false); }}
-                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
+                disabled={newEmailLocked}
+                title={newEmailLocked ? "A saved personalized send is pending — resume it or cancel it first" : undefined}
+                className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm px-3 py-3 rounded-xl transition font-medium">
                 <Plus size={16} />New email
               </button>
               {resumeRun && (
-                <button onClick={() => { startResumePersonalize(); setShowMobileSidebar(false); }}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3 py-3 rounded-xl transition font-medium">
-                  <User size={15} />Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})
-                </button>
+                <div className="space-y-1">
+                  <button onClick={() => { startResumePersonalize(); setShowMobileSidebar(false); }}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-2 py-3 rounded-xl transition font-medium min-w-0">
+                    <User size={15} className="flex-shrink-0" />
+                    <span className="truncate">Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})</span>
+                  </button>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={saveResumeRun}
+                      className={`flex-1 px-2 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                        resumeSaved
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                          : "bg-white border-blue-200 text-blue-600 hover:bg-blue-50"
+                      }`}
+                    >
+                      {resumeSaved ? "Saved ✓" : "Save"}
+                    </button>
+                    <button
+                      onClick={cancelResumeRun}
+                      className="flex-1 px-2 py-2 rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 text-xs font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
             <nav className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
@@ -3076,7 +3225,9 @@ function OutlookEmail({ onToast }) {
             <aside className={`hidden md:flex md:w-56 ${th.surface} border-r ${th.border} flex-col shrink-0`}>
               <div className="p-3">
                 <button onClick={() => startCompose()}
-                  className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
+                  disabled={newEmailLocked}
+                  title={newEmailLocked ? "A saved personalized send is pending — resume it or cancel it first" : undefined}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm px-3 py-2.5 rounded-xl transition shadow-sm font-medium">
                   <Plus size={16} />New email
                 </button>
               </div>
@@ -3165,12 +3316,37 @@ function OutlookEmail({ onToast }) {
                   )}
                   {/* An unfinished personalized send is resumed from HERE (nothing pops up on
                       its own): the old email — subject, tags, body, footer — comes back along
-                      with the personalize page, sent people locked as "Sent ✓". */}
+                      with the personalize page, sent people locked as "Sent ✓". Underneath:
+                      SAVE keeps the run stored; CANCEL discards it — the whole block goes away
+                      and the old data is NOT kept. */}
                   {resumeRun && (
-                    <button onClick={startResumePersonalize}
-                      className="mt-1.5 w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-3 py-2 rounded-xl transition shadow-sm font-medium">
-                      <User size={15} />Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})
-                    </button>
+                    <div className="mt-1.5 space-y-1">
+                      <button onClick={startResumePersonalize}
+                        className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-2 py-2 rounded-xl transition shadow-sm font-medium min-w-0">
+                        <User size={15} className="flex-shrink-0" />
+                        <span className="truncate">Resume Personalize ({resumeRun.rows.filter((r) => !r.sent).length})</span>
+                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={saveResumeRun}
+                          className={`flex-1 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                            resumeSaved
+                              ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                              : "bg-white border-blue-200 text-blue-600 hover:bg-blue-50"
+                          }`}
+                          title="Keep this personalized send saved for later"
+                        >
+                          {resumeSaved ? "Saved ✓" : "Save"}
+                        </button>
+                        <button
+                          onClick={cancelResumeRun}
+                          className="flex-1 px-2 py-1.5 rounded-lg border border-red-200 bg-white text-red-500 hover:bg-red-50 text-xs font-medium transition-colors"
+                          title="Cancel this personalized send — the saved email and list will NOT be kept"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -3624,7 +3800,7 @@ function OutlookEmail({ onToast }) {
                                           {!bodyHtml && !isCurrentMsg ? (
                                             <p className={`text-xs ${isDark ? "text-gray-400" : "text-[#616161]"} py-3 px-4`}>Loading…</p>
                                           ) : (
-                                            <EmailBodyFrame html={cleanHtml} isDark={isDark} />
+                                            <EmailBodyFrame html={cleanHtml} isDark={isDark} onMailto={composeToAddress} />
                                           )}
                                         </div>
                                       )}
@@ -3675,6 +3851,7 @@ function OutlookEmail({ onToast }) {
                                   <EmailBodyFrame
                                     html={(openedMail.body || openedMail.bodyPreview || "").replace(/http:/g, "https:").replace(/border-left\s*:\s*[^;'"<>]*(?:#[0-9a-fA-F]{3,8}|rgb[^;)]+\)|rgba[^;)]+\)|blue|navy|#3b82f6|cornflowerblue)[^;'"<>]*;?/gi, "border-left:2px solid #e5e7eb;")}
                                     isDark={isDark}
+                                    onMailto={composeToAddress}
                                   />
                                   {/* Attachments */}
                                   {openedMail.attachments?.length > 0 && (
@@ -5048,6 +5225,70 @@ export function Email({ accessToken: accessTokenProp, onClose, onMailSent, reply
     setSelectedTags([]);
     // Also wipe the template's loaded content, not just the selection.
     clearLoadedTemplate();
+    // No tags left → their people leave the email too. Addresses typed by hand stay.
+    const tagEmails = new Set(
+      [...(lastPersonalizeRows || []), ...personalized].map((r) => String(r.email || "").toLowerCase()).filter(Boolean)
+    );
+    if (tagEmails.size) {
+      setPersonalized([]);
+      setToInput((prev) => parseEmails(prev).filter((e) => !tagEmails.has(e.toLowerCase())).join(", "));
+      setLastPersonalizeRows(null);
+      clearPersonalizeRun();
+    }
+  };
+
+  // Removing ONE selected tag also removes ITS people from the email: the remaining tags are
+  // re-resolved and every recipient no longer covered by them is dropped from the To field, the
+  // personalized list and the saved run (ticks of the survivors are kept). Removing the last
+  // tag clears all tag-added recipients. Hand-typed addresses are never touched.
+  const removeTag = async (tag) => {
+    const remaining = selectedTags.filter((t) => t !== tag);
+    setSelectedTags(remaining);
+    setModalSelectedTags((p) => p.filter((t) => t !== tag));
+
+    // Everything the tag flow put into this email (the full run list + the confirmed page).
+    const tagEmails = new Set(
+      [...(lastPersonalizeRows || []), ...personalized].map((r) => String(r.email || "").toLowerCase()).filter(Boolean)
+    );
+    if (!tagEmails.size) return;
+
+    // Who is still covered by the remaining tags?
+    let keep = new Set();
+    if (remaining.length) {
+      try {
+        const params = { tags: remaining.join(",") };
+        let list = [];
+        try {
+          const res = await apiClient.get(`/Contact/tags/recipients`, { params });
+          list = Array.isArray(res.data) ? res.data : [];
+        } catch {
+          const res = await apiClient.get(`/Contact/tags/emails`, { params });
+          list = (Array.isArray(res.data) ? res.data : []).map((email) => ({ email }));
+        }
+        keep = new Set(list.map((r) => String(r.email ?? r.Email ?? "").toLowerCase()).filter(Boolean));
+      } catch (e) {
+        // Couldn't re-resolve — leave the recipients alone rather than dropping the wrong people.
+        console.error("[Email] Failed to re-resolve tags after removing one:", e);
+        return;
+      }
+    }
+
+    const stillIn = (email) => keep.has(String(email || "").toLowerCase());
+    const nextPersonalized = personalized.filter((r) => stillIn(r.email));
+    const nextRows = (lastPersonalizeRows || []).filter((r) => stillIn(r.email));
+    setPersonalized(nextPersonalized);
+    // Prune the To field: tag-added addresses no longer covered go; anything else stays.
+    setToInput((prev) => parseEmails(prev)
+      .filter((e) => !tagEmails.has(e.toLowerCase()) || stillIn(e))
+      .join(", "));
+    setPersonalizeStartPage(0);
+    if (nextRows.length) {
+      setLastPersonalizeRows(nextRows);
+      savePersonalizeRun(nextRows, 0, remaining, draftMessage());
+    } else {
+      setLastPersonalizeRows(null);
+      clearPersonalizeRun();
+    }
   };
 
   // Get access token from MSAL (redirect-safe, no popup)
@@ -5641,9 +5882,10 @@ useEffect(() => {
     const toEmails = allToEmails;
     const ccEmails = parseEmails(ccInput);
     // Linkify the body + signature (not the quoted original) so any bare email/URL is sent clickable,
-    // even if the user never blurred the field.
-    const userHtml = autoLinkifyHtml(bodyHtmlForSend());
-    const trailing = autoLinkifyHtml(trailingBlocksHtml());
+    // even if the user never blurred the field — and pin list/paragraph spacing inline so bullets
+    // arrive with the same tight alignment the compose box shows.
+    const userHtml = tightenListSpacing(autoLinkifyHtml(bodyHtmlForSend()));
+    const trailing = tightenListSpacing(autoLinkifyHtml(trailingBlocksHtml()));
     const composedHtml = quoteHtml
       ? `${userHtml}${trailing}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
       : `${userHtml}${trailing}`;
@@ -6133,26 +6375,16 @@ useEffect(() => {
           {!showTemplatesModal && (tags.length > 0 || templates.length > 0) && (
             <div className={`px-4 sm:px-6 py-3 border-b ${isDark ? "bg-blue-900/20 border-blue-800/40" : "bg-blue-50 border-blue-100"}`}>
               <div className="flex items-start gap-3">
-                {templates.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setModalTab("templates"); setShowTemplatesModal(true); }}
-                    className={`px-3 py-2 ${isDark ? "bg-gray-700 text-blue-400 border-blue-700 hover:bg-gray-600" : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
-                  >
-                    <FileText size={16} />
-                    Templates
-                  </button>
-                )}
-                {tags.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setModalTab("tags"); setShowTemplatesModal(true); }}
-                    className={`px-3 py-2 ${isDark ? "bg-gray-700 text-emerald-400 border-emerald-700 hover:bg-gray-600" : "bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
-                  >
-                    <Tag size={16} />
-                    Tags
-                  </button>
-                )}
+                {/* ONE button, single name — the picker it opens keeps Templates and Tags as
+                    their own separate tabs, each working independently (no auto-jumping). */}
+                <button
+                  type="button"
+                  onClick={() => { setModalTab(templates.length > 0 ? "templates" : "tags"); setShowTemplatesModal(true); }}
+                  className={`px-3 py-2 ${isDark ? "bg-gray-700 text-blue-400 border-blue-700 hover:bg-gray-600" : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50"} border rounded-lg transition flex items-center gap-2 shadow-sm text-xs sm:text-sm font-medium flex-shrink-0`}
+                >
+                  <FileText size={16} />
+                  Templates &amp; Tags
+                </button>
 
                 {(selectedTemplate || selectedTags.length > 0) ? (
                   <div className="flex-1 min-w-0 flex flex-wrap content-start gap-2 max-h-[5.5rem] overflow-y-auto pr-1">
@@ -6180,9 +6412,10 @@ useEffect(() => {
                         <span className="truncate max-w-[200px]">{tag}</span>
                         <button
                           type="button"
-                          onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))}
+                          onClick={() => removeTag(tag)}
                           className="flex-shrink-0 w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-emerald-200 font-bold leading-none"
-                          aria-label="Remove tag"
+                          aria-label="Remove tag and its recipients"
+                          title="Remove this tag — its people are removed from the email too"
                         >
                           ×
                         </button>
