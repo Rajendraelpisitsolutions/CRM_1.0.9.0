@@ -271,6 +271,37 @@ function footerToEditable(footer, logo) {
   return autoLinkifyHtml(logoHtml + plainTextToHtml(text));
 }
 
+// Classic Outlook (Word rendering engine) IGNORES max-width/max-height CSS, so a signature
+// logo capped only that way renders at its FULL natural pixel size — huge. Every image in the
+// signature/footer therefore also gets an explicit width ATTRIBUTE (honoured by every mail
+// client), computed from the image's real size and capped at the logo limit — never upscaled.
+async function emailSafeSignatureImages(html) {
+  const s = String(html || "");
+  if (!s || typeof DOMParser === "undefined") return s;
+  const doc = new DOMParser().parseFromString(`<body>${s}</body>`, "text/html");
+  const imgs = Array.from(doc.body.querySelectorAll("img"));
+  if (!imgs.length) return s;
+  const naturalWidth = (src) => new Promise((resolve) => {
+    try {
+      const probe = new window.Image();
+      probe.onload = () => resolve(probe.naturalWidth || 0);
+      probe.onerror = () => resolve(0);
+      probe.src = src;
+    } catch { resolve(0); }
+  });
+  for (const img of imgs) {
+    if (img.getAttribute("width")) continue; // already explicitly sized — leave it
+    const nat = await naturalWidth(img.getAttribute("src") || "");
+    const w = Math.max(1, Math.min(150, nat || 150));
+    img.setAttribute("width", String(w));
+    // Keep/extend the CSS caps for modern clients; height stays automatic so the aspect holds.
+    img.style.maxWidth = "150px";
+    img.style.maxHeight = "100px";
+    img.style.height = "auto";
+  }
+  return doc.body.innerHTML;
+}
+
 // Mail clients render <ul>/<ol>/<p> with big default margins, which puts extra blank space
 // around bulleted lines that the compose box doesn't show. Zero those margins INLINE on the
 // outgoing HTML so the sent email keeps exactly the compose box's tight line spacing.
@@ -5878,14 +5909,15 @@ useEffect(() => {
   };
 
   // Build send payload (shared by schedule + mail merge)
-  const buildPayload = () => {
+  const buildPayload = async () => {
     const toEmails = allToEmails;
     const ccEmails = parseEmails(ccInput);
     // Linkify the body + signature (not the quoted original) so any bare email/URL is sent clickable,
     // even if the user never blurred the field — and pin list/paragraph spacing inline so bullets
-    // arrive with the same tight alignment the compose box shows.
+    // arrive with the same tight alignment the compose box shows. Signature images get an
+    // explicit width so Outlook can't blow the logo up to its natural size.
     const userHtml = tightenListSpacing(autoLinkifyHtml(bodyHtmlForSend()));
-    const trailing = tightenListSpacing(autoLinkifyHtml(trailingBlocksHtml()));
+    const trailing = await emailSafeSignatureImages(tightenListSpacing(autoLinkifyHtml(trailingBlocksHtml())));
     const composedHtml = quoteHtml
       ? `${userHtml}${trailing}<br><br><div style="border-left:2px solid #e5e7eb;padding-left:12px;margin-top:8px;color:#6b7280;font-size:13px;">${quoteHtml}</div>`
       : `${userHtml}${trailing}`;
@@ -5898,7 +5930,7 @@ useEffect(() => {
     const scheduledAt = new Date(scheduleDateTime);
     const delay = scheduledAt.getTime() - Date.now();
     if (delay <= 0) { setErrors({ apiError: "Please select a future date and time." }); return; }
-    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = await buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     // Scheduling parks ONE draft addressed to everyone, so there's no per-person copy to put a
     // "Dear Mr. <name>," on. Say so rather than quietly scheduling an ungreeted mail.
@@ -5942,7 +5974,7 @@ useEffect(() => {
   };
 
   const handleMailMerge = async () => {
-    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = await buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
     setIsSending(true); setErrors({});
@@ -6015,7 +6047,7 @@ useEffect(() => {
   // Either way outcomes are reported back so delivery is reflected, and opted-out addresses are
   // dropped by the backend before sending.
   const handleTrackedCampaign = async ({ footerOnly = false } = {}) => {
-    const { toEmails, ccEmails, html, inlineAttachments } = buildPayload();
+    const { toEmails, ccEmails, html, inlineAttachments } = await buildPayload();
     if (!toEmails.length) { setErrors({ to: "At least one recipient is required." }); return; }
     if (!subject.trim()) { setErrors({ subject: "Subject is required." }); return; }
     if (!accessToken) {
